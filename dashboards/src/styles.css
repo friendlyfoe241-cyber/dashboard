@@ -692,7 +692,7 @@ textarea {
   background: linear-gradient(160deg, #0c2d54 0%, #1a6bb5 45%, #4999e8 80%, #99ccff 100%);
 }
 .aurora { position: absolute; inset: 0; pointer-events: none; filter: blur(60px); opacity: 0.55; }
-.aurora-blob { position: absolute; border-radius: 50%; }
+.aurora-blob { position: absolute; border-radius: 50%; will-change: transform; }
 .a1 { width: 480px; height: 480px; left: -120px; top: -120px; background: #78b4fb; animation: drift1 16s ease-in-out infinite alternate; }
 .a2 { width: 420px; height: 420px; right: -100px; top: 30%; background: #ffd700; opacity: 0.5; animation: drift2 20s ease-in-out infinite alternate; }
 .a3 { width: 520px; height: 520px; left: 25%; bottom: -200px; background: #2589ed; animation: drift3 18s ease-in-out infinite alternate; }
@@ -749,6 +749,18 @@ textarea {
 }
 .login-demo summary::after { content: ' ▾'; }
 .login-demo[open] summary::after { content: ' ▴'; }
+.login-demo-grid {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.demo-btn {
+  font-family: var(--font); font-size: 0.78rem; font-weight: 600; color: var(--brand-deep);
+  background: rgba(255, 255, 255, 0.7); border: 1px solid var(--border);
+  border-radius: 999px; padding: 0.3rem 0.8rem; cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.demo-btn:hover:not(:disabled) { box-shadow: 0 3px 10px rgba(16, 24, 40, 0.12); transform: translateY(-1px); }
+.demo-btn:disabled { opacity: 0.6; cursor: default; }
 
 .login-foot { margin-top: 1rem; text-align: center; font-size: 0.82rem; }
 
