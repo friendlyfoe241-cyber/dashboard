@@ -386,4 +386,36 @@ export const events = [];
 // Per-user in-app notifications.
 export const notifications = [];
 
+// Structured programs (apply → cohort → milestones). Dates are relative to
+// "now" so the demo always shows an open, joinable cohort.
+const weeksFromNow = (n) => new Date(Date.now() + n * 7 * 24 * 3600 * 1000).toISOString();
+
+export const programs = [
+  {
+    id: id('prg'),
+    title: 'Summer Research Cohort',
+    cohortLabel: 'Summer 2026',
+    category: '',
+    description:
+      'An 8-week guided research sprint: weekly mentor check-ins, a structured path from question to draft, and a final showcase. Open to all members — no experience required.',
+    spots: 30,
+    applyDeadline: weeksFromNow(3),
+    startAt: weeksFromNow(4),
+    endAt: weeksFromNow(12),
+    status: 'open',
+    cohort: [],
+    milestones: [
+      { id: 'ms_1', title: 'Research question + mentor match', dueAt: weeksFromNow(5), done: false },
+      { id: 'ms_2', title: 'Literature review complete', dueAt: weeksFromNow(7), done: false },
+      { id: 'ms_3', title: 'Methods + first results', dueAt: weeksFromNow(9), done: false },
+      { id: 'ms_4', title: 'Final draft + showcase', dueAt: weeksFromNow(12), done: false },
+    ],
+    createdBy: 'system',
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// Issued role certificates (verifiable by code).
+export const certificates = [];
+
 export const allUsers = () => [...editors, ...researchers];

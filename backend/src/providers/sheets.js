@@ -65,8 +65,16 @@ export const SCHEMAS = {
     ['id'], ['title'], ['type'], ['dueAt'], ['projectId'], ['chapterId'], ['createdBy'], ['createdByName'], ['at'],
   ],
   Applications: [
-    ['id'], ['kind'], ['userId'], ['userName'], ['listingId'], ['role'], ['message'], ['answers', 'json'],
+    ['id'], ['kind'], ['userId'], ['userName'], ['listingId'], ['programId'], ['role'], ['message'], ['answers', 'json'],
     ['resumeUrl'], ['status'], ['assignedTag'], ['reviewedBy'], ['reviewedAt'], ['at'],
+  ],
+  Programs: [
+    ['id'], ['title'], ['cohortLabel'], ['category'], ['description'], ['spots', 'num'],
+    ['applyDeadline'], ['startAt'], ['endAt'], ['status'], ['cohort', 'json'], ['milestones', 'json'],
+    ['createdBy'], ['createdAt'],
+  ],
+  Certificates: [
+    ['id'], ['code'], ['userId'], ['name'], ['type'], ['issuedAt'],
   ],
   Chapters: [
     ['id'], ['name'], ['location'], ['leaderId'], ['handbookUrl'], ['members', 'json'], ['announcements', 'json'],
@@ -170,8 +178,10 @@ export async function createSheetsProvider() {
         news: await readTab(sheets, spreadsheetId, 'News'),
         audit: await readTab(sheets, spreadsheetId, 'Audit'),
         notifications: await readTab(sheets, spreadsheetId, 'Notifications'),
-        // Tolerate spreadsheets created before the Events tab existed.
+        // Tolerate spreadsheets created before these tabs existed.
         events: await readTab(sheets, spreadsheetId, 'Events').catch(() => []),
+        programs: await readTab(sheets, spreadsheetId, 'Programs').catch(() => []),
+        certificates: await readTab(sheets, spreadsheetId, 'Certificates').catch(() => []),
       };
     },
 
@@ -187,6 +197,9 @@ export async function createSheetsProvider() {
       await writeTab(sheets, spreadsheetId, 'Audit', db.audit);
       await writeTab(sheets, spreadsheetId, 'Notifications', db.notifications);
       await writeTab(sheets, spreadsheetId, 'Events', db.events || []);
+      // Best-effort: deployments created before these tabs existed keep working.
+      await writeTab(sheets, spreadsheetId, 'Programs', db.programs || []).catch(() => {});
+      await writeTab(sheets, spreadsheetId, 'Certificates', db.certificates || []).catch(() => {});
     },
   };
 }

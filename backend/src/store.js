@@ -5,6 +5,7 @@
 // selected by the DATA_PROVIDER env var. The workflow logic below is identical
 // either way; only load() / persist() differ, so routes and UI never change.
 
+import { randomBytes } from 'node:crypto';
 import { STAGE, STAGE_LABEL, EDITOR_ROLES, ASSOCIATE_TOTAL_ROUNDS, TASK_STATUS, freshOnboarding, CATEGORIES } from './domain.js';
 import * as seed from './seed.js';
 import { verifyPassword, hashPassword } from './passwords.js';
@@ -34,6 +35,8 @@ function buildSeed() {
     audit: clone(seed.audit),
     notifications: clone(seed.notifications),
     events: clone(seed.events || []),
+    programs: clone(seed.programs || []),
+    certificates: clone(seed.certificates || []),
   };
 }
 
@@ -1329,6 +1332,246 @@ export function analytics() {
     chapters: db.chapters.length,
     projects: db.projects.length,
     totalAccesses: db.publications.reduce((s, p) => s + (p.metrics?.accesses || 0), 0),
+  };
+}
+
+// Public impact counters for the marketing site (no auth, no PII).
+export function publicStats() {
+  return {
+    researchers: db.researchers.length,
+    members: db.editors.length + db.researchers.length,
+    papersPublished: db.publications.filter((p) => p.verified !== false).length,
+    projects: db.projects.length,
+    chapters: db.chapters.length,
+    openPrograms: db.programs.filter((p) => p.status === 'open').length,
+  };
+}
+
+// --- programs (apply → cohort → milestones) ---------------------------------
+
+const getProgram = (id) => db.programs.find((p) => p.id === id);
+
+// Public view for the marketing site: open programs, no member identities.
+export function listPublicPrograms() {
+  return db.programs
+    .filter((p) => p.status === 'open')
+    .map((p) => ({
+      id: p.id, title: p.title, cohortLabel: p.cohortLabel, category: p.category,
+      description: p.description, spots: p.spots, applyDeadline: p.applyDeadline,
+      startAt: p.startAt, endAt: p.endAt, cohortSize: p.cohort.length,
+      milestones: p.milestones.map((m) => ({ id: m.id, title: m.title, dueAt: m.dueAt })),
+    }));
+}
+
+// Researcher view: every non-archived program plus where this user stands.
+export function listProgramsFor(userId) {
+  return db.programs
+    .filter((p) => p.status !== 'archived')
+    .map((p) => {
+      const application = db.applications.find(
+        (a) => a.kind === 'program' && a.programId === p.id && a.userId === userId,
+      );
+      const myStatus = p.cohort.includes(userId)
+        ? 'member'
+        : application?.status === 'pending'
+          ? 'applied'
+          : application?.status === 'rejected'
+            ? 'rejected'
+            : 'none';
+      return {
+        id: p.id, title: p.title, cohortLabel: p.cohortLabel, category: p.category,
+        description: p.description, spots: p.spots, applyDeadline: p.applyDeadline,
+        startAt: p.startAt, endAt: p.endAt, status: p.status,
+        cohortSize: p.cohort.length, milestones: p.milestones, myStatus,
+      };
+    });
+}
+
+export function applyToProgram({ programId, userId, message }) {
+  const p = getProgram(programId);
+  if (!p) throw httpError(404, 'Program not found');
+  if (p.status !== 'open') throw httpError(400, 'This program is not accepting applications');
+  if (p.applyDeadline && new Date(p.applyDeadline) < new Date()) throw httpError(400, 'The application deadline has passed');
+  if (p.cohort.includes(userId)) throw httpError(400, "You're already in this cohort");
+  if (p.spots && p.cohort.length >= p.spots) throw httpError(400, 'This cohort is full');
+  if (db.applications.some((a) => a.kind === 'program' && a.programId === programId && a.userId === userId && a.status === 'pending'))
+    throw httpError(400, "You've already applied — hang tight!");
+  const u = getUserById(userId);
+  const record = {
+    id: `app_${db.applications.length + 1}`,
+    kind: 'program',
+    programId,
+    userId,
+    userName: u?.name || '',
+    message: String(message || '').slice(0, 600),
+    status: 'pending',
+    at: now(),
+  };
+  db.applications.push(record);
+  notifyEvent({ title: '🎓 Program application', body: `${record.userName} applied to ${p.title}${p.cohortLabel ? ` (${p.cohortLabel})` : ''}.` });
+  schedulePersist();
+  return record;
+}
+
+// Admin view: all programs with cohort names + their pending applications.
+export function listProgramsAdmin() {
+  const nameOf = (id) => getUserById(id)?.name || id;
+  return db.programs.map((p) => ({
+    ...p,
+    cohortMembers: p.cohort.map((id) => ({ id, name: nameOf(id) })),
+    applications: db.applications
+      .filter((a) => a.kind === 'program' && a.programId === p.id)
+      .map((a) => ({ ...a })),
+  }));
+}
+
+export function createProgram({ title, description, category, cohortLabel, spots, applyDeadline, startAt, endAt, milestones }, actor) {
+  if (!title?.trim()) throw httpError(400, 'A title is required');
+  const p = {
+    id: `prg_${Date.now()}`,
+    title: title.trim().slice(0, 140),
+    cohortLabel: String(cohortLabel || '').trim().slice(0, 60),
+    category: CATEGORIES.includes(category) ? category : '',
+    description: String(description || '').slice(0, 1200),
+    spots: Math.max(0, Number(spots) || 0),
+    applyDeadline: applyDeadline || '',
+    startAt: startAt || '',
+    endAt: endAt || '',
+    status: 'open',
+    cohort: [],
+    milestones: (Array.isArray(milestones) ? milestones : [])
+      .filter((m) => m && m.title?.trim())
+      .map((m, i) => ({ id: `ms_${i + 1}`, title: m.title.trim().slice(0, 140), dueAt: m.dueAt || '', done: false })),
+    createdBy: actor?.id || 'system',
+    createdAt: now(),
+  };
+  db.programs.push(p);
+  recordAudit(actor, 'program.create', p.title);
+  schedulePersist();
+  return p;
+}
+
+export function updateProgramStatus({ programId, status, actor }) {
+  const p = getProgram(programId);
+  if (!p) throw httpError(404, 'Program not found');
+  if (!['open', 'closed', 'archived'].includes(status)) throw httpError(400, 'Invalid status');
+  p.status = status;
+  recordAudit(actor, 'program.status', `${p.title} → ${status}`);
+  schedulePersist();
+  return p;
+}
+
+export function addProgramMilestone({ programId, title, dueAt, actor }) {
+  const p = getProgram(programId);
+  if (!p) throw httpError(404, 'Program not found');
+  if (!title?.trim()) throw httpError(400, 'A title is required');
+  p.milestones.push({ id: `ms_${Date.now()}`, title: title.trim().slice(0, 140), dueAt: dueAt || '', done: false });
+  schedulePersist();
+  return p;
+}
+
+// Cohort-wide milestone toggle; members are notified when one completes.
+export function toggleProgramMilestone({ programId, milestoneId, done, actor }) {
+  const p = getProgram(programId);
+  const m = p?.milestones.find((x) => x.id === milestoneId);
+  if (!m) throw httpError(404, 'Milestone not found');
+  m.done = !!done;
+  if (m.done) for (const uid of p.cohort) pushNotif(uid, { type: 'program', title: `🎯 Milestone complete: ${m.title}`, body: `${p.title} (${p.cohortLabel}) just hit a milestone.`, link: '/researcher/programs' });
+  recordAudit(actor, 'program.milestone', `${p.title}: ${m.title} → ${m.done ? 'done' : 'open'}`);
+  schedulePersist();
+  return p;
+}
+
+// Accept/reject a program application. Accepting admits the user to the cohort.
+export function reviewProgramApplication({ id, status, reviewerId }) {
+  const a = db.applications.find((x) => x.id === id && x.kind === 'program');
+  if (!a) throw httpError(404, 'Application not found');
+  if (a.status !== 'pending') throw httpError(400, 'Already reviewed');
+  a.status = status === 'accepted' ? 'accepted' : 'rejected';
+  a.reviewedBy = reviewerId;
+  a.reviewedAt = now();
+  const p = getProgram(a.programId);
+  if (a.status === 'accepted' && p && !p.cohort.includes(a.userId)) {
+    p.cohort.push(a.userId);
+    pushNotif(a.userId, { type: 'program', title: `🎉 You're in: ${p.title}`, body: `Welcome to the ${p.cohortLabel || ''} cohort! Check your milestones.`, link: '/researcher/programs' });
+  } else if (p) {
+    pushNotif(a.userId, { type: 'program', title: `Update on ${p.title}`, body: 'Your program application was not accepted this round — more cohorts are coming.', link: '/researcher/programs' });
+  }
+  recordAudit({ id: reviewerId }, 'program.review', `${a.userName} → ${a.status} (${p?.title || a.programId})`);
+  schedulePersist();
+  return { ...a, user: getUserById(a.userId) ? { email: getUserById(a.userId).email, name: getUserById(a.userId).name } : null, program: p ? { title: p.title, cohortLabel: p.cohortLabel } : null };
+}
+
+// --- certificates (verifiable proof of role/completion) ---------------------
+
+// Certificate type → the researcher tag that earns it (see RESEARCHER_TAGS in
+// domain.js). Mirrors the official Synthica generator repos
+// (AssociateResearcherGen / IndependentResearcherGen / LeadResearchGen):
+// same templates, same eligibility.
+const CERT_TYPES = {
+  associate: 'associate_researcher',
+  independent: 'independent_researcher',
+  lead: 'lead_researcher',
+};
+
+const certCode = () => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+  const chunk = () => Array.from(randomBytes(4)).map((b) => alphabet[b % alphabet.length]).join('');
+  return `SYN-${chunk()}-${chunk()}`;
+};
+
+// Which certificates this user can generate, and which they already hold.
+export function myCertificates(userId) {
+  const u = getResearcherById(userId);
+  const tags = u?.tags || [];
+  return {
+    eligible: Object.entries(CERT_TYPES).filter(([, tag]) => tags.includes(tag)).map(([type]) => type),
+    issued: db.certificates.filter((c) => c.userId === userId).map(({ id, code, type, name, issuedAt }) => ({ id, code, type, name, issuedAt })),
+  };
+}
+
+// Idempotent: re-requesting an issued certificate returns the existing record
+// (same verification code) instead of minting a new one.
+export function issueCertificate({ userId, type }) {
+  const tag = CERT_TYPES[type];
+  if (!tag) throw httpError(400, 'Unknown certificate type');
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(403, 'Certificates are issued to researchers');
+  if (!(u.tags || []).includes(tag)) throw httpError(403, "You haven't earned this certificate yet");
+  let cert = db.certificates.find((c) => c.userId === userId && c.type === type);
+  if (!cert) {
+    cert = { id: `crt_${Date.now()}`, code: certCode(), userId, name: u.name, type, issuedAt: now() };
+    db.certificates.push(cert);
+    recordAudit(u, 'certificate.issue', `${u.name} — ${type} (${cert.code})`);
+    schedulePersist();
+  }
+  return cert;
+}
+
+// Public verification: anyone with the code can confirm a certificate is real.
+export function verifyCertificate(code) {
+  const c = db.certificates.find((x) => x.code === String(code || '').trim().toUpperCase());
+  if (!c) return { valid: false };
+  return { valid: true, name: c.name, type: c.type, issuedAt: c.issuedAt };
+}
+
+// --- weekly digest data ------------------------------------------------------
+
+// Everything the weekly email digest needs in one read: recipients plus the
+// open opportunities, programs, and next week's deadlines.
+export function digestData() {
+  const inAWeek = Date.now() + 7 * 24 * 3600 * 1000;
+  return {
+    recipients: db.researchers
+      .filter((u) => u.email && u.approved !== false)
+      .map((u) => ({ id: u.id, name: u.name, email: u.email })),
+    listings: db.listings.map((l) => ({ title: l.title, category: l.category, spots: l.spots, leadName: l.leadName })),
+    programs: db.programs
+      .filter((p) => p.status === 'open')
+      .map((p) => ({ title: p.title, cohortLabel: p.cohortLabel, applyDeadline: p.applyDeadline })),
+    events: db.events
+      .filter((e) => e.dueAt && new Date(e.dueAt).getTime() > Date.now() && new Date(e.dueAt).getTime() < inAWeek)
+      .map((e) => ({ title: e.title, type: e.type, dueAt: e.dueAt })),
   };
 }
 
