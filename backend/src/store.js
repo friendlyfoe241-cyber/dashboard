@@ -92,13 +92,26 @@ function schedulePersist() {
   }, 300);
 }
 
+// Pull the dataset from the active provider. A provider may return null (empty
+// database on first boot) — start from the seed and let the write-behind
+// persist establish it. Collections the provider doesn't know about yet (added
+// after its data was created) are backfilled from the seed.
+async function loadFromProvider() {
+  const loaded = await provider.load();
+  return loaded ? Object.assign(buildSeed(), loaded) : buildSeed();
+}
+
 // Load the active provider's data. Called once at server startup.
 export async function init() {
   const name = (process.env.DATA_PROVIDER || 'memory').toLowerCase();
   if (name === 'sheets') {
     const { createSheetsProvider } = await import('./providers/sheets.js');
     provider = await createSheetsProvider();
-    db = await provider.load();
+    db = await loadFromProvider();
+  } else if (name === 'postgres' || name === 'pg') {
+    const { createPostgresProvider } = await import('./providers/postgres.js');
+    provider = await createPostgresProvider();
+    db = await loadFromProvider();
   } else {
     provider = null;
     db = buildSeed();
@@ -109,10 +122,10 @@ export async function init() {
   return db;
 }
 
-// Reload baseline data (dev helper / "reset" route). Reloads the sheet when
-// using the Sheets provider, or the seed when in memory.
+// Reload baseline data (dev helper / "reset" route). Reloads from the active
+// provider, or the seed when in memory.
 export async function reset() {
-  db = provider ? await provider.load() : buildSeed();
+  db = provider ? await loadFromProvider() : buildSeed();
   assignPendingReviewers();
   schedulePersist();
 }
