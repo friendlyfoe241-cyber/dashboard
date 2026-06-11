@@ -168,7 +168,7 @@ export const getResearcherById = (id) => db.researchers.find((r) => r.id === id)
 export function authenticate(identifier, password) {
   // Seed/demo accounts all share this password. Refuse it in production so a
   // deployed instance can't be entered through well-known demo credentials.
-  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEMO_LOGINS && password === 'demo1234') return null;
+  if (!demoLoginsEnabled() && password === 'demo1234') return null;
   const id = String(identifier || '').trim().toLowerCase();
   // Accept either a username or an email address (the smart sign-in enters email).
   const user = [...db.editors, ...db.researchers].find(
@@ -178,6 +178,12 @@ export function authenticate(identifier, password) {
   const { password: _pw, twoFactorSecret: _s, ...safe } = user;
   return safe;
 }
+
+// Whether the shared demo password is accepted (always in dev; in production
+// only when ALLOW_DEMO_LOGINS is set). Exposed via /api/config so the login
+// page can hide its one-click demo buttons when they'd be refused.
+export const demoLoginsEnabled = () =>
+  process.env.NODE_ENV !== 'production' || !!process.env.ALLOW_DEMO_LOGINS;
 
 // Smart sign-in: does an account exist for this email, and how does it log in?
 // (password vs. Google-only). Lets the UI route to the right next step.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { api } from '../api.js';
@@ -6,6 +6,31 @@ import { Button, Field } from '../components/ui.jsx';
 import GoogleButton from '../components/GoogleButton.jsx';
 
 const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
+
+const DEMO_ACCOUNTS = [
+  { label: 'Admin', email: 'admin@synthica.org' },
+  { label: 'Director', email: 'director@synthica.org' },
+  { label: 'Auditor', email: 'auditor@synthica.org' },
+  { label: 'Lead researcher', email: 'sam@example.com' },
+  { label: 'Associate researcher', email: 'jordan@example.com' },
+];
+
+// Static layout wrapper. Must live at module scope: defining it inside Login
+// would create a new component type on every render, making React unmount and
+// remount the whole card on each keystroke (replaying the entry animation,
+// dropping input focus, and repainting the blurred aurora).
+function Shell({ children }) {
+  return (
+    <div className="login-wrap login-v2">
+      <Aurora />
+      <div className="login-card login-card-v2">
+        <div className="login-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
+        {children}
+        <div className="login-foot"><Link to="/archive">Browse the Synthica Archive →</Link></div>
+      </div>
+    </div>
+  );
+}
 
 // One smart entry point: enter email → we look it up → known accounts get a
 // password prompt; new ones flow into sign-up. No "login vs register" choice.
@@ -24,6 +49,13 @@ export default function Login() {
   const [signup, setSignup] = useState({ name: '', discord: '', password: '', resumeUrl: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [demoEnabled, setDemoEnabled] = useState(true);
+
+  // Production refuses the shared demo password, so hide the demo buttons
+  // there instead of letting them fail with "invalid password".
+  useEffect(() => {
+    api.config().then((c) => setDemoEnabled(c.demoLogins !== false)).catch(() => {});
+  }, []);
 
   const goHome = (user) => navigate(user.kind === 'editor' ? '/editor' : '/researcher', { replace: true });
   const fail = (e) => setError(e.message || String(e));
@@ -47,8 +79,21 @@ export default function Login() {
     setError('');
     setBusy(true);
     try {
-      const res = await login(email.trim(), password);
+      // Trim the password too: copy-pasting it (e.g. from the demo hint or a
+      // password manager) often drags along a trailing space or newline.
+      const res = await login(email.trim(), password.trim());
       if (res.twoFactorRequired) { setTwoFA({ tempToken: res.tempToken }); setStep('twofa'); }
+      else goHome(res);
+    } catch (err) { fail(err); } finally { setBusy(false); }
+  };
+
+  // One-click demo sign-in — no email/password typing needed.
+  const demoLogin = async (demoEmail) => {
+    setError('');
+    setBusy(true);
+    try {
+      const res = await login(demoEmail, 'demo1234');
+      if (res.twoFactorRequired) { setEmail(demoEmail); setTwoFA({ tempToken: res.tempToken }); setStep('twofa'); }
       else goHome(res);
     } catch (err) { fail(err); } finally { setBusy(false); }
   };
@@ -67,21 +112,10 @@ export default function Login() {
     setError('');
     setBusy(true);
     try {
-      const user = await register({ ...signup, email: email.trim() });
+      const user = await register({ ...signup, email: email.trim(), password: signup.password.trim() });
       goHome(user);
     } catch (err) { fail(err); } finally { setBusy(false); }
   };
-
-  const Shell = ({ children }) => (
-    <div className="login-wrap login-v2">
-      <Aurora />
-      <div className="login-card login-card-v2">
-        <div className="login-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
-        {children}
-        <div className="login-foot"><Link to="/archive">Browse the Synthica Archive →</Link></div>
-      </div>
-    </div>
-  );
 
   if (step === 'twofa') {
     return (
@@ -155,15 +189,19 @@ export default function Login() {
         <Button type="submit" disabled={busy} style={{ width: '100%' }}>{busy ? 'Checking…' : 'Continue →'}</Button>
       </form>
 
-      <details className="login-demo">
-        <summary>Demo accounts</summary>
-        <div className="login-hint" style={{ marginTop: '0.5rem' }}>
-          Password <code>demo1234</code> · sign in with any email below:<br />
-          Staff — <code>admin@synthica.org</code> · <code>director@synthica.org</code> · <code>auditor@synthica.org</code>
-          <br />
-          Researchers — <code>sam@example.com</code> (lead) · <code>jordan@example.com</code> (associate)
-        </div>
-      </details>
+      {demoEnabled && (
+        <details className="login-demo">
+          <summary>Demo accounts</summary>
+          <div className="login-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>One click — no email or password needed:</div>
+          <div className="login-demo-grid">
+            {DEMO_ACCOUNTS.map(({ label, email: demoEmail }) => (
+              <button key={demoEmail} type="button" className="demo-btn" disabled={busy} onClick={() => demoLogin(demoEmail)} title={demoEmail}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
     </Shell>
   );
 }
