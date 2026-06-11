@@ -1,0 +1,181 @@
+// Thin fetch wrapper around the backend API. Reads the auth token from
+// localStorage and attaches it as a Bearer header.
+
+const TOKEN_KEY = 'synthica.token';
+
+// Where the backend lives. In dev this is empty, so requests hit "/api/…" and
+// Vite's proxy forwards them to localhost:4000. In production, set
+// VITE_API_BASE (e.g. https://synthica-backend.onrender.com) at build time.
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function request(path, { method = 'GET', body } = {}, attempt = 0) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  // Reads retry through transient failures (free-tier backends cold-start and
+  // briefly answer 502/503, or the connection drops) so a click loads without
+  // a manual refresh. Writes are never retried (not idempotent).
+  const retryable = method === 'GET' && attempt < 3;
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    if (retryable) {
+      await sleep(1500 * 2 ** attempt); // 1.5s, 3s, 6s
+      return request(path, { method, body }, attempt + 1);
+    }
+    throw new Error('Can’t reach the server — it may be waking up. Try again in a few seconds.');
+  }
+
+  if ([502, 503, 504].includes(res.status) && retryable) {
+    await sleep(1500 * 2 ** attempt);
+    return request(path, { method, body }, attempt + 1);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Expired/invalid session: every call would silently fail until a manual
+    // refresh. Clear the token and send them to login instead.
+    if (res.status === 401 && token && !path.startsWith('/login') && !path.startsWith('/2fa')) {
+      clearToken();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login?expired=1');
+        return new Promise(() => {}); // page is navigating away
+      }
+    }
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+export const api = {
+  // auth
+  login: (identifier, password) => request('/login', { method: 'POST', body: { identifier, password } }),
+  checkEmail: (email) => request('/auth/check-email', { method: 'POST', body: { email } }),
+  verify2fa: (tempToken, code) => request('/2fa/verify', { method: 'POST', body: { tempToken, code } }),
+  setup2fa: () => request('/2fa/setup', { method: 'POST' }),
+  enable2fa: (code) => request('/2fa/enable', { method: 'POST', body: { code } }),
+  disable2fa: (code) => request('/2fa/disable', { method: 'POST', body: { code } }),
+  register: (body) => request('/register', { method: 'POST', body }),
+  googleAuth: (credential) => request('/auth/google', { method: 'POST', body: { credential } }),
+  config: () => request('/config'),
+  me: () => request('/me'),
+  updateProfile: (body) => request('/me/profile', { method: 'PUT', body }),
+  profile: (id) => request(`/profiles/${id}`),
+  // admin (director / auditor)
+  adminAnalytics: () => request('/admin/analytics'),
+  adminApplications: () => request('/admin/applications'),
+  reviewApplication: (id, status, assignTag) => request(`/admin/applications/${id}`, { method: 'POST', body: { status, assignTag } }),
+  adminSetTags: (id, body) => request(`/admin/users/${id}/tags`, { method: 'POST', body }),
+  adminUsers: (q) => request(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminSetRole: (id, body) => request(`/admin/users/${id}/role`, { method: 'POST', body }),
+  adminBulkRole: (body) => request('/admin/bulk-role', { method: 'POST', body }),
+  adminAudit: () => request('/admin/audit'),
+  adminExport: () => request('/admin/export'),
+  // paper archive (admin upload + self-archive verification)
+  adminPublications: () => request('/admin/publications'),
+  adminAddPublication: (body) => request('/admin/publications', { method: 'POST', body }),
+  adminDeletePublication: (id) => request(`/admin/publications/${id}`, { method: 'DELETE' }),
+  adminArchiveQueue: () => request('/admin/archive-queue'),
+  verifyPublication: (id, status) => request(`/admin/publications/${id}/verify`, { method: 'POST', body: { status } }),
+  adminEditPublication: (id, body) => request(`/admin/publications/${id}`, { method: 'PUT', body }),
+  featurePublication: (id, featured) => request(`/admin/publications/${id}/feature`, { method: 'POST', body: { featured } }),
+  setSettings: (body) => request('/editor/settings', { method: 'PUT', body }),
+  // news + account
+  news: () => request('/news'),
+  postNews: (body) => request('/news', { method: 'POST', body }),
+  notifications: () => request('/notifications'),
+  markNotificationsRead: (ids) => request('/notifications/read', { method: 'POST', body: { ids } }),
+  profiles: () => request('/profiles'),
+  forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: { email } }),
+  resetPassword: (token, password) => request('/auth/reset-password', { method: 'POST', body: { token, password } }),
+  verifyEmail: (token) => request('/auth/verify-email', { method: 'POST', body: { token } }),
+  resendVerification: () => request('/auth/resend-verification', { method: 'POST' }),
+
+  // Track 2 — journal
+  publications: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/journal/publications${qs ? `?${qs}` : ''}`);
+  },
+
+  // Track 3 — editor
+  editorPapers: () => request('/editor/papers'),
+  review: (id, body) => request(`/editor/papers/${id}/review`, { method: 'POST', body }),
+  senior: (id, body) => request(`/editor/papers/${id}/senior`, { method: 'POST', body }),
+  associateRound: (id, body) => request(`/editor/papers/${id}/associate-round`, { method: 'POST', body }),
+  chief: (id, body) => request(`/editor/papers/${id}/chief`, { method: 'POST', body }),
+  director: () => request('/editor/director'),
+  markEmailed: (body) => request('/editor/director/emailed', { method: 'POST', body }),
+  publish: (body) => request('/editor/director/publish', { method: 'POST', body }),
+  addComment: (id, body) => request(`/editor/papers/${id}/comments`, { method: 'POST', body: { body } }),
+  workload: () => request('/editor/director/workload'),
+  reassign: (body) => request('/editor/director/reassign', { method: 'POST', body }),
+
+  // Track 4 — researcher
+  myProjects: () => request('/researcher/projects'),
+  project: (id) => request(`/researcher/projects/${id}`),
+  listings: () => request('/researcher/hub/listings'),
+  apply: (body) => request('/researcher/hub/apply', { method: 'POST', body }),
+  myApplications: () => request('/researcher/applications'),
+  createListing: (body) => request('/researcher/listings', { method: 'POST', body }),
+  myListings: () => request('/researcher/my-listings'),
+  updateListing: (id, body) => request(`/researcher/listings/${id}`, { method: 'PUT', body }),
+  deleteListing: (id) => request(`/researcher/listings/${id}`, { method: 'DELETE' }),
+  createProject: (body) => request('/researcher/projects', { method: 'POST', body }),
+  listingApplications: () => request('/researcher/listing-applications'),
+  reviewListingApplication: (id, status) => request(`/researcher/listing-applications/${id}`, { method: 'POST', body: { status } }),
+  postBanner: (body) => request('/researcher/banner', { method: 'POST', body }),
+  addTask: (id, body) => request(`/researcher/projects/${id}/tasks`, { method: 'POST', body }),
+  assignTask: (id, taskId, memberId) => request(`/researcher/projects/${id}/tasks/${taskId}/assign`, { method: 'POST', body: { memberId } }),
+  startTask: (id, taskId) => request(`/researcher/projects/${id}/tasks/${taskId}/start`, { method: 'POST' }),
+  approveTask: (id, taskId, approve) => request(`/researcher/projects/${id}/tasks/${taskId}/approve`, { method: 'POST', body: { approve } }),
+  completeTask: (id, taskId, done) => request(`/researcher/projects/${id}/tasks/${taskId}/complete`, { method: 'POST', body: { done } }),
+  addAnnouncement: (id, body) => request(`/researcher/projects/${id}/announcements`, { method: 'POST', body }),
+  addProjectLink: (id, body) => request(`/researcher/projects/${id}/links`, { method: 'POST', body }),
+  inviteToProject: (id, email) => request(`/researcher/projects/${id}/invite`, { method: 'POST', body: { email } }),
+  projectStats: (id) => request(`/researcher/projects/${id}/stats`),
+  addIdea: (id, text) => request(`/researcher/projects/${id}/ideas`, { method: 'POST', body: { text } }),
+  voteIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/vote`, { method: 'POST' }),
+  chooseIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/choose`, { method: 'POST' }),
+  calendar: () => request('/calendar'),
+  addEvent: (body) => request('/events', { method: 'POST', body }),
+  deleteEvent: (id) => request(`/events/${id}`, { method: 'DELETE' }),
+  pathway: () => request('/researcher/pathway'),
+  addPathway: (body) => request('/researcher/pathway', { method: 'POST', body }),
+  seedPathway: (track) => request('/researcher/pathway/seed', { method: 'POST', body: { track } }),
+  togglePathway: (id, done) => request(`/researcher/pathway/${id}/toggle`, { method: 'POST', body: { done } }),
+  deletePathway: (id) => request(`/researcher/pathway/${id}`, { method: 'DELETE' }),
+  people: () => request('/people'),
+  follow: (id) => request(`/people/${id}/follow`, { method: 'POST' }),
+  unfollow: (id) => request(`/people/${id}/unfollow`, { method: 'POST' }),
+  feed: () => request('/feed'),
+  updateResume: (resumeUrl) => request('/researcher/me/resume', { method: 'PUT', body: { resumeUrl } }),
+  submitJournal: (body) => request('/researcher/journal/submit', { method: 'POST', body }),
+  mySubmissions: () => request('/researcher/my-submissions'),
+  reviseSubmission: (id, body) => request(`/researcher/submissions/${id}/revise`, { method: 'POST', body }),
+  myPublications: () => request('/researcher/publications'),
+  addPastPaper: (body) => request('/researcher/publications', { method: 'POST', body }),
+  requestRevision: (id, note) => request(`/editor/papers/${id}/request-revision`, { method: 'POST', body: { note } }),
+  onboarding: () => request('/researcher/onboarding'),
+  onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
+  chapter: () => request('/researcher/chapter'),
+  addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
+  chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  // editor
+  editorStats: () => request('/editor/stats'),
+  getSettings: () => request('/editor/settings'),
+  setWebhook: (discordWebhookUrl) => request('/editor/settings', { method: 'PUT', body: { discordWebhookUrl } }),
+  testWebhook: () => request('/editor/settings/test', { method: 'POST' }),
+};

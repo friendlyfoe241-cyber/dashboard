@@ -1,0 +1,698 @@
+// Synthica backend — single Express app serving three tracks:
+//   Track 2: /api/journal     journal publications + DOI registry
+//   Track 3: /api/editor      journal editor dashboard workflow
+//   Track 4: /api/researcher  researcher dashboard
+//
+// Everything runs off an in-memory store (src/store.js) seeded from src/seed.js.
+// Run: `npm install && npm start` (defaults to http://localhost:4000).
+
+import express from 'express';
+import cors from 'cors';
+
+import { login, issueToken, issuePurposeToken, verifyPurposeToken } from './src/auth.js';
+import { requireAuth } from './src/auth.js';
+import * as store from './src/store.js';
+import * as notify from './src/notify.js';
+import { sendEmail } from './src/email.js';
+import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
+import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
+
+const FRONTEND_URL = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+
+const app = express();
+app.set('trust proxy', 1); // real client IP behind Render/Vercel proxies
+
+// Fail fast in production if the token secret is missing.
+if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
+  console.error('FATAL: AUTH_SECRET must be set in production.');
+  process.exit(1);
+}
+// Loud warning if production runs without persistence: every restart wipes
+// users, papers, and applications back to the demo seed.
+if (process.env.NODE_ENV === 'production' && (process.env.DATA_PROVIDER || 'memory').toLowerCase() === 'memory') {
+  console.warn('[data] DATA_PROVIDER=memory in production — ALL DATA IS LOST ON RESTART. Set DATA_PROVIDER=sheets.');
+}
+
+// CORS: lock to CORS_ORIGINS (comma-separated) if set; otherwise open (dev).
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+if (corsOrigins.length) {
+  app.use(cors({ origin: corsOrigins }));
+} else {
+  if (process.env.NODE_ENV === 'production') console.warn('[cors] CORS_ORIGINS not set — allowing all origins.');
+  app.use(cors());
+}
+app.use(express.json({ limit: '1mb' }));
+
+// Baseline security headers (helmet-lite, no dependency).
+app.use((_req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Tiny in-memory rate limiter (per IP+path). Protects the auth endpoints from
+// brute force without an external dependency.
+function rateLimiter({ windowMs, max }) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const key = `${req.ip}:${req.path}`;
+    const now = Date.now();
+    let rec = hits.get(key);
+    if (!rec || now > rec.reset) rec = { count: 0, reset: now + windowMs };
+    rec.count += 1;
+    hits.set(key, rec);
+    if (rec.count > max) {
+      const retry = Math.ceil((rec.reset - now) / 1000);
+      res.set('Retry-After', String(retry));
+      return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
+    }
+    next();
+  };
+}
+const authLimiter = rateLimiter({ windowMs: 60_000, max: 10 });
+
+// Turn thrown { status, message } errors into JSON responses.
+const wrap = (fn) => (req, res) => {
+  try {
+    fn(req, res);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Server error' });
+  }
+};
+
+app.get('/api/health', (_req, res) => res.json({ ok: true, categories: CATEGORIES }));
+
+// --- Auth ------------------------------------------------------------------
+app.post('/api/login', authLimiter, wrap((req, res) => {
+  const { username, identifier, password } = req.body || {};
+  const result = login(identifier || username, password);
+  if (!result) return res.status(401).json({ error: 'Invalid username or password' });
+  // If 2FA is on, require a second step before issuing the real token.
+  if (store.twoFactorRequired(result.user.id)) {
+    return res.json({ twoFactorRequired: true, tempToken: issuePurposeToken(result.user.id, '2fa', 300) });
+  }
+  res.json(result);
+}));
+
+// Smart sign-in step 1: is this email known, and how does it sign in?
+app.post('/api/auth/check-email', authLimiter, wrap((req, res) => {
+  res.json(store.lookupEmail((req.body || {}).email));
+}));
+
+// Second factor: exchange the temp token + TOTP code for a session token.
+app.post('/api/2fa/verify', authLimiter, wrap((req, res) => {
+  const { tempToken, code } = req.body || {};
+  const id = verifyPurposeToken(tempToken, '2fa');
+  if (!id) return res.status(401).json({ error: '2FA session expired — sign in again' });
+  if (!store.verifyTwoFactorCode(id, code)) return res.status(401).json({ error: 'Invalid code' });
+  const u = store.getUserById(id);
+  const { password, twoFactorSecret, ...user } = u;
+  res.json({ token: issueToken(u), user });
+}));
+
+// 2FA enrollment (authenticated).
+app.post('/api/2fa/setup', requireAuth, wrap((req, res) => res.json(store.startTwoFactorSetup(req.user.id))));
+app.post('/api/2fa/enable', requireAuth, wrap((req, res) => res.json(store.enableTwoFactor(req.user.id, (req.body || {}).code))));
+app.post('/api/2fa/disable', requireAuth, wrap((req, res) => res.json(store.disableTwoFactor(req.user.id, (req.body || {}).code))));
+
+// Tells the frontend which auth options are available.
+app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled() }));
+
+// Google Sign-In: verify the ID token, find/create the user, issue our token.
+app.post('/api/auth/google', authLimiter, async (req, res) => {
+  try {
+    const { credential } = req.body || {};
+    const profile = await verifyGoogleIdToken(credential);
+    const user = store.findOrCreateGoogleUser(profile);
+    res.json({ token: issueToken(user), user });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Google sign-in failed' });
+  }
+});
+
+app.get('/api/me', requireAuth, (req, res) => res.json(req.user));
+
+// Edit your own public profile.
+app.put('/api/me/profile', requireAuth, wrap((req, res) => {
+  res.json(store.updateProfile(req.user.id, req.body || {}));
+}));
+
+// --- Public profiles (no auth) ---------------------------------------------
+app.get('/api/profiles', wrap((_req, res) => res.json(store.listProfiles())));
+app.get('/api/profiles/:id', wrap((req, res) => {
+  const p = store.getPublicProfile(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Profile not found' });
+  res.json(p);
+}));
+
+// --- Admin: analytics, application review, audit, backup -------------------
+// The platform Admin account passes every admin gate — it sees everything.
+const requireDirector = (req, res, next) =>
+  req.user.kind === 'editor' && [EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.ADMIN].includes(req.user.role)
+    ? next()
+    : res.status(403).json({ error: 'Director only' });
+
+// Auditor, Director, or Admin — reviews sign-ups + applications + audit log.
+const requireAuditor = (req, res, next) =>
+  req.user.kind === 'editor' && [EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.AUDITOR, EDITOR_ROLES.ADMIN].includes(req.user.role)
+    ? next()
+    : res.status(403).json({ error: 'Auditor or Director only' });
+
+// Senior editors and up can post global news.
+const canPostNews = (req, res, next) =>
+  req.user.kind === 'editor' && [EDITOR_ROLES.SENIOR, EDITOR_ROLES.CHIEF, EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.ADMIN].includes(req.user.role)
+    ? next()
+    : res.status(403).json({ error: 'Senior editors and up only' });
+
+app.get('/api/admin/analytics', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.analytics())));
+
+app.get('/api/admin/applications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.allApplications())));
+
+app.post('/api/admin/applications/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  const { status, assignTag } = req.body || {};
+  res.json(store.setApplicationStatus({ id: req.params.id, status, assignTag, reviewerId: req.user.id }));
+}));
+
+// Auditors assign/remove researcher tags directly (role assignment).
+app.post('/api/admin/users/:id/tags', requireAuth, requireAuditor, wrap((req, res) => {
+  const { addTags, removeTags } = req.body || {};
+  res.json(store.auditorSetTags({ userId: req.params.id, addTags, removeTags, actor: req.user }));
+}));
+
+app.get('/api/admin/audit', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listAudit())));
+
+// --- Paper archive: admin upload + self-archive verification (auditor) ------
+app.get('/api/admin/publications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.adminListPublications())));
+
+app.post('/api/admin/publications', requireAuth, requireAuditor, wrap((req, res) => {
+  res.json(store.archivePublication(req.body || {}, req.user));
+}));
+
+app.delete('/api/admin/publications/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  res.json(store.deletePublication({ id: req.params.id, actor: req.user }));
+}));
+
+app.get('/api/admin/archive-queue', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listArchiveQueue())));
+
+app.put('/api/admin/publications/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  res.json(store.editPublication({ id: req.params.id, patch: req.body || {}, actor: req.user }));
+}));
+
+app.post('/api/admin/publications/:id/feature', requireAuth, requireAuditor, wrap((req, res) => {
+  res.json(store.featurePublication({ id: req.params.id, featured: !!(req.body || {}).featured, actor: req.user }));
+}));
+
+app.post('/api/admin/publications/:id/verify', requireAuth, requireAuditor, wrap((req, res) => {
+  const { status } = req.body || {};
+  res.json(store.verifyPublication({ id: req.params.id, status, reviewerId: req.user.id }));
+}));
+
+// People lookup (auditors review/re-assign researcher roles; directors get
+// editor-role powers via the routes below).
+app.get('/api/admin/users', requireAuth, requireAuditor, wrap((req, res) => res.json(store.adminListUsers(req.query.q))));
+
+app.post('/api/admin/users/:id/role', requireAuth, requireDirector, wrap((req, res) => {
+  const { kind, role, category, addTags, removeTags } = req.body || {};
+  res.json(store.adminSetUserRole({ userId: req.params.id, kind, role, category, addTags, removeTags, actor: req.user }));
+}));
+
+app.post('/api/admin/bulk-role', requireAuth, requireDirector, wrap((req, res) => {
+  const { emails, tag, role } = req.body || {};
+  res.json(store.adminBulkRole({ emails, tag, role, actor: req.user }));
+}));
+
+// Full data snapshot for manual backup (Director only).
+app.get('/api/admin/export', requireAuth, requireDirector, wrap((_req, res) => {
+  res.set('Content-Disposition', 'attachment; filename="synthica-backup.json"');
+  res.json(store.exportAll());
+}));
+
+// --- In-app notifications --------------------------------------------------
+app.get('/api/notifications', requireAuth, wrap((req, res) => res.json(store.listNotifications(req.user.id))));
+app.post('/api/notifications/read', requireAuth, wrap((req, res) => {
+  res.json(store.markNotificationsRead(req.user.id, (req.body || {}).ids));
+}));
+
+// --- Global news / announcements -------------------------------------------
+app.get('/api/news', requireAuth, wrap((_req, res) => res.json(store.listNews())));
+app.post('/api/news', requireAuth, canPostNews, wrap((req, res) => {
+  const { title, body, audience } = req.body || {};
+  res.json(store.addNews({ authorId: req.user.id, authorName: req.user.name, title, body, audience }));
+}));
+
+// Public self-registration (researchers). Requires email + Discord.
+app.post('/api/register', authLimiter, wrap((req, res) => {
+  const { name, email, discord, password, username, resumeUrl } = req.body || {};
+  const user = store.registerResearcher({ name, email, discord, password, username, resumeUrl });
+  // Email a verification link (logged if no email provider configured).
+  const vt = issuePurposeToken(user.id, 'verify', 60 * 60 * 24);
+  sendEmail({
+    to: user.email,
+    subject: 'Verify your Synthica email',
+    text: `Welcome to Synthica! Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}`,
+  });
+  res.json({ token: issueToken(user), user });
+}));
+
+// Email verification.
+app.post('/api/auth/verify-email', wrap((req, res) => {
+  const id = verifyPurposeToken((req.body || {}).token, 'verify');
+  if (!id || !store.markEmailVerified(id)) return res.status(400).json({ error: 'Invalid or expired link' });
+  res.json({ ok: true });
+}));
+
+app.post('/api/auth/resend-verification', authLimiter, requireAuth, wrap((req, res) => {
+  const vt = issuePurposeToken(req.user.id, 'verify', 60 * 60 * 24);
+  sendEmail({ to: req.user.email, subject: 'Verify your Synthica email', text: `Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}` });
+  res.json({ ok: true });
+}));
+
+// Password reset (always responds ok so it doesn't leak which emails exist).
+app.post('/api/auth/forgot-password', authLimiter, wrap((req, res) => {
+  const user = store.getUserByEmail((req.body || {}).email || '');
+  if (user && user.password) {
+    const rt = issuePurposeToken(user.id, 'reset', 60 * 60);
+    sendEmail({ to: user.email, subject: 'Reset your Synthica password', text: `Reset your password:\n${FRONTEND_URL || ''}/reset?token=${rt}` });
+  }
+  res.json({ ok: true });
+}));
+
+app.post('/api/auth/reset-password', authLimiter, wrap((req, res) => {
+  const { token, password } = req.body || {};
+  const id = verifyPurposeToken(token, 'reset');
+  if (!id) return res.status(400).json({ error: 'Invalid or expired link' });
+  store.setPassword(id, password);
+  res.json({ ok: true });
+}));
+
+// --- Track 2: Journal publications / DOI registry --------------------------
+app.get('/api/journal/publications', wrap((req, res) => {
+  let pubs = store.listPublications();
+  const { category, q } = req.query;
+  if (category) pubs = pubs.filter((p) => p.category === category);
+  if (q) {
+    const needle = String(q).toLowerCase();
+    pubs = pubs.filter(
+      (p) =>
+        p.title.toLowerCase().includes(needle) ||
+        p.authors.some((a) => a.name.toLowerCase().includes(needle))
+    );
+  }
+  res.json(pubs);
+}));
+
+// RSS feed of the latest publications.
+app.get('/api/journal/rss', wrap((_req, res) => {
+  const esc = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+  const pubs = store.listPublications()
+    .slice()
+    .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  const items = pubs.map((p) => `
+    <item>
+      <title>${esc(p.title)}</title>
+      <link>https://doi.org/${esc(p.doi)}</link>
+      <guid isPermaLink="false">${esc(p.doi)}</guid>
+      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>
+      <category>${esc(p.category)}</category>
+      <description>${esc(p.abstract)}</description>
+    </item>`).join('');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Synthica Journal</title>
+  <link>https://www.synthica.org/journal-archive.html</link>
+  <description>Latest open-access research from the Synthica Journal.</description>
+  ${items}
+</channel></rss>`;
+  res.set('Content-Type', 'application/rss+xml').send(xml);
+}));
+
+app.get('/api/journal/publications/:id', wrap((req, res) => {
+  const pub = store.getPublication(req.params.id);
+  if (!pub) return res.status(404).json({ error: 'Publication not found' });
+  res.json(pub);
+}));
+
+// --- Track 3: Editor dashboard ---------------------------------------------
+// All editor routes require auth and act as the logged-in editor.
+const editorOnly = (req, res, next) =>
+  req.user.kind === 'editor' ? next() : res.status(403).json({ error: 'Editors only' });
+
+app.get('/api/editor/papers', requireAuth, editorOnly, wrap((req, res) => {
+  res.json(store.papersForEditor(req.user.id));
+}));
+
+app.post('/api/editor/papers/:id/review', requireAuth, editorOnly, wrap((req, res) => {
+  const { decision, comments, recommendation } = req.body || {};
+  res.json(
+    store.submitReviewDecision({ paperId: req.params.id, editorId: req.user.id, decision, comments, recommendation })
+  );
+}));
+
+app.post('/api/editor/papers/:id/senior', requireAuth, editorOnly, wrap((req, res) => {
+  const { decision, comments } = req.body || {};
+  res.json(store.seniorDecision({ paperId: req.params.id, editorId: req.user.id, decision, comments }));
+}));
+
+app.post('/api/editor/papers/:id/associate-round', requireAuth, editorOnly, wrap((req, res) => {
+  const { note } = req.body || {};
+  res.json(store.associateRound({ paperId: req.params.id, editorId: req.user.id, note }));
+}));
+
+app.get('/api/editor/stats', requireAuth, editorOnly, wrap((req, res) => {
+  res.json(store.editorStats(req.user.id));
+}));
+
+// Internal editor comment thread on a paper.
+app.post('/api/editor/papers/:id/comments', requireAuth, editorOnly, wrap((req, res) => {
+  const { body } = req.body || {};
+  res.json(store.addPaperComment({ paperId: req.params.id, editorId: req.user.id, body }));
+}));
+
+// An editor asks the author for a revision.
+app.post('/api/editor/papers/:id/request-revision', requireAuth, editorOnly, wrap((req, res) => {
+  const { note } = req.body || {};
+  res.json(store.requestRevision({ paperId: req.params.id, editorId: req.user.id, note }));
+}));
+
+app.post('/api/editor/papers/:id/chief', requireAuth, editorOnly, wrap((req, res) => {
+  if (req.user.role !== EDITOR_ROLES.CHIEF) return res.status(403).json({ error: 'Editor-in-chief only' });
+  const { decision, comments } = req.body || {};
+  res.json(store.chiefDecision({ paperId: req.params.id, decision, comments }));
+}));
+
+// Director-only views + actions (the platform Admin sees these too).
+const directorOnly = (req, res, next) =>
+  [EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.ADMIN].includes(req.user.role) ? next() : res.status(403).json({ error: 'Director only' });
+
+app.get('/api/editor/director', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
+  res.json(store.directorView());
+}));
+
+app.post('/api/editor/director/emailed', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
+  const { paperId, at } = req.body || {};
+  store.markEmailed({ paperId, at });
+  res.json({ ok: true });
+}));
+
+app.post('/api/editor/director/publish', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
+  const { paperId, doiSuffix, volume, issue, pages } = req.body || {};
+  res.json(store.publishToJournal({ paperId, doiSuffix, volume, issue, pages }));
+}));
+
+app.get('/api/editor/director/workload', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
+  res.json(store.editorWorkload());
+}));
+
+app.post('/api/editor/director/reassign', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
+  const { paperId, fromEditorId, toEditorId } = req.body || {};
+  res.json(store.reassignReviewer({ paperId, fromEditorId, toEditorId }));
+}));
+
+// Director: configure + test the Discord webhook for queue notifications.
+app.get('/api/editor/settings', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
+  res.json({ discordWebhookUrl: notify.getWebhook(), whatsappWebhookUrl: notify.getWhatsapp() });
+}));
+
+app.put('/api/editor/settings', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
+  const { discordWebhookUrl, whatsappWebhookUrl } = req.body || {};
+  if (discordWebhookUrl && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\//.test(discordWebhookUrl)) {
+    return res.status(400).json({ error: 'That does not look like a Discord webhook URL' });
+  }
+  if (whatsappWebhookUrl && !/^https:\/\//.test(whatsappWebhookUrl)) {
+    return res.status(400).json({ error: 'WhatsApp webhook must be an https URL' });
+  }
+  if (discordWebhookUrl !== undefined) notify.setWebhook(discordWebhookUrl);
+  if (whatsappWebhookUrl !== undefined) notify.setWhatsapp(whatsappWebhookUrl);
+  res.json({ discordWebhookUrl: notify.getWebhook(), whatsappWebhookUrl: notify.getWhatsapp() });
+}));
+
+app.post('/api/editor/settings/test', requireAuth, editorOnly, directorOnly, wrap(async (_req, res) => {
+  const result = await notify.sendTest();
+  if (result.skipped) return res.status(400).json({ error: 'Set a webhook URL first' });
+  res.json(result);
+}));
+
+// --- Track 4: Researcher dashboard -----------------------------------------
+const researcherOnly = (req, res, next) => {
+  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
+  // New members can't act until an auditor assigns their role.
+  if (req.user.approved === false) return res.status(403).json({ error: 'Your account is awaiting role assignment by an auditor.' });
+  next();
+};
+
+app.get('/api/researcher/projects', requireAuth, researcherOnly, wrap((req, res) => {
+  // Projects the user is a member of (associate view) or leads (lead view).
+  const mine = store.listProjects().filter((p) => p.members.includes(req.user.id));
+  res.json(mine);
+}));
+
+app.get('/api/researcher/projects/:id', requireAuth, researcherOnly, wrap((req, res) => {
+  const project = store.getProject(req.params.id);
+  if (!project || !project.members.includes(req.user.id))
+    return res.status(404).json({ error: 'Project not found' });
+  // Resolve members to full contacts (name, email, discord) for the roster +
+  // the lead's "email everyone" action.
+  const team = store.projectTeam(project.id);
+  const memberNames = team.map((m) => m.name);
+  res.json({ ...project, team, memberNames, isLead: project.leadId === req.user.id });
+}));
+
+// Researcher updates the link to their résumé.
+app.put('/api/researcher/me/resume', requireAuth, researcherOnly, wrap((req, res) => {
+  const { resumeUrl } = req.body || {};
+  res.json(store.updateResume(req.user.id, resumeUrl));
+}));
+
+app.get('/api/researcher/hub/listings', requireAuth, researcherOnly, wrap((_req, res) => {
+  res.json(store.listListings());
+}));
+
+app.post('/api/researcher/hub/apply', requireAuth, researcherOnly, wrap((req, res) => {
+  const { listingId, role, message, answers } = req.body || {};
+  // Auto-attach the applicant's résumé link (if they've added one).
+  res.json(store.addApplication({
+    userId: req.user.id,
+    userName: req.user.name,
+    listingId: listingId || null,
+    role: role || null,
+    message: message || '',
+    answers: answers && typeof answers === 'object' ? answers : null,
+    resumeUrl: req.user.resumeUrl || '',
+  }));
+}));
+
+app.get('/api/researcher/applications', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.listApplications().filter((a) => a.userId === req.user.id));
+}));
+
+// Leads: create listings/projects + review applicants to their own listings.
+app.get('/api/researcher/my-listings', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.myListings(req.user.id));
+}));
+
+app.put('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
+  res.json(store.updateListing({ listingId: req.params.id, leadId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+}));
+
+app.delete('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteListing({ listingId: req.params.id, leadId: req.user.id }));
+}));
+
+app.post('/api/researcher/listings', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
+  res.json(store.createListing({ userId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+}));
+
+// --- Shared calendar: lead/staff deadlines + due dates ----------------------
+app.get('/api/calendar', requireAuth, wrap((req, res) => res.json(store.calendarFor(req.user.id))));
+
+app.post('/api/events', requireAuth, wrap((req, res) => {
+  const { title, type, dueAt, projectId, chapterId } = req.body || {};
+  res.json(store.addEvent({ userId: req.user.id, title, type, dueAt, projectId, chapterId }));
+}));
+
+app.delete('/api/events/:id', requireAuth, wrap((req, res) => {
+  res.json(store.deleteEvent({ id: req.params.id, userId: req.user.id }));
+}));
+app.post('/api/researcher/projects', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description } = req.body || {};
+  res.json(store.createProject({ userId: req.user.id, title, category, description }));
+}));
+app.get('/api/researcher/listing-applications', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.myListingApplications(req.user.id));
+}));
+app.post('/api/researcher/listing-applications/:id', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.reviewListingApplication({ leadId: req.user.id, appId: req.params.id, status: (req.body || {}).status }));
+}));
+// Leads post a project banner/update to the feed.
+app.post('/api/researcher/banner', requireAuth, researcherOnly, wrap((req, res) => {
+  const u = req.user;
+  // Feed posting is for leads + associates; everyone else just reads.
+  const canPost = (u.tags || []).some((t) => ['lead_researcher', 'associate_researcher'].includes(t));
+  if (!canPost) return res.status(403).json({ error: 'Lead or associate researchers only' });
+  const { title, body, bannerUrl } = req.body || {};
+  res.json(store.addNews({ authorId: u.id, authorName: u.name, title, body, bannerUrl }));
+}));
+
+// Researcher submits a paper into the editor pipeline + manages revisions.
+app.post('/api/researcher/journal/submit', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, abstract, pdfUrl, coAuthors } = req.body || {};
+  res.json(store.submitToJournal({ userId: req.user.id, title, category, abstract, pdfUrl, coAuthors }));
+}));
+
+app.get('/api/researcher/my-submissions', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.mySubmissions(req.user.id));
+}));
+
+app.post('/api/researcher/submissions/:id/revise', requireAuth, researcherOnly, wrap((req, res) => {
+  const { url, note } = req.body || {};
+  res.json(store.addRevision({ paperId: req.params.id, userId: req.user.id, url, note }));
+}));
+
+// Researcher self-archives a past paper (links to their profile, pending verify)
+// and lists their own publications (verified + pending).
+app.get('/api/researcher/publications', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.myPublications(req.user.id));
+}));
+
+app.post('/api/researcher/publications', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.addPastPaper(req.user.id, req.body || {}));
+}));
+
+// Any member can add a task; the lead approves tasks that need sign-off.
+app.post('/api/researcher/projects/:id/tasks', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, type, dueAt, assignedTo, requiresApproval } = req.body || {};
+  res.json(store.addProjectTask({ projectId: req.params.id, userId: req.user.id, title, type, dueAt, assignedTo, requiresApproval }));
+}));
+
+app.post('/api/researcher/projects/:id/tasks/:taskId/assign', requireAuth, researcherOnly, wrap((req, res) => {
+  const { memberId } = req.body || {};
+  res.json(store.assignTask({ projectId: req.params.id, userId: req.user.id, taskId: req.params.taskId, memberId }));
+}));
+
+app.post('/api/researcher/projects/:id/tasks/:taskId/start', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.startTask({ projectId: req.params.id, userId: req.user.id, taskId: req.params.taskId }));
+}));
+
+app.post('/api/researcher/projects/:id/tasks/:taskId/approve', requireAuth, researcherOnly, wrap((req, res) => {
+  const { approve } = req.body || {};
+  res.json(store.approveTask({ projectId: req.params.id, userId: req.user.id, taskId: req.params.taskId, approve: approve !== false }));
+}));
+
+app.post('/api/researcher/projects/:id/tasks/:taskId/complete', requireAuth, researcherOnly, wrap((req, res) => {
+  const { done } = req.body || {};
+  res.json(store.completeTask({ projectId: req.params.id, userId: req.user.id, taskId: req.params.taskId, done: done !== false }));
+}));
+
+app.post('/api/researcher/projects/:id/announcements', requireAuth, researcherOnly, wrap((req, res) => {
+  const { body } = req.body || {};
+  res.json(store.addProjectAnnouncement({ projectId: req.params.id, userId: req.user.id, body }));
+}));
+
+// Any member can link a paper / media resource (rendered as an embed preview).
+app.post('/api/researcher/projects/:id/invite', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.inviteToProject({ projectId: req.params.id, leadId: req.user.id, email: (req.body || {}).email }));
+}));
+
+app.post('/api/researcher/projects/:id/links', requireAuth, researcherOnly, wrap((req, res) => {
+  const { label, url } = req.body || {};
+  res.json(store.addProjectLink({ projectId: req.params.id, userId: req.user.id, label, url }));
+}));
+
+app.get('/api/researcher/projects/:id/stats', requireAuth, researcherOnly, wrap((req, res) => {
+  const project = store.getProject(req.params.id);
+  if (!project || !project.members.includes(req.user.id))
+    return res.status(404).json({ error: 'Project not found' });
+  res.json(store.projectStats(req.params.id));
+}));
+
+// Project idea board (brainstorm + vote; lead chooses).
+app.post('/api/researcher/projects/:id/ideas', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.addIdea({ projectId: req.params.id, userId: req.user.id, text: (req.body || {}).text }));
+}));
+app.post('/api/researcher/projects/:id/ideas/:ideaId/vote', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.voteIdea({ projectId: req.params.id, userId: req.user.id, ideaId: req.params.ideaId }));
+}));
+app.post('/api/researcher/projects/:id/ideas/:ideaId/choose', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.chooseIdea({ projectId: req.params.id, userId: req.user.id, ideaId: req.params.ideaId }));
+}));
+
+// Pathway — personal guided research to-dos.
+app.get('/api/researcher/pathway', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listPathway(req.user.id))));
+app.post('/api/researcher/pathway', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, deliverable, dueAt } = req.body || {};
+  res.json(store.addPathway({ userId: req.user.id, title, deliverable, dueAt }));
+}));
+app.post('/api/researcher/pathway/seed', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.seedPathway({ userId: req.user.id, track: (req.body || {}).track }));
+}));
+app.post('/api/researcher/pathway/:id/toggle', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.togglePathway({ userId: req.user.id, itemId: req.params.id, done: (req.body || {}).done }));
+}));
+app.delete('/api/researcher/pathway/:id', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deletePathway({ userId: req.user.id, itemId: req.params.id }));
+}));
+
+// Follow / people directory / personalized feed (any authed user).
+app.get('/api/people', requireAuth, wrap((req, res) => res.json(store.peopleDirectory(req.user.id))));
+app.post('/api/people/:id/follow', requireAuth, wrap((req, res) => res.json(store.followUser(req.user.id, req.params.id))));
+app.post('/api/people/:id/unfollow', requireAuth, wrap((req, res) => res.json(store.unfollowUser(req.user.id, req.params.id))));
+app.get('/api/feed', requireAuth, wrap((req, res) => res.json(store.feedFor(req.user.id))));
+
+// Onboarding (current researcher).
+app.get('/api/researcher/onboarding', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.myOnboarding(req.user.id));
+}));
+
+app.post('/api/researcher/onboarding/step', requireAuth, researcherOnly, wrap((req, res) => {
+  const { key, done } = req.body || {};
+  res.json(store.setOnboardingStep({ userId: req.user.id, key, done }));
+}));
+
+// Chapter leader: roster + stats, and onboarding new members.
+app.get('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
+  const view = store.chapterView(req.user.id);
+  if (!view) return res.status(404).json({ error: 'You do not lead a chapter' });
+  res.json(view);
+}));
+
+app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, email, discord } = req.body || {};
+  res.json(store.addChapterMember({ leaderId: req.user.id, name, email, discord }));
+}));
+
+app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, body } = req.body || {};
+  res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
+}));
+
+// Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive
+// on the memory provider — Director/Admin only, never anonymous.
+app.post('/api/dev/reset', requireAuth, requireDirector, async (_req, res) => {
+  try {
+    await store.reset();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 4000;
+
+// Load the active data provider (memory or Google Sheets) before serving.
+store
+  .init()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Synthica backend running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize data store:', err.message);
+    process.exit(1);
+  });

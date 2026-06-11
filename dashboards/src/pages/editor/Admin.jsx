@@ -1,0 +1,688 @@
+import { useEffect, useState, useCallback } from 'react';
+import { api } from '../../api.js';
+import { Card, Badge, Button, Field } from '../../components/ui.jsx';
+import { useToast } from '../../components/toast.jsx';
+import { useAuth } from '../../auth.jsx';
+import NewsPoster from '../../components/NewsPoster.jsx';
+
+// Director-only control center: analytics, integrations (API keys/webhooks),
+// and application review (the "auditor" function).
+export default function Admin() {
+  const { user } = useAuth();
+  // The platform Admin account has full Director powers here.
+  const isDirector = user?.role === 'director' || user?.role === 'admin';
+  return (
+    <div>
+      <h1 className="page-title">Admin</h1>
+      <p className="page-sub">Analytics, integrations, applications, audit log, and announcements.</p>
+      {isDirector && <NewsPoster />}
+      <AnalyticsCards />
+      <People isDirector={isDirector} />
+      <Applications />
+      <Archive />
+      <AuditLog />
+      {isDirector && <Integrations />}
+      {isDirector && <Backup />}
+      <SetupGuide />
+    </div>
+  );
+}
+
+const TAGS = ['lead_researcher', 'associate_researcher', 'chapter_leader', 'independent_researcher'];
+const EDITOR_ROLES = ['reviews', 'associate', 'senior', 'chief', 'director', 'auditor'];
+const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
+const ARTICLE_TYPES = ['Article', 'Letter', 'Analysis', 'Review', 'Preprint', 'Dataset', 'Conference Paper'];
+
+// People lookup + role management. Auditors review/re-assign researcher roles
+// (with the same signals + suggestion shown at onboarding); directors also get
+// editor-role and bulk powers.
+function People({ isDirector }) {
+  const toast = useToast();
+  const [q, setQ] = useState('');
+  const [users, setUsers] = useState([]);
+  const [bulk, setBulk] = useState({ emails: '', tag: 'lead_researcher' });
+
+  const search = (query) => api.adminUsers(query).then(setUsers).catch(() => {});
+  useEffect(() => { search(''); }, []);
+
+  // Directors use the full role endpoint; auditors the tags-only one.
+  const setTags = (u, body) => (isDirector ? api.adminSetRole(u.id, body) : api.adminSetTags(u.id, body));
+  const addTag = (u, tag) =>
+    setTags(u, { addTags: [tag] }).then(() => { toast.success(`${u.name} → ${tag}`); search(q); }).catch((e) => toast.error(e.message));
+  const removeTag = (u, tag) =>
+    setTags(u, { removeTags: [tag] }).then(() => search(q)).catch((e) => toast.error(e.message));
+  const makeEditor = (u, role, category) =>
+    api.adminSetRole(u.id, { kind: 'editor', role, category: category || null }).then(() => { toast.success(`${u.name} → ${role} editor`); search(q); }).catch((e) => toast.error(e.message));
+
+  const runBulk = () =>
+    api.adminBulkRole(bulk).then((r) => toast.success(`Updated ${r.updated.length}${r.notFound.length ? `, ${r.notFound.length} not found` : ''}`)).then(() => search(q)).catch((e) => toast.error(e.message));
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>People</h2>
+
+      {isDirector && (
+        <Card style={{ marginBottom: '1rem' }}>
+          <h3>Bulk assign by email</h3>
+          <p className="muted" style={{ margin: '0.25rem 0 0.6rem' }}>Paste comma- or space-separated emails to grant a role to all of them.</p>
+          <textarea placeholder="a@x.com, b@y.com, …" value={bulk.emails} onChange={(e) => setBulk({ ...bulk, emails: e.target.value })} />
+          <div className="row" style={{ marginTop: '0.5rem' }}>
+            <select value={bulk.tag} onChange={(e) => setBulk({ ...bulk, tag: e.target.value })} style={{ width: 'auto' }}>
+              {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <Button onClick={runBulk}>Assign to all</Button>
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <div className="card-row">
+          <h3>Lookup</h3>
+          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); }} style={{ maxWidth: 280 }} />
+        </div>
+        <div className="stack" style={{ marginTop: '0.6rem' }}>
+          {users.slice(0, 25).map((u) => (
+            <div key={u.id} className="info-block">
+              <div className="card-row">
+                <div>
+                  <strong>{u.name}</strong> <Badge tone="gray">{u.kind}{u.role ? ` · ${u.role}` : ''}{u.category ? ` · ${u.category}` : ''}</Badge>
+                  {!u.approved && <> <Badge tone="gold">pending approval</Badge></>}
+                  <div className="muted" style={{ fontSize: '0.78rem' }}>{u.email}</div>
+                  {u.kind === 'researcher' && (
+                    <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.2rem' }}>
+                      Research {u.researchExperience ?? '—'}/10 · Leadership {u.leadershipExperience ?? '—'}/10
+                      {u.wantsChapterLead ? ' · wants to lead a chapter' : ''}{u.gpa ? ` · GPA ${u.gpa}` : ''}
+                      {u.resumeUrl && <> · <a href={u.resumeUrl} target="_blank" rel="noreferrer">résumé</a></>}
+                      {u.experienceSummary && <div style={{ marginTop: '0.15rem', color: 'var(--slate)' }}>“{u.experienceSummary}”</div>}
+                    </div>
+                  )}
+                  {u.recommendation && !(u.tags || []).includes(u.recommendation.tag) && (
+                    <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>
+                      <Badge tone="gold">Suggested: {u.recommendation.label}</Badge>{' '}
+                      <span className="muted">{u.recommendation.reason}</span>
+                    </div>
+                  )}
+                  <div className="row" style={{ marginTop: '0.3rem' }}>
+                    {(u.tags || []).map((t) => (
+                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} ✕</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="row" style={{ marginTop: '0.4rem' }}>
+                <select defaultValue="" onChange={(e) => e.target.value && (addTag(u, e.target.value), (e.target.value = ''))} style={{ width: 'auto' }}>
+                  <option value="">+ tag…</option>
+                  {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {u.recommendation && !(u.tags || []).includes(u.recommendation.tag) && (
+                  <Button className="btn-sm" variant="ghost" onClick={() => addTag(u, u.recommendation.tag)}>Apply suggestion</Button>
+                )}
+                {isDirector && <EditorRolePicker onPick={(role, cat) => makeEditor(u, role, cat)} />}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function EditorRolePicker({ onPick }) {
+  const [role, setRole] = useState('');
+  const [cat, setCat] = useState('');
+  return (
+    <span className="row">
+      <select value={role} onChange={(e) => setRole(e.target.value)} style={{ width: 'auto' }}>
+        <option value="">make editor…</option>
+        {EDITOR_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+      {['reviews', 'associate', 'senior'].includes(role) && (
+        <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ width: 'auto' }}>
+          <option value="">category…</option>
+          {CATS.map((c) => <option key={c}>{c}</option>)}
+        </select>
+      )}
+      {role && <Button className="btn-sm" onClick={() => onPick(role, cat)}>Apply</Button>}
+    </span>
+  );
+}
+
+// Append-only log of editorial + admin actions.
+function AuditLog() {
+  const [rows, setRows] = useState([]);
+  useEffect(() => { api.adminAudit().then(setRows).catch(() => {}); }, []);
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Audit log</h2>
+      <Card>
+        <div className="stack">
+          {rows.slice(0, 30).map((r) => (
+            <div key={r.id} className="muted" style={{ fontSize: '0.82rem' }}>
+              <strong>{new Date(r.at).toLocaleString()}</strong> · {r.actorName} · <Badge tone="gray">{r.action}</Badge> {r.detail}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Download a full JSON snapshot for backup (Director only).
+function Backup() {
+  const toast = useToast();
+  const download = async () => {
+    try {
+      const data = await api.adminExport();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `synthica-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+  return (
+    <Card style={{ marginBottom: '1.5rem' }}>
+      <div className="card-row">
+        <div>
+          <h3>Backup</h3>
+          <p className="muted" style={{ marginTop: '0.2rem' }}>Download a full JSON snapshot of all data.</p>
+        </div>
+        <Button onClick={download}>Export backup</Button>
+      </div>
+    </Card>
+  );
+}
+
+// In-app deployment / integration guide so the director can self-serve setup.
+function SetupGuide() {
+  const guides = [
+    {
+      t: 'Google Sign-In',
+      steps: [
+        'Google Cloud Console → APIs & Services → OAuth consent screen (External; add email/profile/openid scopes).',
+        'Credentials → Create OAuth client ID → Web application. Authorized JS origins = your dashboards URL + http://localhost:5173.',
+        'Copy the Client ID. Set GOOGLE_CLIENT_ID on the backend (Render) AND VITE_GOOGLE_CLIENT_ID on the dashboards (Vercel) — same value — then redeploy.',
+        'A "Continue with Google" button then appears on Login & Register.',
+      ],
+    },
+    {
+      t: 'Discord webhook',
+      steps: [
+        'Discord → your channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL.',
+        'Paste it in Integrations above and Save (or set DISCORD_WEBHOOK_URL on the backend to persist).',
+        'Click "Send Discord test" to confirm. You\'ll get a message every time a paper moves up or is declined.',
+      ],
+    },
+    {
+      t: 'WhatsApp alerts',
+      steps: [
+        'WhatsApp has no plain webhook — use a relay. Create a Twilio / Make / Zapier webhook that forwards a JSON {text} payload to your WhatsApp number or group.',
+        'Paste that relay URL in Integrations above (or set WHATSAPP_WEBHOOK_URL on the backend).',
+      ],
+    },
+    {
+      t: 'Author emails (Resend)',
+      steps: [
+        'Create an account at resend.com and an API key; verify your sending domain.',
+        'Set RESEND_API_KEY and EMAIL_FROM on the backend. Authors are then emailed on accept/decline/revision automatically.',
+        'Without a key, those emails are just logged (no-op).',
+      ],
+    },
+    {
+      t: 'Persistent data (Google Sheets)',
+      steps: [
+        'Create a Google service account + enable the Sheets API; share a spreadsheet with its client_email as Editor.',
+        'Set DATA_PROVIDER=sheets, SHEETS_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_JSON on the backend.',
+        'Run `npm run seed:sheet` once to create the tabs. Full steps in docs/GOOGLE_SHEETS.md.',
+      ],
+    },
+    {
+      t: 'Security before going public',
+      steps: [
+        'Set a long random AUTH_SECRET (signs login tokens).',
+        'Lock CORS to your real frontend domains in backend/server.js.',
+        'Use an always-on backend instance (no cold starts). Full list in DEPLOY.md.',
+      ],
+    },
+  ];
+  return (
+    <div style={{ marginTop: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Setup & deployment guide</h2>
+      <div className="stack">
+        {guides.map((g) => (
+          <Card key={g.t}>
+            <details>
+              <summary style={{ cursor: 'pointer', fontWeight: 700 }}>{g.t}</summary>
+              <ol style={{ margin: '0.6rem 0 0 1.1rem', color: 'var(--body)', lineHeight: 1.7 }}>
+                {g.steps.map((s, i) => <li key={i}>{s}</li>)}
+              </ol>
+            </details>
+          </Card>
+        ))}
+      </div>
+      <p className="muted" style={{ marginTop: '0.75rem' }}>Full reference: <code>DEPLOY.md</code> and <code>docs/GOOGLE_SHEETS.md</code> in the repo.</p>
+    </div>
+  );
+}
+
+const STAGE_LABELS = {
+  review: 'In review', senior_screen: 'Senior screen', associate: 'With associate',
+  senior_final: 'Senior final', chief: 'With chief', published: 'Published', rejected: 'Declined',
+};
+
+// Horizontal bar chart (pure CSS) for a {label: count} map.
+function Bars({ data, labels = {}, tone = 'blue' }) {
+  const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return <p className="muted" style={{ margin: 0 }}>No data yet.</p>;
+  const max = Math.max(...entries.map(([, n]) => n));
+  return (
+    <div className="bars">
+      {entries.map(([k, n]) => (
+        <div key={k} className="bar-row">
+          <span className="bar-label">{labels[k] || k}</span>
+          <span className="bar-track">
+            <span className={`bar-fill bar-${tone}`} style={{ width: `${Math.max(6, (n / max) * 100)}%` }} />
+          </span>
+          <span className="bar-num">{n}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AnalyticsCards() {
+  const [a, setA] = useState(null);
+  useEffect(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
+  if (!a) return null;
+  const kpis = [
+    { icon: '👥', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
+    { icon: '📄', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
+    { icon: '🧪', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
+    { icon: '👁', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
+    { icon: '🪪', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
+  ];
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Analytics</h2>
+      <div className="kpi-grid">
+        {kpis.map((k) => (
+          <div key={k.label} className={`kpi ${k.hot ? 'kpi-hot' : ''}`}>
+            <span className="kpi-icon">{k.icon}</span>
+            <div className="kpi-value">{k.value}</div>
+            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-sub">{k.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-2" style={{ marginTop: '1rem' }}>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Pipeline by stage</h3>
+          <Bars data={a.byStage} labels={STAGE_LABELS} tone="blue" />
+        </Card>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Published by subject</h3>
+          <Bars data={a.byCategory} tone="gold" />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Integrations() {
+  const toast = useToast();
+  const [form, setForm] = useState({ discordWebhookUrl: '', whatsappWebhookUrl: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.getSettings().then((s) => setForm({ discordWebhookUrl: s.discordWebhookUrl || '', whatsappWebhookUrl: s.whatsappWebhookUrl || '' })).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setBusy(true); setError('');
+    try { await api.setSettings(form); toast.success('Integrations saved'); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const test = async () => {
+    setBusy(true); setError('');
+    try { await api.setSettings(form); await api.testWebhook(); toast.success('Test sent to Discord'); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ marginBottom: '1.5rem' }}>
+      <h3>Integrations</h3>
+      <p className="muted" style={{ margin: '0.25rem 0 0.75rem' }}>Notification channels for the editorial queue.</p>
+      {error && <div className="login-error">{error}</div>}
+      <Field label="Discord webhook URL"><input value={form.discordWebhookUrl} onChange={(e) => setForm({ ...form, discordWebhookUrl: e.target.value })} placeholder="https://discord.com/api/webhooks/…" /></Field>
+      <Field label="WhatsApp relay webhook URL (Twilio/Make/Zapier)"><input value={form.whatsappWebhookUrl} onChange={(e) => setForm({ ...form, whatsappWebhookUrl: e.target.value })} placeholder="https://…" /></Field>
+      <div className="row">
+        <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        <Button variant="ghost" onClick={test} disabled={busy}>Send Discord test</Button>
+      </div>
+      <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.78rem' }}>
+        Set <code>DISCORD_WEBHOOK_URL</code> / <code>WHATSAPP_WEBHOOK_URL</code> on the backend to persist across restarts.
+      </p>
+    </Card>
+  );
+}
+
+// Paper archive: upload past/external papers (arXiv/Nature-style), verify
+// self-archived submissions, and manage the published record.
+function Archive() {
+  const toast = useToast();
+  const [pubs, setPubs] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => {
+    api.adminPublications().then(setPubs).catch(() => {});
+    api.adminArchiveQueue().then(setQueue).catch(() => {});
+  }, []);
+  useEffect(load, [load]);
+
+  const verify = (id, status) =>
+    api.verifyPublication(id, status).then(() => { toast.success(`Paper ${status}`); load(); }).catch((e) => toast.error(e.message));
+  const remove = (id) => {
+    if (!window.confirm('Remove this paper from the archive?')) return;
+    api.adminDeletePublication(id).then(() => { toast.success('Removed'); load(); }).catch((e) => toast.error(e.message));
+  };
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div className="card-row" style={{ marginBottom: '0.6rem' }}>
+        <h2 className="section-title" style={{ margin: 0 }}>Paper archive <Badge tone="gray">{pubs.length}</Badge></h2>
+        <Button onClick={() => setOpen((o) => !o)}>{open ? 'Close' : '+ Upload paper'}</Button>
+      </div>
+      <p className="muted" style={{ margin: '0 0 0.6rem' }}>Upload past or external papers, verify member self-archives, and curate the public archive.</p>
+
+      {open && <UploadForm onDone={() => { setOpen(false); load(); }} />}
+
+      {queue.length > 0 && (
+        <>
+          <h3 style={{ margin: '1rem 0 0.4rem' }}>Pending verification <Badge tone="gold">{queue.length}</Badge></h3>
+          <div className="stack">
+            {queue.map((p) => (
+              <Card key={p.id}>
+                <div className="card-row">
+                  <div>
+                    <strong>{p.title}</strong>
+                    <div className="muted" style={{ fontSize: '0.8rem' }}>{p.authors.map((a) => a.name).join(', ')} · {p.category} · {p.publishedAt}</div>
+                    {p.pdfUrl && <a href={p.pdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem' }}>PDF / source</a>}
+                  </div>
+                  <div className="row">
+                    <Button variant="approve" className="btn-sm" onClick={() => verify(p.id, 'approved')}>Verify</Button>
+                    <Button variant="reject" className="btn-sm" onClick={() => verify(p.id, 'rejected')}>Reject</Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      <h3 style={{ margin: '1rem 0 0.4rem' }}>All papers</h3>
+      {pubs.length === 0 ? (
+        <Card><p className="muted">No papers in the archive yet.</p></Card>
+      ) : (
+        <div className="stack">
+          {pubs.slice(0, 40).map((p) => <AdminPubRow key={p.id} p={p} onChanged={load} onRemove={remove} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One archive row with feature/edit/delete controls.
+function AdminPubRow({ p, onChanged, onRemove }) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({
+    title: p.title, category: p.category, articleType: p.articleType || 'Article',
+    abstract: p.abstract || '', doi: p.doi || '', pdfUrl: p.pdfUrl || '', sourceUrl: p.sourceUrl || '',
+    publishedAt: (p.publishedAt || '').slice(0, 10), keywords: (p.keywords || []).join(', '),
+    volume: p.volume || '', issue: p.issue || '', pages: p.pages || '',
+  });
+  const [busy, setBusy] = useState(false);
+
+  const feature = () =>
+    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive ⭐'); onChanged(); }).catch((e) => toast.error(e.message));
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try { await api.adminEditPublication(p.id, f); toast.success('Paper updated'); setEditing(false); onChanged(); }
+    catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Card>
+      <div className="card-row">
+        <div style={{ minWidth: 0 }}>
+          <strong>{p.title}</strong>{' '}
+          {p.featured && <Badge tone="gold">⭐ featured</Badge>}{' '}
+          {p.verified === false && <Badge tone="gold">unverified</Badge>} <Badge tone="gray">{p.source || 'editorial'}</Badge>
+          <div className="muted" style={{ fontSize: '0.8rem' }}>{(p.authors || []).map((a) => a.name).join(', ')} · {p.category} · {p.doi}</div>
+        </div>
+        <div className="row" style={{ flexShrink: 0 }}>
+          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? '★ Unfeature' : '☆ Feature'}</Button>
+          <Button className="btn-sm" variant="ghost" onClick={() => setEditing((x) => !x)}>{editing ? 'Cancel' : 'Edit'}</Button>
+          <Button variant="reject" className="btn-sm" onClick={() => onRemove(p.id)}>Delete</Button>
+        </div>
+      </div>
+      {editing && (
+        <form onSubmit={save} style={{ marginTop: '0.7rem', borderTop: '1px solid var(--border)', paddingTop: '0.7rem' }}>
+          <Field label="Title"><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} required /></Field>
+          <div className="grid grid-3">
+            <Field label="Category"><select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Type"><select value={f.articleType} onChange={(e) => setF({ ...f, articleType: e.target.value })}>{ARTICLE_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
+            <Field label="Published"><input type="date" value={f.publishedAt} onChange={(e) => setF({ ...f, publishedAt: e.target.value })} /></Field>
+          </div>
+          <Field label="Abstract"><textarea rows={3} value={f.abstract} onChange={(e) => setF({ ...f, abstract: e.target.value })} /></Field>
+          <div className="grid grid-2">
+            <Field label="DOI"><input value={f.doi} onChange={(e) => setF({ ...f, doi: e.target.value })} /></Field>
+            <Field label="Keywords (comma-separated)"><input value={f.keywords} onChange={(e) => setF({ ...f, keywords: e.target.value })} /></Field>
+          </div>
+          <div className="grid grid-2">
+            <Field label="PDF link"><input value={f.pdfUrl} onChange={(e) => setF({ ...f, pdfUrl: e.target.value })} /></Field>
+            <Field label="Source URL"><input value={f.sourceUrl} onChange={(e) => setF({ ...f, sourceUrl: e.target.value })} /></Field>
+          </div>
+          <div className="grid grid-3">
+            <Field label="Volume"><input value={f.volume} onChange={(e) => setF({ ...f, volume: e.target.value })} /></Field>
+            <Field label="Issue"><input value={f.issue} onChange={(e) => setF({ ...f, issue: e.target.value })} /></Field>
+            <Field label="Pages"><input value={f.pages} onChange={(e) => setF({ ...f, pages: e.target.value })} /></Field>
+          </div>
+          <Button type="submit" className="btn-sm" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
+// arXiv-style upload form — metadata + PDF link, with authors linkable to profiles.
+function UploadForm({ onDone }) {
+  const toast = useToast();
+  const [profiles, setProfiles] = useState([]);
+  useEffect(() => { api.profiles().then(setProfiles).catch(() => {}); }, []);
+  const [f, setF] = useState({
+    title: '', category: CATS[0], articleType: 'Article', abstract: '', doi: '',
+    pdfUrl: '', sourceUrl: '', publishedAt: '', keywords: '', volume: '', issue: '', pages: '',
+  });
+  const [authors, setAuthors] = useState([{ name: '', affiliation: '', userId: '' }]);
+  const [busy, setBusy] = useState(false);
+  const set = (patch) => setF((x) => ({ ...x, ...patch }));
+  const setA = (i, patch) => setAuthors((xs) => xs.map((a, j) => (j === i ? { ...a, ...patch } : a)));
+  const linkProfile = (i, id) => {
+    const p = profiles.find((x) => x.id === id);
+    setA(i, { userId: id, ...(p ? { name: p.name, affiliation: p.institution || '' } : {}) });
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.adminAddPublication({
+        ...f,
+        authors: authors.filter((a) => a.name.trim()).map((a) => ({ name: a.name, affiliation: a.affiliation, userId: a.userId || null })),
+      });
+      toast.success('Paper added to the archive');
+      onDone();
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ marginBottom: '0.6rem' }}>
+      <form onSubmit={submit}>
+        <Field label="Title"><input value={f.title} onChange={(e) => set({ title: e.target.value })} required /></Field>
+        <div className="grid grid-2">
+          <Field label="Category"><select value={f.category} onChange={(e) => set({ category: e.target.value })}>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Type"><select value={f.articleType} onChange={(e) => set({ articleType: e.target.value })}>{ARTICLE_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
+        </div>
+
+        <label className="label-up" style={{ display: 'block', margin: '0.4rem 0 0.2rem' }}>Authors</label>
+        <div className="stack">
+          {authors.map((a, i) => (
+            <div key={i} className="row" style={{ gap: '0.4rem' }}>
+              <input placeholder="Full name" value={a.name} onChange={(e) => setA(i, { name: e.target.value })} style={{ flex: 2 }} />
+              <input placeholder="Affiliation" value={a.affiliation} onChange={(e) => setA(i, { affiliation: e.target.value })} style={{ flex: 2 }} />
+              <select value={a.userId} onChange={(e) => linkProfile(i, e.target.value)} style={{ flex: 1, width: 'auto' }} title="Link to a Synthica profile">
+                <option value="">link profile…</option>
+                {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove">✕</button>}
+            </div>
+          ))}
+        </div>
+        <button type="button" className="link-btn" style={{ margin: '0.3rem 0 0.6rem' }} onClick={() => setAuthors((xs) => [...xs, { name: '', affiliation: '', userId: '' }])}>+ Add author</button>
+
+        <Field label="Abstract"><textarea value={f.abstract} onChange={(e) => set({ abstract: e.target.value })} rows={3} /></Field>
+        <div className="grid grid-2">
+          <Field label="DOI or arXiv id (optional — auto-assigned if blank)"><input value={f.doi} onChange={(e) => set({ doi: e.target.value })} placeholder="10.xxxx/… or arXiv:2401.12345" /></Field>
+          <Field label="Published date"><input type="date" value={f.publishedAt} onChange={(e) => set({ publishedAt: e.target.value })} /></Field>
+        </div>
+        <div className="grid grid-2">
+          <Field label="PDF link"><input value={f.pdfUrl} onChange={(e) => set({ pdfUrl: e.target.value })} placeholder="https://…/paper.pdf" /></Field>
+          <Field label="Source / external URL"><input value={f.sourceUrl} onChange={(e) => set({ sourceUrl: e.target.value })} placeholder="https://arxiv.org/abs/…" /></Field>
+        </div>
+        <Field label="Keywords (comma-separated)"><input value={f.keywords} onChange={(e) => set({ keywords: e.target.value })} placeholder="ecology, microplastics" /></Field>
+        <div className="grid grid-3">
+          <Field label="Volume"><input value={f.volume} onChange={(e) => set({ volume: e.target.value })} /></Field>
+          <Field label="Issue"><input value={f.issue} onChange={(e) => set({ issue: e.target.value })} /></Field>
+          <Field label="Pages"><input value={f.pages} onChange={(e) => set({ pages: e.target.value })} placeholder="1–14" /></Field>
+        </div>
+        <Button type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add to archive'}</Button>
+      </form>
+    </Card>
+  );
+}
+
+// Auditor queue: new-member onboarding (assign a role) + role/project applications.
+function Applications() {
+  const toast = useToast();
+  const [apps, setApps] = useState([]);
+  const load = useCallback(() => { api.adminApplications().then(setApps).catch(() => {}); }, []);
+  useEffect(load, [load]);
+
+  const review = (id, status, assignTag) =>
+    api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+
+  const onboarding = apps.filter((a) => a.kind === 'onboarding');
+  const others = apps.filter((a) => a.kind !== 'onboarding');
+  const pendCount = (xs) => xs.filter((a) => a.status === 'pending').length;
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Onboarding <Badge tone="gray">{pendCount(onboarding)} pending</Badge>
+      </h2>
+      <p className="muted" style={{ margin: '0 0 0.6rem' }}>New members — approve and assign a starting role.</p>
+      {onboarding.length === 0 ? (
+        <Card><p className="muted">No new members waiting.</p></Card>
+      ) : (
+        <div className="stack">{onboarding.map((a) => <AppRow key={a.id} a={a} review={review} assignable />)}</div>
+      )}
+
+      <h2 className="section-title" style={{ margin: '1.5rem 0 0.6rem' }}>
+        Role &amp; project applications <Badge tone="gray">{pendCount(others)} pending</Badge>
+      </h2>
+      {others.length === 0 ? (
+        <Card><p className="muted">No applications yet.</p></Card>
+      ) : (
+        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
+      )}
+    </div>
+  );
+}
+
+// A single application with approve/reject and (when assignable) a role picker.
+// Onboarding rows default the picker to the system's recommended role.
+function AppRow({ a, review, assignable }) {
+  const [tag, setTag] = useState(a.recommendation?.tag || 'independent_researcher');
+  return (
+    <Card>
+      <div className="card-row">
+        <div>
+          <strong>{a.userName}</strong> — {a.role || (a.kind === 'onboarding' ? 'new member' : 'project application')}
+          {a.assignedTag && <> · <Badge tone="green">{a.assignedTag}</Badge></>}
+          {a.resumeUrl ? <> · <a href={a.resumeUrl} target="_blank" rel="noreferrer">résumé</a></> : (a.kind === 'onboarding' && <> · <span className="muted" style={{ fontSize: '0.8rem' }}>no résumé</span></>)}
+          {a.kind === 'onboarding' && (
+            <div className="info-block" style={{ marginTop: '0.4rem' }}>
+              <div className="muted" style={{ fontSize: '0.8rem' }}>
+                Research {a.researchExperience ?? '—'}/10 · Leadership {a.leadershipExperience ?? '—'}/10
+                {a.wantsChapterLead ? ' · wants to lead a chapter' : ''}{a.gpa ? ` · GPA ${a.gpa}` : ''}
+              </div>
+              {a.experienceSummary && (
+                <div style={{ fontSize: '0.82rem', marginTop: '0.3rem', color: 'var(--slate)' }}>
+                  “{a.experienceSummary}”
+                </div>
+              )}
+              {a.priorLead && a.legacyProject?.title && (
+                <div style={{ fontSize: '0.82rem', marginTop: '0.3rem' }}>
+                  <Badge tone="gold">Returning lead</Badge>{' '}
+                  <span className="muted">Claims project “{a.legacyProject.title}” ({a.legacyProject.category || 'no subject'}) — approving as Lead restores it.</span>
+                </div>
+              )}
+              {a.recommendation && (
+                <div style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+                  <Badge tone="gold">Suggested: {a.recommendation.label}</Badge>{' '}
+                  <span className="muted">{a.recommendation.reason}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {a.answers && (
+            <details style={{ marginTop: '0.3rem' }}>
+              <summary className="muted" style={{ cursor: 'pointer' }}>View application</summary>
+              <div className="stack" style={{ marginTop: '0.3rem' }}>
+                {Object.entries(a.answers).map(([k, v]) => v && (
+                  <div key={k} className="muted" style={{ fontSize: '0.8rem' }}><strong>{k}:</strong> {v}</div>
+                ))}
+              </div>
+            </details>
+          )}
+          {a.message && !a.answers && <div className="muted" style={{ marginTop: '0.2rem' }}>{a.message}</div>}
+          <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{new Date(a.at).toLocaleDateString()}</div>
+        </div>
+        <div className="row">
+          {a.status === 'pending' ? (
+            <>
+              {assignable && (
+                <select value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 'auto' }} title="Role to grant on approval">
+                  {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+              <Button variant="approve" className="btn-sm" onClick={() => review(a.id, 'approved', assignable ? tag : undefined)}>Approve</Button>
+              <Button variant="reject" className="btn-sm" onClick={() => review(a.id, 'rejected')}>Reject</Button>
+            </>
+          ) : (
+            <Badge tone={a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}

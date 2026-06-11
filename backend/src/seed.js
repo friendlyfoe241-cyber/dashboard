@@ -1,0 +1,389 @@
+// Seed data for the in-memory store. In production this is replaced by:
+//   - Google Sheets (submissions, editor roster, login table)  -> Track 3
+//   - the journal publications database                         -> Track 2
+//   - the researcher projects database                         -> Track 4
+//
+// Passwords are stored in plaintext here ONLY because this is a local mock.
+// The real login sheet should store hashes.
+
+import { CATEGORIES, EDITOR_ROLES, RESEARCHER_TAGS, STAGE, freshOnboarding } from './domain.js';
+import { hashPassword } from './passwords.js';
+
+let _id = 0;
+const id = (prefix) => `${prefix}_${String(++_id).padStart(4, '0')}`;
+
+// All demo accounts share the password "demo1234", stored hashed (so the seed
+// and the Sheets bootstrap both persist hashes rather than plaintext).
+const DEMO_PASSWORD = hashPassword('demo1234');
+
+// ---------------------------------------------------------------------------
+// Editors / staff login table (Track 3)
+// ---------------------------------------------------------------------------
+function editor(name, username, role, category) {
+  return {
+    id: id('usr'),
+    name,
+    username,
+    password: DEMO_PASSWORD,
+    kind: 'editor',
+    role,
+    category,
+    email: `${username}@synthica.org`,
+    discord: `${username.replace(/\./g, '_')}`,
+    slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
+    institution: '',
+    bio: '',
+    avatarUrl: '',
+    interests: [],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+  };
+}
+
+export const editors = [
+  // Reviews editors — at least two per category so dual-review routing works.
+  editor('Rina Patel', 'rina.bio', EDITOR_ROLES.REVIEWS, 'Biology'),
+  editor('Marco Silva', 'marco.bio', EDITOR_ROLES.REVIEWS, 'Biology'),
+  editor('Wei Chen', 'wei.cs', EDITOR_ROLES.REVIEWS, 'Computer Science'),
+  editor('Asha Rao', 'asha.cs', EDITOR_ROLES.REVIEWS, 'Computer Science'),
+  editor('Tomás Vargas', 'tomas.phys', EDITOR_ROLES.REVIEWS, 'Physics'),
+  editor('Lena Hoff', 'lena.phys', EDITOR_ROLES.REVIEWS, 'Physics'),
+  editor('Yuki Mori', 'yuki.chem', EDITOR_ROLES.REVIEWS, 'Chemistry'),
+  editor('Priya Nair', 'priya.chem', EDITOR_ROLES.REVIEWS, 'Chemistry'),
+
+  // Senior editors (one per category is fine for the screen + final checks).
+  editor('Dr. Helen Ward', 'helen.bio', EDITOR_ROLES.SENIOR, 'Biology'),
+  editor('Dr. Omar Aziz', 'omar.cs', EDITOR_ROLES.SENIOR, 'Computer Science'),
+  editor('Dr. Sofia Marin', 'sofia.phys', EDITOR_ROLES.SENIOR, 'Physics'),
+  editor('Dr. Ken Adeyemi', 'ken.chem', EDITOR_ROLES.SENIOR, 'Chemistry'),
+
+  // Associate editors (author liaison / revision rounds).
+  editor('Jonah Reid', 'jonah.bio', EDITOR_ROLES.ASSOCIATE, 'Biology'),
+  editor('Mia Klein', 'mia.cs', EDITOR_ROLES.ASSOCIATE, 'Computer Science'),
+  editor('Diego Cruz', 'diego.phys', EDITOR_ROLES.ASSOCIATE, 'Physics'),
+  editor('Nadia Farouk', 'nadia.chem', EDITOR_ROLES.ASSOCIATE, 'Chemistry'),
+
+  // Editor-in-chief and Director span all categories.
+  editor('Quang Bui', 'chief', EDITOR_ROLES.CHIEF, null),
+  editor('Quang Bui', 'director', EDITOR_ROLES.DIRECTOR, null),
+  // Auditor reviews sign-ups + applications (separate from the Director).
+  editor('Dana Cole', 'auditor', EDITOR_ROLES.AUDITOR, null),
+  // Platform super-admin: full visibility (Director Desk + Admin), no review queue.
+  editor('Platform Admin', 'admin', EDITOR_ROLES.ADMIN, null),
+];
+
+// ---------------------------------------------------------------------------
+// Submissions / papers in the review pipeline (Track 3)
+// ---------------------------------------------------------------------------
+// These mirror the columns we'd pull from the Google Form responses sheet.
+function submission(title, authorName, authorEmail, category, abstract) {
+  const submittedAt = new Date(Date.now() - Math.floor(Math.random() * 12) * 864e5).toISOString();
+  const pdfUrl = 'https://drive.google.com/file/d/EXAMPLE/view';
+  return {
+    id: id('paper'),
+    title,
+    authorName,
+    authorEmail,
+    authorDiscord: authorName.toLowerCase().replace(/[^a-z]/g, '_'),
+    submittedBy: null, // researcher userId when submitted from the dashboard
+    category,
+    abstract,
+    pdfUrl,
+    submittedAt,
+    stage: STAGE.REVIEW,
+    assignedReviewers: [], // filled by the store's load-balanced assignment
+    assignee: null, // single-owner stages (senior/associate/chief) use this
+    reviews: [], // [{ editorId, decision, comments, recommendation, at }]
+    comments: [], // [{ id, authorId, authorName, role, body, at }] internal editor thread
+    revisions: [{ version: 1, url: pdfUrl, note: 'Initial submission', at: submittedAt, byName: authorName }],
+    revisionRequested: false,
+    associateRounds: 0,
+    history: [], // audit trail of stage transitions + decisions
+  };
+}
+
+export const submissions = [
+  submission(
+    'CRISPR Screening of Drought-Tolerance Genes in Maize',
+    'Aiden Cole',
+    'aiden.cole@example.com',
+    'Biology',
+    'We apply a pooled CRISPR knockout screen to identify candidate loci associated with drought tolerance in Zea mays seedlings.'
+  ),
+  submission(
+    'A Lightweight Transformer for On-Device Sign-Language Recognition',
+    'Bella Nguyen',
+    'bella.nguyen@example.com',
+    'Computer Science',
+    'We present a distilled transformer that runs real-time ASL recognition on mobile hardware under 50ms latency.'
+  ),
+  submission(
+    'Constraints on Dark Photon Mass from Tabletop Interferometry',
+    'Caleb Ortiz',
+    'caleb.ortiz@example.com',
+    'Physics',
+    'Using a student-built Michelson interferometer we place an upper bound on dark-photon coupling in the sub-eV regime.'
+  ),
+  submission(
+    'Green Synthesis of Silver Nanoparticles from Citrus Peel Extract',
+    'Dara Field',
+    'dara.field@example.com',
+    'Chemistry',
+    'An eco-friendly route to AgNPs using citrus pectin as a reducing agent, characterized by UV-Vis and TEM.'
+  ),
+  submission(
+    'Predicting Protein Folding Stability with Graph Neural Networks',
+    'Evan Park',
+    'evan.park@example.com',
+    'Biology',
+    'A GNN trained on the Megascale dataset predicts ΔΔG of point mutations with competitive accuracy.'
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// Journal publications / DOI registry (Track 2)
+// ---------------------------------------------------------------------------
+// Publication shape mirrors the metadata Nature surfaces on an article page:
+// article type, full author + affiliation list, corresponding author, abstract,
+// keywords, the received/accepted/published dates, volume/issue/pages, DOI,
+// license, and article-level metrics (accesses, citations, Altmetric).
+function publication(title, authors, category, doiSuffix, year, abstract, extra = {}) {
+  return {
+    id: id('pub'),
+    doi: `10.55555/synthica.${doiSuffix}`,
+    title,
+    articleType: extra.articleType || 'Article',
+    authors, // [{ name, affiliation }]
+    authorUserId: extra.authorUserId || null, // links to a researcher profile
+    correspondingAuthor: extra.correspondingAuthor || authors[0]?.name,
+    category,
+    abstract,
+    keywords: extra.keywords || [],
+    receivedAt: extra.receivedAt || `${year - 1}-11-02`,
+    acceptedAt: extra.acceptedAt || `${year}-02-18`,
+    publishedAt: extra.publishedAt || `${year}-03-15`,
+    volume: extra.volume || 1,
+    issue: extra.issue || 1,
+    pages: extra.pages || '1–14',
+    pdfUrl: extra.pdfUrl || 'https://www.synthica.org/journal/pdf/EXAMPLE.pdf',
+    license: 'CC BY 4.0',
+    openAccess: true,
+    // Nature-style article sections, used to render the full-text view.
+    sections: extra.sections || [
+      { heading: 'Introduction', body: 'Background and motivation for the study.' },
+      { heading: 'Methods', body: 'Materials, data sources, and experimental design.' },
+      { heading: 'Results', body: 'Key findings and figures.' },
+      { heading: 'Discussion', body: 'Interpretation, limitations, and future work.' },
+    ],
+    metrics: {
+      accesses: extra.accesses ?? 200 + Math.floor(Math.random() * 4000),
+      citations: extra.citations ?? Math.floor(Math.random() * 8),
+      altmetric: extra.altmetric ?? Math.floor(Math.random() * 30),
+    },
+    citationCount: extra.citations ?? Math.floor(Math.random() * 8),
+  };
+}
+
+export const publications = [
+  publication(
+    'Quantifying Microplastic Uptake in Freshwater Daphnia',
+    [{ name: 'Hana Lee', affiliation: 'Synthica Research Group' }],
+    'Biology',
+    '2025.0001',
+    2025,
+    'A controlled exposure study measuring microplastic accumulation in Daphnia magna over a 14-day window.',
+    { keywords: ['microplastics', 'Daphnia magna', 'freshwater ecology'], articleType: 'Article', accesses: 3120, citations: 4, altmetric: 18 }
+  ),
+  publication(
+    'Benchmarking Small Language Models for Math Word Problems',
+    [
+      { name: 'Ravi Shah', affiliation: 'Synthica Research Group' },
+      { name: 'Mei Tan', affiliation: 'Synthica Research Group' },
+    ],
+    'Computer Science',
+    '2025.0002',
+    2025,
+    'We evaluate sub-3B parameter models on GSM8K-style problems and analyze failure modes.',
+    { keywords: ['language models', 'mathematical reasoning', 'benchmarking'], articleType: 'Analysis', accesses: 5400, citations: 6, altmetric: 27 }
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// Researchers, projects, listings, applications (Track 4)
+// ---------------------------------------------------------------------------
+function researcher(name, username, tags) {
+  return {
+    id: id('usr'),
+    name,
+    username,
+    password: DEMO_PASSWORD,
+    kind: 'researcher',
+    tags,
+    email: `${username}@example.com`,
+    discord: username,
+    resumeUrl: '',
+    gpa: '',
+    researchExperience: null, // self-rated 0–10, collected at onboarding
+    leadRecommended: false, // flagged when self-rated experience is high (≥ 8)
+    pathway: [], // personal guided research to-dos (title, deliverable, due, done)
+    slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
+    institution: '',
+    bio: '',
+    avatarUrl: '',
+    interests: [],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+  };
+}
+
+export const researchers = [
+  researcher('Sam Rivera', 'sam', [RESEARCHER_TAGS.LEAD_RESEARCHER]),
+  researcher('Jordan Kim', 'jordan', [RESEARCHER_TAGS.ASSOCIATE_RESEARCHER]),
+  researcher('Taylor Brooks', 'taylor', [RESEARCHER_TAGS.CHAPTER_LEADER]),
+  researcher('Robin Diaz', 'robin', [RESEARCHER_TAGS.INDEPENDENT_RESEARCHER]),
+  researcher('Casey Wong', 'casey', [
+    RESEARCHER_TAGS.ASSOCIATE_RESEARCHER,
+    RESEARCHER_TAGS.CHAPTER_LEADER,
+  ]),
+];
+
+const leadId = researchers[0].id;
+const assocId = researchers[1].id;
+const taylorId = researchers[2].id;
+const caseyId = researchers[4].id;
+
+// task(title, type, assignedTo, status, opts)
+function task(title, type, assignedTo, status, opts = {}) {
+  return {
+    id: id('task'),
+    title,
+    type, // 'task' | 'reading' | 'question'
+    assignedTo,
+    status, // see TASK_STATUS
+    done: status === 'done',
+    requiresApproval: !!opts.requiresApproval,
+    createdBy: opts.createdBy || leadId,
+    dueAt: opts.dueAt || null,
+  };
+}
+
+export const projects = [
+  {
+    id: id('proj'),
+    title: 'Air Quality Sensing in Urban Schools',
+    category: 'Chemistry',
+    description: 'Deploy low-cost PM2.5 sensors across partner schools and analyze exposure patterns.',
+    leadId,
+    members: [leadId, assocId, caseyId],
+    announcements: [
+      { id: id('ann'), at: new Date().toISOString(), body: 'Welcome! Read the onboarding doc before Friday.' },
+    ],
+    tasks: [
+      // A "question" sits at the top of the hierarchy for those ahead to see.
+      task('Research question: does ventilation type predict PM2.5 exposure?', 'question', [], 'in_progress', { createdBy: assocId }),
+      task('Read: intro to PM2.5 sensing', 'reading', [assocId, caseyId], 'todo', { dueAt: '2026-06-20' }),
+      task('Calibrate sensor batch #2', 'task', [assocId], 'done', { dueAt: '2026-06-10' }),
+      // A step that needs the lead's sign-off before work starts.
+      task('Run the field deployment', 'task', [caseyId], 'awaiting_approval', { requiresApproval: true, dueAt: '2026-06-28' }),
+    ],
+    links: [
+      { id: id('link'), label: 'Draft manuscript (Google Drive)', url: 'https://drive.google.com/file/d/EXAMPLE/view', addedBy: leadId, at: new Date().toISOString() },
+      { id: id('link'), label: 'Project kickoff video', url: 'https://youtu.be/dQw4w9WgXcQ', addedBy: leadId, at: new Date().toISOString() },
+    ],
+    // Team brainstorm: propose ideas, upvote, then the lead picks one.
+    ideas: [
+      { id: id('idea'), text: 'Compare PM2.5 across naturally vs. mechanically ventilated rooms', by: assocId, votes: [assocId, caseyId], chosen: true, at: new Date().toISOString() },
+      { id: id('idea'), text: 'Map exposure to nearby traffic density', by: caseyId, votes: [caseyId], chosen: false, at: new Date().toISOString() },
+    ],
+  },
+  {
+    id: id('proj'),
+    title: 'NLP for Low-Resource Languages',
+    category: 'Computer Science',
+    description: 'Build and evaluate tokenizers for under-resourced languages.',
+    leadId,
+    members: [leadId, assocId],
+    announcements: [],
+    tasks: [
+      task('Collect parallel corpus', 'task', [assocId], 'in_progress', { dueAt: '2026-07-01' }),
+    ],
+    links: [],
+    ideas: [],
+  },
+];
+
+// Demo: seed a couple personal "Pathway" to-dos + a follow edge.
+researchers[1].pathway = [
+  { id: id('pw'), title: 'Read 3 papers in my field', deliverable: 'Short notes doc', dueAt: '2026-06-25', done: true },
+  { id: id('pw'), title: 'Draft a research question', deliverable: '1-paragraph proposal', dueAt: '2026-07-05', done: false },
+];
+researchers[1].following = [researchers[0].id]; // Jordan follows Sam
+researchers[1].interests = ['air quality', 'sensors'];
+
+// ---------------------------------------------------------------------------
+// Chapters + onboarding (Track 4)
+// ---------------------------------------------------------------------------
+// A chapter is a local group with a leader and members. Each membership tracks
+// an onboarding checklist so leaders can see who's fully ramped up.
+function member(userId, doneKeys = []) {
+  const onboarding = freshOnboarding().map((s) => ({ ...s, done: doneKeys.includes(s.key) }));
+  return { userId, joinedAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 864e5).toISOString(), onboarding };
+}
+
+export const chapters = [
+  {
+    id: id('chap'),
+    name: 'Bay Area Chapter',
+    location: 'San Francisco, USA',
+    leaderId: taylorId,
+    handbookUrl: 'https://example.com/synthica-chapter-handbook',
+    members: [
+      member(taylorId, ['discord', 'profile', 'handbook', 'project', 'intro']),
+      member(caseyId, ['discord', 'profile', 'handbook']),
+      member(assocId, ['discord', 'profile']),
+    ],
+  },
+];
+
+// Open project listings for the Research Hub.
+export const listings = [
+  { id: id('list'), title: 'Modeling Coral Bleaching under Warming Scenarios', category: 'Biology', spots: 3, leadName: 'Sam Rivera', leadId: leadId, description: 'Use public reef datasets to model bleaching thresholds.' },
+  { id: id('list'), title: 'Fairness Audits of Public Recommender Datasets', category: 'Computer Science', spots: 2, leadName: 'Sam Rivera', leadId: leadId, description: 'Measure demographic skew in open recommender benchmarks.' },
+  { id: id('list'), title: 'Behavioral Economics of Classroom Incentives', category: 'Economics', spots: 4, leadName: 'Open', leadId: null, description: 'Design a small RCT on study incentives.' },
+];
+
+// Role/project applications submitted from the Application Hub.
+export const applications = [];
+
+// Global news / announcements (Track-wide).
+export const news = [
+  {
+    id: id('news'),
+    title: 'Welcome to the Synthica platform',
+    body: 'The editorial and researcher dashboards are live. Post announcements here for everyone.',
+    authorName: 'Quang Bui',
+    audience: 'all',
+    at: new Date().toISOString(),
+  },
+];
+
+// Append-only audit log of editorial + admin actions.
+export const audit = [];
+export const events = [];
+
+// Per-user in-app notifications.
+export const notifications = [];
+
+export const allUsers = () => [...editors, ...researchers];

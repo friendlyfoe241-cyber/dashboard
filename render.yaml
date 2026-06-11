@@ -1,0 +1,14 @@
+# Render Blueprint — deploys the Synthica backend as a web service.
+# Import this repo at https://render.com/deploy and Render reads this file.
+services:
+  - type: web
+    name: synthica-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 4000

@@ -1,0 +1,19 @@
+{
+  "name": "synthica-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synthica backend API — journal publications/DOI registry + data layer for the editor and researcher dashboards.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed:sheet": "node scripts/seed-sheet.js",
+    "test:workflow": "node scripts/test-workflow.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0"
+  }
+}
