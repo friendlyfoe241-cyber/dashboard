@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { api } from '../api.js';
@@ -49,6 +49,13 @@ export default function Login() {
   const [signup, setSignup] = useState({ name: '', discord: '', password: '', resumeUrl: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [demoEnabled, setDemoEnabled] = useState(true);
+
+  // Production refuses the shared demo password, so hide the demo buttons
+  // there instead of letting them fail with "invalid password".
+  useEffect(() => {
+    api.config().then((c) => setDemoEnabled(c.demoLogins !== false)).catch(() => {});
+  }, []);
 
   const goHome = (user) => navigate(user.kind === 'editor' ? '/editor' : '/researcher', { replace: true });
   const fail = (e) => setError(e.message || String(e));
@@ -182,17 +189,19 @@ export default function Login() {
         <Button type="submit" disabled={busy} style={{ width: '100%' }}>{busy ? 'Checking…' : 'Continue →'}</Button>
       </form>
 
-      <details className="login-demo">
-        <summary>Demo accounts</summary>
-        <div className="login-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>One click — no email or password needed:</div>
-        <div className="login-demo-grid">
-          {DEMO_ACCOUNTS.map(({ label, email: demoEmail }) => (
-            <button key={demoEmail} type="button" className="demo-btn" disabled={busy} onClick={() => demoLogin(demoEmail)} title={demoEmail}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </details>
+      {demoEnabled && (
+        <details className="login-demo">
+          <summary>Demo accounts</summary>
+          <div className="login-hint" style={{ marginTop: '0.5rem', textAlign: 'center' }}>One click — no email or password needed:</div>
+          <div className="login-demo-grid">
+            {DEMO_ACCOUNTS.map(({ label, email: demoEmail }) => (
+              <button key={demoEmail} type="button" className="demo-btn" disabled={busy} onClick={() => demoLogin(demoEmail)} title={demoEmail}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
     </Shell>
   );
 }

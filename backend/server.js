@@ -61,6 +61,11 @@ function rateLimiter({ windowMs, max }) {
   return (req, res, next) => {
     const key = `${req.ip}:${req.path}`;
     const now = Date.now();
+    // Evict expired windows so the map can't grow without bound under a
+    // long-running process (one entry per client IP per path).
+    if (hits.size > 10_000) {
+      for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
+    }
     let rec = hits.get(key);
     if (!rec || now > rec.reset) rec = { count: 0, reset: now + windowMs };
     rec.count += 1;
@@ -120,7 +125,7 @@ app.post('/api/2fa/enable', requireAuth, wrap((req, res) => res.json(store.enabl
 app.post('/api/2fa/disable', requireAuth, wrap((req, res) => res.json(store.disableTwoFactor(req.user.id, (req.body || {}).code))));
 
 // Tells the frontend which auth options are available.
-app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled() }));
+app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), demoLogins: store.demoLoginsEnabled() }));
 
 // Google Sign-In: verify the ID token, find/create the user, issue our token.
 app.post('/api/auth/google', authLimiter, async (req, res) => {
