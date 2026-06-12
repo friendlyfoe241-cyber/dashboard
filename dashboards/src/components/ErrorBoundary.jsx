@@ -7,9 +7,7 @@ import { Link } from 'react-router-dom';
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
-    this.autoReloadTimer = null;
-    this.visibilityHandler = null;
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -19,7 +17,6 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary Caught]', error);
     console.error('[Component Stack]', info?.componentStack);
-    this.setState({ errorInfo: info });
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -29,39 +26,8 @@ export default class ErrorBoundary extends Component {
     }
   }
 
-  componentWillUnmount() {
-    if (this.autoReloadTimer) {
-      clearTimeout(this.autoReloadTimer);
-    }
-    if (this.visibilityHandler) {
-      document.removeEventListener('visibilitychange', this.visibilityHandler);
-    }
-  }
-
-  handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible' && this.state.hasError) {
-      // User returned to the tab and error is still showing - reload
-      window.location.reload();
-    }
-  };
-
   render() {
     if (this.state.hasError) {
-      const { error } = this.state;
-      const isNetworkError = error?.message?.includes("Can't reach the server") || 
-                           error?.message?.includes("NetworkError") ||
-                           error?.message?.includes("Failed to fetch") ||
-                           error?.message?.includes("Network request failed");
-      const isAuthError = error?.message?.includes("expired") || 
-                        error?.message?.includes("401");
-
-      // Set up visibility change listener when error shows
-      if (!this.visibilityHandler) {
-        this.visibilityHandler = this.handleVisibilityChange;
-        document.addEventListener('visibilitychange', this.visibilityHandler);
-      }
-
-      // Use CSS variables so it respects dark/light mode
       return (
         <div style={{
           minHeight: '100vh',
@@ -92,31 +58,12 @@ export default class ErrorBoundary extends Component {
               margin: '0 auto 1rem',
               animation: 'spin 1s linear infinite',
             }} />
-            <h1 style={{ 
-              fontSize: '1.3rem', 
-              fontWeight: 700, 
-              color: 'var(--ink, #0f172a)', 
-              margin: '0 0 0.5rem' 
-            }}>
-              {isNetworkError ? 'Server Waking Up' : isAuthError ? 'Session Expired' : 'Loading…'}
-            </h1>
-            <p style={{ 
-              color: 'var(--body, #6b7280)', 
-              margin: '0 0 1rem', 
-              fontSize: '0.9rem' 
-            }}>
-              {isNetworkError 
-                ? "The backend is waking up. Hang on a moment…" 
-                : isAuthError 
-                ? "Your session may have expired. Refreshing…"
-                : "Please wait while we load the page…"}
-            </p>
             <p style={{ 
               color: 'var(--body-alt, #9ca3af)', 
               fontSize: '0.8rem',
               margin: 0 
             }}>
-              If this persists, <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
+              <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
             </p>
           </div>
           {/* Keyframe animation style */}
