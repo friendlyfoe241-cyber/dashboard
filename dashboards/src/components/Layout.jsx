@@ -10,13 +10,17 @@ import CommandPalette from './CommandPalette.jsx';
 // when the tab regains focus after being hidden a moment — every page's load
 // effect re-runs, so data is fresh without a full reload. Only fires after a
 // real away-and-back (not on quick alt-tabs) to avoid disrupting active use.
+// Disabled for now as it was causing errors when switching tabs.
 function useTabRevalidate() {
+  // Temporarily disabled - was causing blank screens when users switch tabs
+  // return 0;
+  
   const [rev, setRev] = useState(0);
   useEffect(() => {
     let hiddenAt = 0;
     const onHide = () => { if (document.visibilityState === 'hidden') hiddenAt = Date.now(); };
     const onShow = () => {
-      if (document.visibilityState === 'visible' && hiddenAt && Date.now() - hiddenAt > 800) {
+      if (document.visibilityState === 'visible' && hiddenAt && Date.now() - hiddenAt > 2000) {
         hiddenAt = 0;
         setRev((r) => r + 1);
       }

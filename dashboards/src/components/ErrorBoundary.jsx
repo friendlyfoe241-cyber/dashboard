@@ -3,16 +3,6 @@
 import { Component } from 'react';
 import { Link } from 'react-router-dom';
 
-// Global error handler to catch unhandled promise rejections and other errors
-if (typeof window !== 'undefined') {
-  window.addEventListener('error', (e) => {
-    console.error('[Unhandled Error]', e.error);
-  });
-  window.addEventListener('unhandledrejection', (e) => {
-    console.error('[Unhandled Promise Rejection]', e.reason);
-  });
-}
-
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
