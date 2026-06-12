@@ -23,12 +23,9 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
-    // When error state becomes true, auto-reload after a short delay
+    // When error state becomes true, auto-reload immediately
     if (this.state.hasError && !prevState.hasError) {
-      // Auto-reload after 0.25 seconds
-      this.autoReloadTimer = setTimeout(() => {
-        window.location.reload();
-      }, 250);
+      window.location.reload();
     }
   }
 
