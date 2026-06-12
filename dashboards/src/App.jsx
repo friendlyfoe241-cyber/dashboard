@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useAuth, RequireAuth } from './auth.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -14,7 +14,12 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 // Send a logged-in user to the right dashboard based on their account kind.
 function HomeRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="page-loading">Loading…</div>;
+  if (loading) return (
+    <div className="page-loading">
+      <div className="spinner" />
+      <p className="home-link"><Link to="/">go home</Link></p>
+    </div>
+  );
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={user.kind === 'editor' ? '/editor' : '/researcher'} replace />;
 }

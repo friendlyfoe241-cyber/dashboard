@@ -52,10 +52,38 @@ a {
 }
 
 .page-loading {
-  display: grid;
-  place-items: center;
   min-height: 100vh;
-  color: var(--body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  font-family: var(--font);
+  background: var(--surface, #fcfdff);
+  color: var(--heading, #1f2937);
+}
+
+.page-loading .spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border, #e2e8f0);
+  border-top-color: var(--brand, #78b4fb);
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  animation: spin 1s linear infinite;
+}
+
+.page-loading .home-link {
+  color: var(--body-alt, #9ca3af);
+  font-size: 0.8rem;
+}
+
+.page-loading .home-link a {
+  color: var(--brand-deep, #1a6bb5);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---------- Login ---------- */
