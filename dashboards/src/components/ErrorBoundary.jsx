@@ -1,5 +1,6 @@
 // Error boundary to catch React errors and display a user-friendly message
 // instead of a blank screen. Auto-reloads to recover from transient errors.
+// Uses the same dark/light mode theme as the rest of the dashboard.
 import { Component } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -63,6 +64,7 @@ export default class ErrorBoundary extends Component {
         document.addEventListener('visibilitychange', this.visibilityHandler);
       }
 
+      // Use CSS variables so it respects dark/light mode
       return (
         <div style={{
           minHeight: '100vh',
@@ -71,22 +73,43 @@ export default class ErrorBoundary extends Component {
           justifyContent: 'center',
           padding: '2rem',
           textAlign: 'center',
-          fontFamily: 'var(--font, -apple-system, BlinkMacSystemFont, sans-serif)',
-          background: 'linear-gradient(180deg, #2589ed 0%, #4999e8 5%, #69aaec 35%, #99ccff 65%, #ffffff 100%)',
+          fontFamily: 'var(--font)',
+          background: 'var(--surface, #fcfdff)',
+          color: 'var(--heading, #1f2937)',
         }}>
-          <div style={{ maxWidth: 420, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', borderRadius: 24, padding: '2rem', border: '1px solid rgba(255,255,255,0.4)', boxShadow: '0 8px 32px rgba(0,61,130,0.2)' }}>
+          <div style={{
+            maxWidth: 420,
+            background: 'var(--card-bg, #ffffff)',
+            borderRadius: 24,
+            padding: '2rem',
+            border: '1px solid var(--border, #e2e8f0)',
+            boxShadow: '0 8px 32px rgba(0,61,130,0.1)',
+          }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
-            <h1 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--ink, #0f172a)', margin: '0 0 0.5rem' }}>
+            <h1 style={{ 
+              fontSize: '1.3rem', 
+              fontWeight: 700, 
+              color: 'var(--ink, #0f172a)', 
+              margin: '0 0 0.5rem' 
+            }}>
               {isNetworkError ? 'Server Waking Up' : isAuthError ? 'Session Expired' : 'Reloading…'}
             </h1>
-            <p style={{ color: 'var(--body, #6b7280)', margin: '0 0 1rem', fontSize: '0.9rem' }}>
+            <p style={{ 
+              color: 'var(--body, #6b7280)', 
+              margin: '0 0 1rem', 
+              fontSize: '0.9rem' 
+            }}>
               {isNetworkError 
                 ? "The backend is waking up. Auto-reloading in a moment…" 
                 : isAuthError 
                 ? "Your session may have expired. Auto-reloading…"
                 : "Recovering from an error. Auto-reloading…"}
             </p>
-            <p style={{ color: 'var(--body-alt, #9ca3af)', fontSize: '0.8rem' }}>
+            <p style={{ 
+              color: 'var(--body-alt, #9ca3af)', 
+              fontSize: '0.8rem',
+              margin: 0 
+            }}>
               If this persists, <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
             </p>
           </div>
