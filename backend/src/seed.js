@@ -76,6 +76,31 @@ export const editors = [
   editor('Dana Cole', 'auditor', EDITOR_ROLES.AUDITOR, null),
   // Platform super-admin: full visibility (Director Desk + Admin), no review queue.
   editor('Platform Admin', 'admin', EDITOR_ROLES.ADMIN, null),
+  // Your admin account
+  {
+    id: id('usr'),
+    name: 'Friendly Foe',
+    username: 'friendlyfoe',
+    password: 'scrypt:1ae80fd40794cdd2537f85ac602fcc96:27d2ceefea8c72972c83dc62f3b90b094aaef78d64dde8416d4a17cb9c7447ac',
+    kind: 'editor',
+    role: EDITOR_ROLES.ADMIN,
+    category: null,
+    email: 'friendlyfoe241@gmail.com',
+    discord: 'friendlyfoe',
+    slug: 'friendlyfoe',
+    institution: '',
+    bio: '',
+    avatarUrl: '',
+    interests: [],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
