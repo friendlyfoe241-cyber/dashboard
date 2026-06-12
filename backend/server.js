@@ -16,8 +16,12 @@ import * as notify from './src/notify.js';
 import { sendEmail } from './src/email.js';
 import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
+import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
+import { ogCardPng, sharePageHtml } from './src/og.js';
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+// Marketing site base, used by per-paper share pages to forward to articles.
+const SITE_URL = (process.env.SITE_URL || 'https://www.synthica.org').replace(/\/$/, '');
 
 const app = express();
 app.set('trust proxy', 1); // real client IP behind Render/Vercel proxies
@@ -90,6 +94,11 @@ const wrap = (fn) => (req, res) => {
 };
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, categories: CATEGORIES }));
+
+// --- Public (no auth): impact stats, programs, certificate verification -----
+app.get('/api/public/stats', wrap((_req, res) => res.json(store.publicStats())));
+app.get('/api/public/programs', wrap((_req, res) => res.json(store.listPublicPrograms())));
+app.get('/api/certificates/:code', wrap((req, res) => res.json(store.verifyCertificate(req.params.code))));
 
 // --- Auth ------------------------------------------------------------------
 app.post('/api/login', authLimiter, wrap((req, res) => {
@@ -230,6 +239,53 @@ app.post('/api/admin/bulk-role', requireAuth, requireDirector, wrap((req, res) =
   res.json(store.adminBulkRole({ emails, tag, role, actor: req.user }));
 }));
 
+// --- Programs (apply → cohort → milestones) ----------------------------------
+app.get('/api/researcher/programs', requireAuth, wrap((req, res) => res.json(store.listProgramsFor(req.user.id))));
+app.post('/api/researcher/programs/:id/apply', requireAuth, wrap((req, res) => {
+  res.json(store.applyToProgram({ programId: req.params.id, userId: req.user.id, message: (req.body || {}).message }));
+}));
+
+app.get('/api/admin/programs', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listProgramsAdmin())));
+app.post('/api/admin/programs', requireAuth, requireDirector, wrap((req, res) => res.json(store.createProgram(req.body || {}, req.user))));
+app.post('/api/admin/programs/:id/status', requireAuth, requireDirector, wrap((req, res) => {
+  res.json(store.updateProgramStatus({ programId: req.params.id, status: (req.body || {}).status, actor: req.user }));
+}));
+app.post('/api/admin/programs/:id/milestones', requireAuth, requireDirector, wrap((req, res) => {
+  const { title, dueAt } = req.body || {};
+  res.json(store.addProgramMilestone({ programId: req.params.id, title, dueAt, actor: req.user }));
+}));
+app.post('/api/admin/programs/:id/milestones/:mid', requireAuth, requireDirector, wrap((req, res) => {
+  res.json(store.toggleProgramMilestone({ programId: req.params.id, milestoneId: req.params.mid, done: !!(req.body || {}).done, actor: req.user }));
+}));
+app.post('/api/admin/program-applications/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  const out = store.reviewProgramApplication({ id: req.params.id, status: (req.body || {}).status, reviewerId: req.user.id });
+  if (out.user?.email && out.program) {
+    sendEmail({
+      to: out.user.email,
+      subject: out.status === 'accepted' ? `Welcome to ${out.program.title}!` : `Update on your ${out.program.title} application`,
+      text: out.status === 'accepted'
+        ? `Hi ${out.user.name},\n\nYou're in! Welcome to ${out.program.title}${out.program.cohortLabel ? ` (${out.program.cohortLabel})` : ''}. Your milestones are waiting in the dashboard:\n${FRONTEND_URL || ''}/researcher/programs\n\n— The Synthica Team`
+        : `Hi ${out.user.name},\n\nThank you for applying to ${out.program.title}. We couldn't offer you a spot this round, but new cohorts open regularly — keep an eye on the dashboard.\n\n— The Synthica Team`,
+    });
+  }
+  res.json(out);
+}));
+
+// --- Certificates -------------------------------------------------------------
+app.get('/api/researcher/certificates', requireAuth, wrap((req, res) => res.json(store.myCertificates(req.user.id))));
+app.post('/api/researcher/certificates', requireAuth, wrap((req, res) => {
+  res.json(store.issueCertificate({ userId: req.user.id, type: (req.body || {}).type }));
+}));
+
+// --- Weekly digest: manual trigger (also used by external cron) ---------------
+app.post('/api/admin/digest/send', requireAuth, requireDirector, async (req, res) => {
+  try {
+    res.json(await sendWeeklyDigests(store.digestData()));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Digest failed' });
+  }
+});
+
 // Full data snapshot for manual backup (Director only).
 app.get('/api/admin/export', requireAuth, requireDirector, wrap((_req, res) => {
   res.set('Content-Disposition', 'attachment; filename="synthica-backup.json"');
@@ -339,6 +395,24 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   const pub = store.getPublication(req.params.id);
   if (!pub) return res.status(404).json({ error: 'Publication not found' });
   res.json(pub);
+}));
+
+// Per-paper OG share card (1200×630 PNG) + a share page whose meta tags
+// crawlers can read (the static site can't serve per-paper tags).
+app.get('/api/journal/publications/:id/og.png', wrap((req, res) => {
+  const pub = store.getPublication(req.params.id);
+  if (!pub) return res.status(404).json({ error: 'Publication not found' });
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.send(ogCardPng(pub));
+}));
+
+app.get('/api/journal/publications/:id/share', wrap((req, res) => {
+  const pub = store.getPublication(req.params.id);
+  if (!pub) return res.status(404).json({ error: 'Publication not found' });
+  const apiBase = `${req.protocol}://${req.get('host')}`;
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(sharePageHtml(pub, { apiBase, siteBase: SITE_URL }));
 }));
 
 // --- Track 3: Editor dashboard ---------------------------------------------
@@ -696,6 +770,12 @@ store
     app.listen(PORT, () => {
       console.log(`Synthica backend running on http://localhost:${PORT}`);
     });
+    // Weekly digest scheduler (opt-in; needs an always-on instance). Hosts
+    // that sleep should hit POST /api/admin/digest/send from a cron instead.
+    if (process.env.ENABLE_DIGESTS === 'true') {
+      setInterval(() => maybeSendWeekly(store.digestData).catch((e) => console.error('[digest]', e.message)), 60 * 60 * 1000);
+      console.log('[digest] weekly digest scheduler enabled (Mondays 13:00 UTC)');
+    }
   })
   .catch((err) => {
     console.error('Failed to initialize data store:', err.message);
