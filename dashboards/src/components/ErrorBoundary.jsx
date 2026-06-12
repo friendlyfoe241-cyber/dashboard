@@ -85,7 +85,16 @@ export default class ErrorBoundary extends Component {
             border: '1px solid var(--border, #e2e8f0)',
             boxShadow: '0 8px 32px rgba(0,61,130,0.1)',
           }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+            {/* Loading spinner */}
+            <div style={{
+              width: 48,
+              height: 48,
+              border: '4px solid var(--border, #e2e8f0)',
+              borderTopColor: 'var(--brand, #78b4fb)',
+              borderRadius: '50%',
+              margin: '0 auto 1rem',
+              animation: 'spin 1s linear infinite',
+            }} />
             <h1 style={{ 
               fontSize: '1.3rem', 
               fontWeight: 700, 
@@ -113,6 +122,12 @@ export default class ErrorBoundary extends Component {
               If this persists, <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
             </p>
           </div>
+          {/* Keyframe animation style */}
+          <style>{`
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       );
     }
