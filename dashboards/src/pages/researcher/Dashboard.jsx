@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import OnboardingWizard from '../../components/OnboardingWizard.jsx';
+import CertificateGenerator from '../../components/CertificateGenerator.jsx';
 import { imageSrc } from '../../files.js';
 
 const TAG_LABEL = {
@@ -38,6 +39,7 @@ export default function Dashboard() {
         ))}
       </p>
 
+      <CertificateGenerator user={user} />
       <Pathway />
       <UpcomingDeadlines />
       <Feed />
