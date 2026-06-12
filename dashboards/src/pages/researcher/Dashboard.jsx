@@ -20,6 +20,10 @@ export default function Dashboard() {
   const tags = user?.tags || [];
   const firstName = user?.name?.split(' ')?.[0] || 'there';
 
+  if (!user) {
+    return <div className="page-loading">Loading…</div>;
+  }
+
   return (
     <div>
       <OnboardingWizard />
@@ -51,6 +55,10 @@ export default function Dashboard() {
 // single progress tracker — it replaces the old hardcoded "progress checklist".
 function Pathway() {
   const { user } = useAuth();
+  
+  // Don't render until user is loaded
+  if (!user) return null;
+  
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -157,11 +165,11 @@ function UpcomingDeadlines() {
   const [items, setItems] = useState([]);
   useEffect(() => { api.calendar().then(setItems).catch(() => {}); }, []);
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = items.filter((i) => i.date >= today).slice(0, 4);
-  const overdue = items.filter((i) => i.date < today).length;
+  const upcoming = items?.filter((i) => i.date >= today).slice(0, 4) || [];
+  const overdue = items?.filter((i) => i.date < today).length || 0;
   if (!upcoming.length && !overdue) return null;
   const icons = { paper: '📄', task: '✅', event: '📅', pathway: '🧭' };
-  const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const fmt = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
   return (
     <section style={{ marginBottom: '2rem' }}>
       <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

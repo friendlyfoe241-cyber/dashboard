@@ -13,6 +13,7 @@ const DEMO_ACCOUNTS = [
   { label: 'Auditor', email: 'auditor@synthica.org' },
   { label: 'Lead researcher', email: 'sam@example.com' },
   { label: 'Associate researcher', email: 'jordan@example.com' },
+  { label: 'Independent researcher', email: 'testindependent@synthica.org' },
 ];
 
 // Static layout wrapper. Must live at module scope: defining it inside Login
