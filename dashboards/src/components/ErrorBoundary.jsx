@@ -92,7 +92,7 @@ export default class ErrorBoundary extends Component {
               color: 'var(--ink, #0f172a)', 
               margin: '0 0 0.5rem' 
             }}>
-              {isNetworkError ? 'Server Waking Up' : isAuthError ? 'Session Expired' : 'Reloading…'}
+              {isNetworkError ? 'Server Waking Up' : isAuthError ? 'Session Expired' : 'Loading…'}
             </h1>
             <p style={{ 
               color: 'var(--body, #6b7280)', 
@@ -100,10 +100,10 @@ export default class ErrorBoundary extends Component {
               fontSize: '0.9rem' 
             }}>
               {isNetworkError 
-                ? "The backend is waking up. Auto-reloading in a moment…" 
+                ? "The backend is waking up. Hang on a moment…" 
                 : isAuthError 
-                ? "Your session may have expired. Auto-reloading…"
-                : "Recovering from an error. Auto-reloading…"}
+                ? "Your session may have expired. Refreshing…"
+                : "Please wait while we load the page…"}
             </p>
             <p style={{ 
               color: 'var(--body-alt, #9ca3af)', 
