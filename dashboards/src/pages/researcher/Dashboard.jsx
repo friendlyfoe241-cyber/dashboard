@@ -18,18 +18,19 @@ const TAG_LABEL = {
 export default function Dashboard() {
   const { user } = useAuth();
   const tags = user?.tags || [];
+  const firstName = user?.name?.split(' ')?.[0] || 'there';
 
   return (
     <div>
       <OnboardingWizard />
 
       <h1 className="page-title">
-        Welcome, <span className="yellow-text">{user.name.split(' ')[0]}</span>
+        Welcome, <span className="yellow-text">{firstName}</span>
       </h1>
       <p className="page-sub">
         Your roles:{' '}
         {tags.map((t) => (
-          <Badge key={t}>{TAG_LABEL[t]}</Badge>
+          <Badge key={t}>{TAG_LABEL[t] || t}</Badge>
         ))}
       </p>
 
@@ -193,7 +194,7 @@ function UpcomingDeadlines() {
 function Feed() {
   const [items, setItems] = useState([]);
   useEffect(() => { api.feed().then(setItems).catch(() => {}); }, []);
-  if (!items.length) return null;
+  if (!items?.length) return null;
   const tone = { news: 'gray', following: 'blue', suggested: 'gold' };
   const label = { news: 'announcement', following: 'from your network', suggested: 'for you' };
   return (
@@ -204,13 +205,13 @@ function Feed() {
           <Card key={i}>
             {it.bannerUrl && <img src={imageSrc(it.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 12, marginBottom: '0.6rem', maxHeight: 200, objectFit: 'cover' }} />}
             <div className="row" style={{ gap: '0.4rem' }}>
-              <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type}</Badge>
-              <strong>{it.title}</strong>
+              <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type || 'update'}</Badge>
+              <strong>{it.title || 'Untitled'}</strong>
             </div>
             <div style={{ marginTop: '0.25rem' }}>
-              {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body}</a> : it.body}
+              {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body || ''}</a> : (it.body || '')}
             </div>
-            {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {new Date(it.at).toLocaleDateString()}</div>}
+            {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {it.at ? new Date(it.at).toLocaleDateString() : ''}</div>}
           </Card>
         ))}
       </div>
