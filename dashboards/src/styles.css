@@ -343,6 +343,7 @@ a {
 }
 .btn-approve:hover:not(:disabled) {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 .btn-reject {
   background: var(--danger);
@@ -350,14 +351,19 @@ a {
 }
 .btn-reject:hover:not(:disabled) {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 .btn-ghost {
-  background: transparent;
-  color: var(--body);
+  background: #fff;
+  color: var(--brand-deep);
   border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: var(--surface);
+  background: var(--surface-alt);
+  border-color: rgba(120, 180, 251, 0.55);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.10);
 }
 .btn-sm {
   padding: 0.35rem 0.8rem;
@@ -786,20 +792,6 @@ body {
 }
 .card { transition: box-shadow 0.2s, border-color 0.2s; }
 .card:hover { border-color: rgba(120, 180, 251, 0.45); }
-
-/* Ghost buttons: crisp pills instead of flat gray rectangles. */
-.btn-ghost {
-  background: #fff;
-  color: var(--brand-deep);
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
-}
-.btn-ghost:hover:not(:disabled) {
-  background: var(--surface-alt);
-  border-color: rgba(120, 180, 251, 0.55);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.10);
-}
 
 /* Segmented pill control (e.g. Lead tools). */
 .seg {
