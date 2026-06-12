@@ -39,7 +39,6 @@ export default function Dashboard() {
         ))}
       </p>
 
-      <CertificateGenerator user={user} />
       <Pathway />
       <UpcomingDeadlines />
       <Feed />
@@ -49,6 +48,8 @@ export default function Dashboard() {
       )}
       {tags.includes('chapter_leader') && <ChapterPanel />}
       {tags.includes('independent_researcher') && <IndependentPanel />}
+
+      <CertificateGenerator user={user} />
     </div>
   );
 }
