@@ -97,7 +97,7 @@ function Pathway() {
         <Button className="btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : '+ Add step'}</Button>
       </div>
 
-      {user?.leadRecommended && (
+      {user?.leadRecommended && !tags.includes('lead_researcher') && (
         <Card style={{ marginBottom: '0.75rem', borderLeft: '3px solid var(--gold, #FFD700)' }}>
           <div className="card-row">
             <div>
@@ -232,6 +232,8 @@ function Feed() {
 
 // New-member onboarding checklist. Self-serve; the leader sees aggregate progress.
 function OnboardingCard() {
+  const { user } = useAuth();
+  const tags = user?.tags || [];
   const [ob, setOb] = useState(null);
 
   useEffect(() => {
@@ -275,9 +277,11 @@ function OnboardingCard() {
             <span className="ci-title">{s.label}</span>
           </div>
         ))}
-        <p className="muted" style={{ marginTop: '0.75rem' }}>
-          Ready for more? <Link to="/researcher/apply">Apply to lead a project or join the team →</Link>
-        </p>
+        {!tags.includes('lead_researcher') && (
+          <p className="muted" style={{ marginTop: '0.75rem' }}>
+            Ready for more? <Link to="/researcher/apply">Apply to lead a project or join the team →</Link>
+          </p>
+        )}
       </Card>
     </section>
   );
@@ -490,10 +494,10 @@ function IndependentPanel() {
           Track your progress in <strong>Pathways</strong> above. Here are resources to help along the way:
         </p>
         <ul className="muted" style={{ lineHeight: 1.9, paddingLeft: '1.1rem' }}>
-          <li><a href="#">Free research methods course</a></li>
-          <li><a href="#">How to read a paper</a></li>
-          <li><a href="#">Finding a dataset</a></li>
-          <li><a href="#">Journal submission guide</a></li>
+          <li><a href="/free-course.html">Free research methods course</a></li>
+          <li><a href="/resources.html">How to read a paper</a></li>
+          <li><a href="/resources.html">Finding a dataset</a></li>
+          <li><a href="/article.html">Journal submission guide</a></li>
         </ul>
       </Card>
     </section>
