@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, countdown: 0 };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -20,25 +20,10 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
-    // When error state becomes true, start countdown and auto-reload after 0.25s
+    // When error state becomes true, auto-reload immediately
     if (this.state.hasError && !prevState.hasError) {
-      this.setState({ countdown: 0.25 });
-      this.timer = setInterval(() => {
-        this.setState((s) => {
-          const next = Math.round((s.countdown - 0.1) * 100) / 100;
-          if (next <= 0) {
-            clearInterval(this.timer);
-            window.location.reload();
-            return { countdown: 0 };
-          }
-          return { countdown: next };
-        });
-      }, 100);
+      window.location.reload();
     }
-  }
-
-  componentWillUnmount() {
-    if (this.timer) clearInterval(this.timer);
   }
 
   render() {
@@ -78,7 +63,7 @@ export default class ErrorBoundary extends Component {
               fontSize: '0.8rem',
               margin: 0 
             }}>
-              Reloading in {this.state.countdown.toFixed(2)}s · <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
+              <Link to="/" style={{ color: 'var(--brand-deep, #1a6bb5)' }}>go home</Link>
             </p>
           </div>
           {/* Keyframe animation style */}
