@@ -1304,7 +1304,10 @@ export function auditorSetTags({ userId, addTags, removeTags, actor }) {
   granted.forEach((t) => u.tags.push(t));
   (Array.isArray(removeTags) ? removeTags : []).forEach((t) => { u.tags = u.tags.filter((x) => x !== t); });
   if ((addTags || []).length) u.approved = true; // granting a role activates the member
-  if (granted.includes('lead_researcher')) restoreLegacyProject(u, actor?.id);
+  if (granted.includes('lead_researcher')) {
+    restoreLegacyProject(u, actor?.id);
+    u.leadRecommended = false; // clear the nudge once they've become a lead
+  }
   if (granted.length) u.newRoleCongrats = TAG_LABEL[granted[granted.length - 1]] || granted[granted.length - 1];
   recordAudit(actor, 'assign_tags', `${u.name}: [${u.tags.join(',')}]`);
   schedulePersist();

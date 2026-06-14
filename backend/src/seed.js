@@ -370,7 +370,7 @@ export const researchers = [
     resumeUrl: '',
     gpa: '',
     researchExperience: 8,
-    leadRecommended: true,
+    leadRecommended: false, // already a lead, don't show the nudge
     pathway: [],
     slug: 'testlead',
     institution: '',
