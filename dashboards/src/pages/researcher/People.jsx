@@ -14,14 +14,14 @@ export default function People() {
   const toggle = (p) => (p.following ? api.unfollow(p.id) : api.follow(p.id)).then(load);
   const needle = q.toLowerCase();
   const shown = needle
-    ? people.filter((p) => p.name.toLowerCase().includes(needle) || (p.interests || []).some((i) => i.toLowerCase().includes(needle)) || p.role.toLowerCase().includes(needle) || (p.username || '').toLowerCase().includes(needle) || (p.blurb || '').toLowerCase().includes(needle))
+    ? people.filter((p) => p.name.toLowerCase().includes(needle) || (p.interests || []).some((i) => i.toLowerCase().includes(needle)) || p.role.toLowerCase().includes(needle) || (p.username || '').toLowerCase().includes(needle) || (p.blurb || '').toLowerCase().includes(needle) || (p.institution || '').toLowerCase().includes(needle))
     : people;
 
   return (
     <div>
       <h1 className="page-title">People</h1>
       <p className="page-sub">Follow researchers and editors to get their updates in your feed.</p>
-      <input placeholder="Search name, @username, role, or interest" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320, marginBottom: '1rem' }} />
+      <input placeholder="Search name, @username, role, affiliation, or interest" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 360, marginBottom: '1rem' }} />
       <div className="grid grid-3">
         {shown.map((p) => (
           <Card key={p.id}>
@@ -30,6 +30,7 @@ export default function People() {
               <div>
                 <strong>{p.name}</strong>
                 <div className="muted" style={{ fontSize: '0.78rem' }}>{p.role}{p.username ? ` · @${p.username}` : ''}</div>
+                {p.institution && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.institution}</div>}
               </div>
             </div>
             {p.blurb && <p className="muted" style={{ margin: '0.45rem 0 0', fontSize: '0.85rem' }}>{p.blurb}</p>}
