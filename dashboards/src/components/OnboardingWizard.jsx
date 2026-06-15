@@ -38,7 +38,7 @@ export default function OnboardingWizard() {
     setShow(true);
   }, [user]);
 
-  if (!show) return null;
+  if (!show || !user) return null;
 
   const chapterSteps = chapter?.steps || [];
   // Most members answer interests/scores during the pending-approval intake, so

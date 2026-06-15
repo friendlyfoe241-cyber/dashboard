@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import OnboardingWizard from '../../components/OnboardingWizard.jsx';
+import CertificateGenerator from '../../components/CertificateGenerator.jsx';
 import { imageSrc } from '../../files.js';
 
 const TAG_LABEL = {
@@ -18,18 +19,23 @@ const TAG_LABEL = {
 export default function Dashboard() {
   const { user } = useAuth();
   const tags = user?.tags || [];
+  const firstName = user?.name?.split(' ')?.[0] || 'there';
+
+  if (!user) {
+    return <div className="page-loading">Loading…</div>;
+  }
 
   return (
     <div>
       <OnboardingWizard />
 
       <h1 className="page-title">
-        Welcome, <span className="yellow-text">{user.name.split(' ')[0]}</span>
+        Welcome, <span className="yellow-text">{firstName}</span>
       </h1>
       <p className="page-sub">
         Your roles:{' '}
         {tags.map((t) => (
-          <Badge key={t}>{TAG_LABEL[t]}</Badge>
+          <Badge key={t}>{TAG_LABEL[t] || t}</Badge>
         ))}
       </p>
 
@@ -37,11 +43,12 @@ export default function Dashboard() {
       <UpcomingDeadlines />
       <Feed />
 
-      {(tags.includes('lead_researcher') || tags.includes('associate_researcher')) && (
-        <ProjectsPanel isLead={tags.includes('lead_researcher')} />
-      )}
+      {tags.includes('lead_researcher') && <LeadResearcherPanel />}
+      {tags.includes('associate_researcher') && <ProjectsPanel isLead={false} />}
       {tags.includes('chapter_leader') && <ChapterPanel />}
       {tags.includes('independent_researcher') && <IndependentPanel />}
+
+      <CertificateGenerator user={user} />
     </div>
   );
 }
@@ -50,6 +57,10 @@ export default function Dashboard() {
 // single progress tracker — it replaces the old hardcoded "progress checklist".
 function Pathway() {
   const { user } = useAuth();
+  
+  // Don't render until user is loaded
+  if (!user) return null;
+  
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -84,18 +95,6 @@ function Pathway() {
         </div>
         <Button className="btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : '+ Add step'}</Button>
       </div>
-
-      {user?.leadRecommended && (
-        <Card style={{ marginBottom: '0.75rem', borderLeft: '3px solid var(--gold, #FFD700)' }}>
-          <div className="card-row">
-            <div>
-              <strong>You're a strong Lead Researcher candidate 🌟</strong>
-              <p className="muted" style={{ margin: '0.2rem 0 0' }}>Based on your research experience, we recommend you to lead a project.</p>
-            </div>
-            <Link className="btn btn-primary btn-sm" to="/researcher/apply">Apply to lead</Link>
-          </div>
-        </Card>
-      )}
 
       {open && (
         <Card style={{ marginBottom: '0.75rem' }}>
@@ -156,11 +155,11 @@ function UpcomingDeadlines() {
   const [items, setItems] = useState([]);
   useEffect(() => { api.calendar().then(setItems).catch(() => {}); }, []);
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = items.filter((i) => i.date >= today).slice(0, 4);
-  const overdue = items.filter((i) => i.date < today).length;
+  const upcoming = items?.filter((i) => i.date >= today).slice(0, 4) || [];
+  const overdue = items?.filter((i) => i.date < today).length || 0;
   if (!upcoming.length && !overdue) return null;
   const icons = { paper: '📄', task: '✅', event: '📅', pathway: '🧭' };
-  const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const fmt = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
   return (
     <section style={{ marginBottom: '2rem' }}>
       <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -193,7 +192,7 @@ function UpcomingDeadlines() {
 function Feed() {
   const [items, setItems] = useState([]);
   useEffect(() => { api.feed().then(setItems).catch(() => {}); }, []);
-  if (!items.length) return null;
+  if (!items?.length) return null;
   const tone = { news: 'gray', following: 'blue', suggested: 'gold' };
   const label = { news: 'announcement', following: 'from your network', suggested: 'for you' };
   return (
@@ -204,13 +203,13 @@ function Feed() {
           <Card key={i}>
             {it.bannerUrl && <img src={imageSrc(it.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 12, marginBottom: '0.6rem', maxHeight: 200, objectFit: 'cover' }} />}
             <div className="row" style={{ gap: '0.4rem' }}>
-              <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type}</Badge>
-              <strong>{it.title}</strong>
+              <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type || 'update'}</Badge>
+              <strong>{it.title || 'Untitled'}</strong>
             </div>
             <div style={{ marginTop: '0.25rem' }}>
-              {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body}</a> : it.body}
+              {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body || ''}</a> : (it.body || '')}
             </div>
-            {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {new Date(it.at).toLocaleDateString()}</div>}
+            {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {it.at ? new Date(it.at).toLocaleDateString() : ''}</div>}
           </Card>
         ))}
       </div>
@@ -220,6 +219,8 @@ function Feed() {
 
 // New-member onboarding checklist. Self-serve; the leader sees aggregate progress.
 function OnboardingCard() {
+  const { user } = useAuth();
+  const tags = user?.tags || [];
   const [ob, setOb] = useState(null);
 
   useEffect(() => {
@@ -263,9 +264,11 @@ function OnboardingCard() {
             <span className="ci-title">{s.label}</span>
           </div>
         ))}
-        <p className="muted" style={{ marginTop: '0.75rem' }}>
-          Ready for more? <Link to="/researcher/apply">Apply to lead a project or join the team →</Link>
-        </p>
+        {!tags.includes('lead_researcher') && (
+          <p className="muted" style={{ marginTop: '0.75rem' }}>
+            Ready for more? <Link to="/researcher/apply">Apply to lead a project or join the team →</Link>
+          </p>
+        )}
       </Card>
     </section>
   );
@@ -295,6 +298,94 @@ function ProjectsPanel({ isLead }) {
                 <h3>{p.title}</h3>
                 <p className="paper-meta">{p.members.length} members · {p.tasks.length} tasks</p>
                 <span className="label-up">Open project →</span>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Lead Researcher dashboard: manage projects, members, and project lifecycle.
+function LeadResearcherPanel() {
+  const [projects, setProjects] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ title: '', category: 'Computer Science', description: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => api.myProjects().then(setProjects).catch(() => {}), []);
+  useEffect(() => { load(); }, [load]);
+
+  const createProject = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.createProject(form);
+      setForm({ title: '', category: 'Computer Science', description: '' });
+      setCreating(false);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const categories = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
+
+  return (
+    <section style={{ marginBottom: '2rem' }}>
+      <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div className="section-badge">Lead Researcher</div>
+          <h2 className="section-title">My Projects</h2>
+        </div>
+        <Button className="btn-sm" onClick={() => setCreating((c) => !c)}>
+          {creating ? 'Cancel' : '+ New project'}
+        </Button>
+      </div>
+
+      {creating && (
+        <Card style={{ marginBottom: '1rem' }}>
+          <form onSubmit={createProject}>
+            {error && <div className="login-error" style={{ marginBottom: '0.75rem' }}>{error}</div>}
+            <Field label="Project title">
+              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. AI Ethics in Healthcare" required />
+            </Field>
+            <div className="grid grid-2">
+              <Field label="Category">
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  {categories.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Description (optional)">
+              <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief overview of the project goals..." />
+            </Field>
+            <Button type="submit" className="btn-sm" disabled={busy}>{busy ? 'Creating…' : 'Create project'}</Button>
+          </form>
+        </Card>
+      )}
+
+      {projects.length === 0 ? (
+        <EmptyState>You haven't created any projects yet. Click "New project" to get started.</EmptyState>
+      ) : (
+        <div className="grid grid-3">
+          {projects.map((p) => (
+            <Link key={p.id} to={`/researcher/project/${p.id}`} style={{ color: 'inherit' }}>
+              <Card className="paper-card">
+                <div className="card-row" style={{ marginBottom: '0.5rem' }}>
+                  <Badge>{p.category}</Badge>
+                  <span className="muted" style={{ fontSize: '0.72rem' }}>{p.status || 'Active'}</span>
+                </div>
+                <h3>{p.title}</h3>
+                <p className="paper-meta">{p.members?.length || 0} members · {p.tasks?.length || 0} tasks</p>
+                {p.description && <p className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>{p.description.slice(0, 80)}{p.description.length > 80 ? '…' : ''}</p>}
+                <span className="label-up">Manage project →</span>
               </Card>
             </Link>
           ))}
@@ -478,10 +569,10 @@ function IndependentPanel() {
           Track your progress in <strong>Pathways</strong> above. Here are resources to help along the way:
         </p>
         <ul className="muted" style={{ lineHeight: 1.9, paddingLeft: '1.1rem' }}>
-          <li><a href="#">Free research methods course</a></li>
-          <li><a href="#">How to read a paper</a></li>
-          <li><a href="#">Finding a dataset</a></li>
-          <li><a href="#">Journal submission guide</a></li>
+          <li><a href="/free-course.html">Free research methods course</a></li>
+          <li><a href="/resources.html">How to read a paper</a></li>
+          <li><a href="/resources.html">Finding a dataset</a></li>
+          <li><a href="/article.html">Journal submission guide</a></li>
         </ul>
       </Card>
     </section>

@@ -13,9 +13,19 @@ export function Badge({ children, tone = 'blue' }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
-export function Button({ children, variant = 'primary', ...rest }) {
+export function Button({ children, variant = 'primary', size = '', ...rest }) {
+  // Build class string: btn is always present, variant class is derived from prop,
+  // and size can be passed via size prop or any other additional classes via className in rest
+  const classes = [
+    'btn',
+    `btn-${variant}`,
+    size,
+    rest.className || '',
+  ].filter(Boolean).join(' ');
+  // Remove className from rest so it doesn't get passed as HTML attribute
+  const { className: _unused, ...restProps } = rest;
   return (
-    <button className={`btn btn-${variant}`} {...rest}>
+    <button className={classes} {...restProps}>
       {children}
     </button>
   );
