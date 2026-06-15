@@ -416,6 +416,18 @@ button.btn-sm {
   color: var(--heading);
   margin-bottom: 0.35rem;
 }
+/* Section heading inside a multi-part form (Profile editor). */
+.field-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--brand-deep);
+  margin: 1.25rem 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.field-group-title:first-child { margin-top: 0; }
 input,
 textarea,
 select {

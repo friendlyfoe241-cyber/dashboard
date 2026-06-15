@@ -12,6 +12,7 @@ import Opportunities from './Opportunities.jsx';
 import MyProjects from './MyProjects.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
+import Programs from './Programs.jsx';
 import Calendar from './Calendar.jsx';
 import Drive from './Drive.jsx';
 import Tools from '../Tools.jsx';
@@ -54,6 +55,7 @@ export default function ResearcherApp() {
     { to: '/researcher/journal', label: 'Synthica Journal' },
     { to: '/archive', label: 'Synthica Archive' },
     { to: '/researcher/opportunities', label: 'Opportunities' },
+    { to: '/researcher/programs', label: 'Programs' },
     { to: '/researcher/people', label: 'People' },
     { to: '/researcher/account', label: 'Account' },
   ];
@@ -70,6 +72,7 @@ export default function ResearcherApp() {
         <Route path="project/:id" element={<ProjectDetail />} />
         <Route path="journal" element={<MyJournal />} />
         <Route path="opportunities" element={<Opportunities />} />
+        <Route path="programs" element={<Programs />} />
         <Route path="account" element={<Account />} />
         {/* Deep-link routes kept so existing links still resolve. */}
         <Route path="hub" element={<ResearchHub />} />

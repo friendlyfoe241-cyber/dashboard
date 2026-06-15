@@ -317,7 +317,7 @@ export const publications = [
 // ---------------------------------------------------------------------------
 // Researchers, projects, listings, applications (Track 4)
 // ---------------------------------------------------------------------------
-function researcher(name, username, tags) {
+function researcher(name, username, tags, extra = {}) {
   return {
     id: id('usr'),
     name,
@@ -334,22 +334,51 @@ function researcher(name, username, tags) {
     pathway: [], // personal guided research to-dos (title, deliverable, due, done)
     slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
     institution: '',
+    affiliations: [], // up to two; institution mirrors the first
     bio: '',
+    blurb: '',
+    pronouns: '',
     avatarUrl: '',
     interests: [],
+    researchGroup: '', // current lab / research group name
+    researchGroupUrl: '',
+    contactEmail: '', // public contact email (login email stays private)
     linkedinUrl: '',
     websiteUrl: '',
+    githubUrl: '',
+    twitterUrl: '',
+    scholarUrl: '', // Google Scholar
+    orcid: '',
+    dob: '', // YYYY-MM-DD; private unless dobPublic
+    dobPublic: false,
     links: [],
     public: true,
     emailVerified: true,
     twoFactorSecret: '',
     twoFactorEnabled: false,
     following: [],
+    ...extra,
   };
 }
 
 export const researchers = [
-  researcher('Sam Rivera', 'sam', [RESEARCHER_TAGS.LEAD_RESEARCHER]),
+  researcher('Sam Rivera', 'sam', [RESEARCHER_TAGS.LEAD_RESEARCHER], {
+    affiliations: ['Phillips Exeter Academy', 'Synthica Research Group'],
+    institution: 'Phillips Exeter Academy',
+    pronouns: 'she/her',
+    blurb: 'Lead researcher studying coral-reef genetics 🌊',
+    bio: 'High-school researcher leading a team on reef resilience. I love turning messy field data into models that say something real about a warming ocean.',
+    interests: ['marine biology', 'genomics', 'climate modeling'],
+    researchGroup: 'Reef Genomics Group',
+    contactEmail: 'sam.rivera@example.com',
+    linkedinUrl: 'https://www.linkedin.com/in/sam-rivera',
+    githubUrl: 'https://github.com/sam-rivera',
+    scholarUrl: 'https://scholar.google.com/citations?user=EXAMPLE',
+    orcid: '0000-0002-1825-0097',
+    dob: '2007-04-12',
+    dobPublic: false,
+    avatarUrl: '',
+  }),
   researcher('Jordan Kim', 'jordan', [RESEARCHER_TAGS.ASSOCIATE_RESEARCHER]),
   researcher('Taylor Brooks', 'taylor', [RESEARCHER_TAGS.CHAPTER_LEADER]),
   researcher('Robin Diaz', 'robin', [RESEARCHER_TAGS.INDEPENDENT_RESEARCHER]),

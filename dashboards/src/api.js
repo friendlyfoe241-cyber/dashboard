@@ -173,6 +173,21 @@ export const api = {
   chapter: () => request('/researcher/chapter'),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  // programs (apply → cohort → milestones)
+  programs: () => request('/researcher/programs'),
+  applyProgram: (id, message) => request(`/researcher/programs/${id}/apply`, { method: 'POST', body: { message } }),
+  adminPrograms: () => request('/admin/programs'),
+  createProgram: (body) => request('/admin/programs', { method: 'POST', body }),
+  setProgramStatus: (id, status) => request(`/admin/programs/${id}/status`, { method: 'POST', body: { status } }),
+  addProgramMilestone: (id, body) => request(`/admin/programs/${id}/milestones`, { method: 'POST', body }),
+  toggleProgramMilestone: (id, mid, done) => request(`/admin/programs/${id}/milestones/${mid}`, { method: 'POST', body: { done } }),
+  reviewProgramApplication: (id, status) => request(`/admin/program-applications/${id}`, { method: 'POST', body: { status } }),
+  // certificates
+  myCertificates: () => request('/researcher/certificates'),
+  issueCertificate: (type) => request('/researcher/certificates', { method: 'POST', body: { type } }),
+  verifyCertificate: (code) => request(`/certificates/${encodeURIComponent(code)}`),
+  // weekly digest (admin)
+  sendDigest: () => request('/admin/digest/send', { method: 'POST' }),
   // editor
   editorStats: () => request('/editor/stats'),
   getSettings: () => request('/editor/settings'),

@@ -19,6 +19,7 @@ export default function Admin() {
       <AnalyticsCards />
       <People isDirector={isDirector} />
       <Applications />
+      <ProgramsPanel isDirector={isDirector} />
       <Archive />
       <AuditLog />
       {isDirector && <Integrations />}
@@ -591,7 +592,8 @@ function Applications() {
     api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
 
   const onboarding = apps.filter((a) => a.kind === 'onboarding');
-  const others = apps.filter((a) => a.kind !== 'onboarding');
+  // Program applications have their own panel below (cohort admission).
+  const others = apps.filter((a) => a.kind !== 'onboarding' && a.kind !== 'program');
   const pendCount = (xs) => xs.filter((a) => a.status === 'pending').length;
 
   return (
@@ -684,5 +686,114 @@ function AppRow({ a, review, assignable }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+// Programs: cohort admissions for auditors; create/close/milestones + the
+// weekly digest trigger for directors.
+function ProgramsPanel({ isDirector }) {
+  const toast = useToast();
+  const [programs, setPrograms] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' });
+  const load = useCallback(() => { api.adminPrograms().then(setPrograms).catch(() => {}); }, []);
+  useEffect(load, [load]);
+
+  const reviewApp = (id, status) =>
+    api.reviewProgramApplication(id, status).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+  const toggleMs = (pid, mid, done) =>
+    api.toggleProgramMilestone(pid, mid, done).then(load).catch((e) => toast.error(e.message));
+  const setStatus = (pid, status) =>
+    api.setProgramStatus(pid, status).then(() => { load(); toast.success(`Program ${status}`); }).catch((e) => toast.error(e.message));
+  const create = (e) => {
+    e.preventDefault();
+    api.createProgram(form).then(() => { setShowCreate(false); setForm({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' }); load(); toast.success('Program created'); }).catch((err) => toast.error(err.message));
+  };
+  const sendDigest = () =>
+    api.sendDigest().then((r) => toast.success(`Digest sent to ${r.sent}/${r.recipients} researchers`)).catch((e) => toast.error(e.message));
+
+  const pending = programs.flatMap((p) => p.applications.filter((a) => a.status === 'pending').map((a) => ({ ...a, programTitle: p.title })));
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div className="card-row" style={{ marginBottom: '0.6rem' }}>
+        <h2 className="section-title" style={{ margin: 0 }}>Programs <Badge tone="gray">{pending.length} pending</Badge></h2>
+        {isDirector && (
+          <div className="row">
+            <Button variant="ghost" onClick={sendDigest}>Send weekly digest now</Button>
+            <Button onClick={() => setShowCreate((v) => !v)}>{showCreate ? 'Cancel' : '+ New program'}</Button>
+          </div>
+        )}
+      </div>
+
+      {showCreate && (
+        <Card>
+          <form onSubmit={create}>
+            <div className="grid grid-2">
+              <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+              <Field label="Cohort label (e.g. Summer 2026)"><input value={form.cohortLabel} onChange={(e) => setForm({ ...form, cohortLabel: e.target.value })} /></Field>
+            </div>
+            <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+            <div className="grid grid-2">
+              <Field label="Spots"><input type="number" min="0" value={form.spots} onChange={(e) => setForm({ ...form, spots: e.target.value })} /></Field>
+              <Field label="Apply deadline"><input type="date" value={form.applyDeadline} onChange={(e) => setForm({ ...form, applyDeadline: e.target.value })} /></Field>
+            </div>
+            <div className="grid grid-2">
+              <Field label="Starts"><input type="date" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} /></Field>
+              <Field label="Ends"><input type="date" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} /></Field>
+            </div>
+            <Button type="submit">Create program</Button>
+          </form>
+        </Card>
+      )}
+
+      {pending.length > 0 && (
+        <div className="stack" style={{ marginBottom: '0.8rem' }}>
+          {pending.map((a) => (
+            <Card key={a.id}>
+              <div className="card-row">
+                <div><strong>{a.userName}</strong> → {a.programTitle}{a.message && <div className="muted" style={{ fontSize: '0.82rem' }}>{a.message}</div>}</div>
+                <div className="row">
+                  <Button onClick={() => reviewApp(a.id, 'accepted')}>Accept</Button>
+                  <Button variant="ghost" onClick={() => reviewApp(a.id, 'rejected')}>Reject</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="stack">
+        {programs.map((p) => (
+          <Card key={p.id}>
+            <div className="card-row">
+              <div>
+                <strong>{p.title}</strong> {p.cohortLabel && <Badge>{p.cohortLabel}</Badge>} <Badge tone={p.status === 'open' ? 'green' : 'gray'}>{p.status}</Badge>
+                <div className="muted" style={{ fontSize: '0.82rem' }}>
+                  {p.cohortMembers.length}{p.spots ? `/${p.spots}` : ''} members
+                  {p.cohortMembers.length > 0 && <> — {p.cohortMembers.map((m) => m.name).join(', ')}</>}
+                </div>
+              </div>
+              {isDirector && (
+                <div className="row">
+                  {p.status === 'open'
+                    ? <Button variant="ghost" onClick={() => setStatus(p.id, 'closed')}>Close</Button>
+                    : <Button variant="ghost" onClick={() => setStatus(p.id, 'open')}>Reopen</Button>}
+                </div>
+              )}
+            </div>
+            {p.milestones.length > 0 && (
+              <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {p.milestones.map((m) => (
+                  <label key={m.id} className="muted" style={{ fontSize: '0.84rem', cursor: isDirector ? 'pointer' : 'default' }}>
+                    <input type="checkbox" checked={m.done} disabled={!isDirector} onChange={(e) => toggleMs(p.id, m.id, e.target.checked)} /> {m.title}
+                  </label>
+                ))}
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }

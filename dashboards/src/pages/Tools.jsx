@@ -128,6 +128,7 @@ function Placeholder({ title, desc }) {
 }
 
 function ResumeCard({ user }) {
+  const { refreshUser } = useAuth();
   const [url, setUrl] = useState(user.resumeUrl || '');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -138,6 +139,8 @@ function ResumeCard({ user }) {
     setError('');
     try {
       await api.updateResume(url);
+      // Keep the auth user fresh so listings auto-apply with the new résumé.
+      await refreshUser();
       setSaved(true);
     } catch (e) {
       setError(e.message);

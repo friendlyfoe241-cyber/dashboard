@@ -96,7 +96,7 @@ export default function ProjectDetail() {
               {(project.team || []).map((m) => (
                 <div key={m.id} className="row" style={{ alignItems: 'flex-start' }}>
                   <span className="badge badge-blue" style={{ borderRadius: '999px' }}>
-                    {m.name.split(' ').map((p) => p[0]).join('')}
+                    {String(m.name || '?').split(' ').map((p) => p[0] || '').join('').slice(0, 2)}
                   </span>
                   <div>
                     <div>

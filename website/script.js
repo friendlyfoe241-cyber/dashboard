@@ -14,6 +14,13 @@
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Live platform endpoints. Point a deployed site at the deployed backend /
+  // dashboards by setting these before this script loads:
+  //   <script>window.SYNTHICA_API_BASE = 'https://synthica-backend.onrender.com';
+  //           window.SYNTHICA_APP_URL  = 'https://app.synthica.org';</script>
+  var API_BASE = (window.SYNTHICA_API_BASE || 'http://localhost:4000').replace(/\/$/, '');
+  var APP_URL = (window.SYNTHICA_APP_URL || 'https://app.synthica.org').replace(/\/$/, '');
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     initScrolledNav();
@@ -23,7 +30,72 @@
     initSpotlight();
     initNewsletter();
     initThemeToggle();
+    initAppLinks();
+    initLiveStats();
+    initFeaturedPapers();
   });
+
+  /* Every [data-app-link] points at the dashboards app (smart sign-in funnel). */
+  function initAppLinks() {
+    Array.prototype.slice.call(document.querySelectorAll('[data-app-link]')).forEach(function (a) {
+      a.href = APP_URL + a.getAttribute('data-app-link');
+    });
+  }
+
+  /* Impact counters: swap the hardcoded fallbacks for live platform numbers
+     (members, published papers, …) before the count-up animation reaches them. */
+  function initLiveStats() {
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-stat]'));
+    if (!els.length) return;
+    fetch(API_BASE + '/api/public/stats')
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (stats) {
+        els.forEach(function (el) {
+          var v = stats[el.dataset.stat];
+          if (typeof v !== 'number') return;
+          el.dataset.count = String(v);
+          // Already animated (user scrolled past before the fetch landed)?
+          // Update the text in place so the band still ends up truthful.
+          if (el.textContent !== '0') el.textContent = formatCount(el);
+        });
+      })
+      .catch(function () { /* offline/cold backend: keep the fallback numbers */ });
+  }
+
+  /* "Made by students" showcase: featured publications first, then latest. */
+  function initFeaturedPapers() {
+    var grid = document.getElementById('showcase-grid');
+    if (!grid) return;
+    var STICKERS = { Biology: '\u{1F9EC}', Chemistry: '⚗️', Physics: '\u{1F52D}', Mathematics: '∑', 'Computer Science': '\u{1F916}', Humanities: '\u{1F4DC}', Economics: '\u{1F4C8}', Psychology: '\u{1F9E0}' };
+    fetch(API_BASE + '/api/journal/publications')
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (pubs) {
+        var picks = pubs
+          .slice()
+          .sort(function (a, b) {
+            if (!!b.featured !== !!a.featured) return b.featured ? 1 : -1;
+            return new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+          })
+          .slice(0, 3);
+        if (!picks.length) return;
+        grid.innerHTML = '';
+        picks.forEach(function (p, i) {
+          var a = document.createElement('a');
+          a.className = 'showcase-card revealed';
+          a.setAttribute('data-reveal', String(i * 100));
+          a.href = 'article.html?id=' + encodeURIComponent(p.id);
+          var authors = (p.authors || []).map(function (x) { return x.name; }).slice(0, 2).join(' & ') + ((p.authors || []).length > 2 ? ' et al.' : '');
+          a.innerHTML =
+            '<span class="showcase-sticker" aria-hidden="true">' + (STICKERS[p.category] || '\u{1F52C}') + (p.featured ? ' ⭐' : '') + '</span>' +
+            '<span class="badge-cat"></span><h3></h3><p></p>';
+          a.querySelector('.badge-cat').textContent = p.category || 'Research';
+          a.querySelector('h3').textContent = p.title;
+          a.querySelector('p').textContent = authors;
+          grid.appendChild(a);
+        });
+      })
+      .catch(function () { /* offline/cold backend: keep the embedded showcase */ });
+  }
 
   /* Newsletter signup: front-end only. On submit we hide the form and show an
      inline success message. No data is sent anywhere yet.

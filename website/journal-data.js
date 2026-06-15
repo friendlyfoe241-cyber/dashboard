@@ -385,23 +385,44 @@ async function renderProfile() {
 
   document.title = `${profile.name} — Synthica`;
 
-  // Role + institution line, e.g. "Lead Researcher · MIT".
+  // Role + affiliations line, e.g. "Lead Researcher · MIT · Synthica".
   const isEditor = profile.kind === 'editor';
+  const affiliations = Array.isArray(profile.affiliations) && profile.affiliations.length
+    ? profile.affiliations
+    : (profile.institution ? [profile.institution] : []);
   const roleBits = [];
   if (profile.role) roleBits.push(esc(profile.role));
   if (isEditor && profile.category) roleBits.push(esc(profile.category));
-  if (profile.institution) roleBits.push(esc(profile.institution));
+  for (const a of affiliations) roleBits.push(esc(a));
   const roleLine = roleBits.join(' · ');
+
+  const namePronouns = profile.pronouns ? ` <span class="profile-pronouns">· ${esc(profile.pronouns)}</span>` : '';
+
+  // Secondary line: research group, contact email, DOB (only if opted in).
+  const metaBits = [];
+  if (profile.researchGroup) {
+    metaBits.push(profile.researchGroupUrl
+      ? `🔬 <a href="${esc(profile.researchGroupUrl)}" target="_blank" rel="noopener">${esc(profile.researchGroup)}</a>`
+      : `🔬 ${esc(profile.researchGroup)}`);
+  }
+  if (profile.contactEmail) metaBits.push(`✉️ <a href="mailto:${esc(profile.contactEmail)}">${esc(profile.contactEmail)}</a>`);
+  if (profile.dob) metaBits.push(`🎂 ${esc(profile.dob)}`);
+  const metaLine = metaBits.length ? `<p class="profile-meta">${metaBits.join(' &nbsp;·&nbsp; ')}</p>` : '';
 
   const avatar = profile.avatarUrl
     ? `<img class="profile-avatar profile-avatar-img" src="${esc(profile.avatarUrl)}" alt="${esc(profile.name)}" />`
     : `<div class="profile-avatar" aria-hidden="true">${esc(initialsOf(profile.name))}</div>`;
 
-  // Action buttons: LinkedIn, Website, then any custom links[] — all ghost
-  // buttons that open in a new tab.
+  // Action buttons: socials first, then any custom links[] — ghost buttons that
+  // open in a new tab.
+  const orcidHref = profile.orcid ? (String(profile.orcid).startsWith('http') ? profile.orcid : `https://orcid.org/${profile.orcid}`) : '';
   const actions = [];
   if (profile.linkedinUrl) actions.push({ label: 'LinkedIn', url: profile.linkedinUrl });
   if (profile.websiteUrl) actions.push({ label: 'Website', url: profile.websiteUrl });
+  if (profile.githubUrl) actions.push({ label: 'GitHub', url: profile.githubUrl });
+  if (profile.twitterUrl) actions.push({ label: 'X', url: profile.twitterUrl });
+  if (profile.scholarUrl) actions.push({ label: 'Google Scholar', url: profile.scholarUrl });
+  if (orcidHref) actions.push({ label: 'ORCID', url: orcidHref });
   if (Array.isArray(profile.links)) {
     for (const l of profile.links) {
       if (l && l.url) actions.push({ label: l.label || l.url, url: l.url });
@@ -479,8 +500,9 @@ async function renderProfile() {
     <div class="profile-header card">
       ${avatar}
       <div class="profile-id">
-        <h1 class="profile-name">${esc(profile.name)}</h1>
+        <h1 class="profile-name">${esc(profile.name)}${namePronouns}</h1>
         ${roleLine ? `<p class="profile-role">${roleLine}</p>` : ''}
+        ${metaLine}
         ${linksBlock}
       </div>
     </div>

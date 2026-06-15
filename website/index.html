@@ -64,6 +64,7 @@
           <ul class="dropdown">
             <li><a href="about.html#mission">Our Mission</a></li>
             <li><a href="about.html#team">Our Team</a></li>
+            <li><a href="mentors.html">Mentors</a></li>
           </ul>
         </li>
 
@@ -156,10 +157,12 @@
   </section>
 
   <!-- ===================== STATS BAND (Hack Club-inspired) ===================== -->
+  <!-- data-stat cells are refreshed from the live platform (/api/public/stats)
+       before the count-up runs; the hardcoded values are the offline fallback. -->
   <section class="stats-band" aria-label="Synthica by the numbers">
     <div class="stats-row">
       <div data-reveal="0">
-        <div class="stat-num yellow-text" data-count="1000" data-suffix="+">0</div>
+        <div class="stat-num yellow-text" data-count="1000" data-suffix="+" data-stat="members">0</div>
         <div class="stat-label">young researchers</div>
       </div>
       <div data-reveal="80">
@@ -167,12 +170,12 @@
         <div class="stat-label">countries</div>
       </div>
       <div data-reveal="160">
-        <div class="stat-num yellow-text" data-count="0" data-prefix="$">0</div>
-        <div class="stat-label">cost to join</div>
+        <div class="stat-num yellow-text" data-count="25" data-suffix="+" data-stat="papersPublished">0</div>
+        <div class="stat-label">papers published</div>
       </div>
       <div data-reveal="240">
-        <div class="stat-num yellow-text" data-count="100" data-suffix="%">0</div>
-        <div class="stat-label">non-selective</div>
+        <div class="stat-num yellow-text" data-count="0" data-prefix="$">0</div>
+        <div class="stat-label">cost to join</div>
       </div>
     </div>
   </section>
@@ -283,7 +286,9 @@
         </p>
       </div>
 
-      <div class="showcase-grid">
+      <!-- Replaced with live "featured & latest" publications when the journal
+           API is reachable; these cards are the offline fallback. -->
+      <div class="showcase-grid" id="showcase-grid">
         <a class="showcase-card" href="journal-archive.html" data-reveal="0">
           <span class="showcase-sticker" aria-hidden="true">&#129516;</span>
           <span class="badge-cat">Biology</span>
@@ -378,6 +383,40 @@
             <span><span class="testimonial-name">Ethan O.</span><br><span class="testimonial-role">Researcher · USA</span></span>
           </figcaption>
         </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GET INVOLVED (funnel → smart sign-in) ===================== -->
+  <section class="section section-alt" id="get-involved">
+    <div class="container">
+      <div class="section-head" data-reveal>
+        <span class="section-badge">Get involved</span>
+        <h2 class="section-title">Pick your path, <span class="yellow-text">start today</span></h2>
+        <p class="section-subtitle">
+          One account, one smart sign-in — enter your email and we take you the rest of the way.
+        </p>
+      </div>
+
+      <div class="grid grid-3">
+        <article class="card feature-card" data-spotlight data-reveal="0">
+          <div class="feature-icon" aria-hidden="true">&#128300;</div>
+          <h3>Join as a researcher</h3>
+          <p>Start a project, join a cohort, and publish your first paper with mentors beside you.</p>
+          <a class="btn btn-primary" data-app-link="/login" href="https://app.synthica.org/login">Create your account &rarr;</a>
+        </article>
+        <article class="card feature-card" data-spotlight data-reveal="100">
+          <div class="feature-icon" aria-hidden="true">&#9997;&#65039;</div>
+          <h3>Become an editor</h3>
+          <p>Review submissions, mentor authors, and help run a real peer-reviewed journal.</p>
+          <a class="btn btn-primary" data-app-link="/login" href="https://app.synthica.org/login">Apply to the team &rarr;</a>
+        </article>
+        <article class="card feature-card" data-spotlight data-reveal="200">
+          <div class="feature-icon" aria-hidden="true">&#127759;</div>
+          <h3>Start a chapter</h3>
+          <p>Bring Synthica to your school — we provide the playbook, dashboard, and community.</p>
+          <a class="btn btn-primary" data-app-link="/login" href="https://app.synthica.org/login">Lead a chapter &rarr;</a>
+        </article>
       </div>
     </div>
   </section>
@@ -501,6 +540,7 @@
     <div class="footer-cta-card">
       <h2>Start your <span class="yellow-text">research journey</span> today</h2>
       <p>Join 1000+ students across 93+ countries making research approachable &mdash; for free.</p>
+      <a class="btn btn-secondary" data-app-link="/login" href="https://app.synthica.org/login">Get Started &mdash; It's Free</a>
       <a class="btn btn-secondary" href="https://discord.gg/8wPzZkGy5Z" target="_blank" rel="noopener">Join Us on Discord</a>
     </div>
     <div class="footer-bar">

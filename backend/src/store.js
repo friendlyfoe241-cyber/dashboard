@@ -333,10 +333,25 @@ function publicProfileOf(u) {
   const currentProjects = db.projects
     .filter((p) => p.members.includes(u.id))
     .map((p) => ({ id: p.id, title: p.title, category: p.category }));
+  // Affiliations: prefer the new multi-slot field, fall back to the legacy
+  // single institution so older records still show something.
+  const affiliations = (u.affiliations && u.affiliations.length)
+    ? u.affiliations
+    : (u.institution ? [u.institution] : []);
   return {
     id: u.id, slug: u.slug || u.id, username: u.username || '', name: u.name, kind: u.kind, role: roleDisplay(u),
-    institution: u.institution || '', bio: u.bio || '', blurb: u.blurb || '', avatarUrl: u.avatarUrl || '',
-    interests: u.interests || [], linkedinUrl: u.linkedinUrl || '', websiteUrl: u.websiteUrl || '',
+    tags: u.tags || [],
+    institution: affiliations[0] || '', affiliations,
+    bio: u.bio || '', blurb: u.blurb || '', avatarUrl: u.avatarUrl || '',
+    pronouns: u.pronouns || '',
+    interests: u.interests || [],
+    researchGroup: u.researchGroup || '', researchGroupUrl: u.researchGroupUrl || '',
+    contactEmail: u.contactEmail || '',
+    linkedinUrl: u.linkedinUrl || '', websiteUrl: u.websiteUrl || '',
+    githubUrl: u.githubUrl || '', twitterUrl: u.twitterUrl || '', scholarUrl: u.scholarUrl || '', orcid: u.orcid || '',
+    // DOB is sensitive (this is a platform for minors) — only ever exposed when
+    // the member explicitly opts in via dobPublic.
+    dob: u.dobPublic ? (u.dob || '') : '',
     links: u.links || [], category: u.category || null, currentProjects, publications,
   };
 }
@@ -377,6 +392,23 @@ export function updateProfile(userId, patch) {
   if (typeof patch.discord === 'string') u.discord = patch.discord.trim().slice(0, 60);
   if (typeof patch.linkedinUrl === 'string') u.linkedinUrl = patch.linkedinUrl.trim().slice(0, 300);
   if (typeof patch.websiteUrl === 'string') u.websiteUrl = patch.websiteUrl.trim().slice(0, 300);
+  if (typeof patch.githubUrl === 'string') u.githubUrl = patch.githubUrl.trim().slice(0, 300);
+  if (typeof patch.twitterUrl === 'string') u.twitterUrl = patch.twitterUrl.trim().slice(0, 300);
+  if (typeof patch.scholarUrl === 'string') u.scholarUrl = patch.scholarUrl.trim().slice(0, 300);
+  if (typeof patch.orcid === 'string') u.orcid = patch.orcid.trim().slice(0, 60);
+  if (typeof patch.pronouns === 'string') u.pronouns = patch.pronouns.trim().slice(0, 40);
+  if (typeof patch.contactEmail === 'string') u.contactEmail = patch.contactEmail.trim().slice(0, 120);
+  if (typeof patch.researchGroup === 'string') u.researchGroup = patch.researchGroup.trim().slice(0, 120);
+  if (typeof patch.researchGroupUrl === 'string') u.researchGroupUrl = patch.researchGroupUrl.trim().slice(0, 300);
+  // Date of birth (YYYY-MM-DD) — stored, but only shown publicly if dobPublic.
+  if (typeof patch.dob === 'string') u.dob = patch.dob.trim().slice(0, 10);
+  if (typeof patch.dobPublic === 'boolean') u.dobPublic = patch.dobPublic;
+  // Up to two affiliations; mirror the first into the legacy institution field
+  // so the People list and website role line keep working.
+  if (Array.isArray(patch.affiliations)) {
+    u.affiliations = patch.affiliations.map((s) => String(s).trim().slice(0, 120)).filter(Boolean).slice(0, 2);
+    u.institution = u.affiliations[0] || '';
+  }
   if (Array.isArray(patch.interests)) u.interests = patch.interests.map((s) => String(s).trim().slice(0, 40)).filter(Boolean).slice(0, 12);
   if (Array.isArray(patch.links)) u.links = cleanLinks(patch.links);
   if (typeof patch.public === 'boolean') u.public = patch.public;

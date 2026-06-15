@@ -48,23 +48,32 @@ export default function PublicProfile() {
           <div className="row" style={{ gap: '1rem', alignItems: 'center' }}>
             <Pfp name={p.name} url={imageSrc(p.avatarUrl)} size="lg" />
             <div>
-              <h1 className="page-title" style={{ marginBottom: 0 }}>{p.name}</h1>
-              <div className="muted">{p.role}{p.institution ? ` · ${p.institution}` : ''}{p.username ? ` · @${p.username}` : ''}</div>
+              <h1 className="page-title" style={{ marginBottom: 0 }}>
+                {p.name}{p.pronouns && <span className="muted" style={{ fontSize: '0.9rem', fontWeight: 400 }}> · {p.pronouns}</span>}
+              </h1>
+              <div className="muted">{p.role}{p.username ? ` · @${p.username}` : ''}</div>
+              {(p.affiliations || []).length > 0 && <div className="muted">{p.affiliations.join(' · ')}</div>}
               {p.blurb && <p style={{ margin: '0.35rem 0 0', color: 'var(--slate)' }}>{p.blurb}</p>}
             </div>
           </div>
+
+          {(p.researchGroup || p.dob || p.contactEmail) && (
+            <div className="stack" style={{ marginTop: '0.7rem', gap: '0.2rem' }}>
+              {p.researchGroup && (
+                <div className="muted">🔬 {p.researchGroupUrl ? <a href={p.researchGroupUrl} target="_blank" rel="noreferrer">{p.researchGroup}</a> : p.researchGroup}</div>
+              )}
+              {p.contactEmail && <div className="muted">✉️ <a href={`mailto:${p.contactEmail}`}>{p.contactEmail}</a></div>}
+              {p.dob && <div className="muted">🎂 {p.dob}</div>}
+            </div>
+          )}
+
           {(p.interests || []).length > 0 && (
             <div className="row" style={{ marginTop: '0.7rem', gap: '0.3rem' }}>
               {p.interests.map((i) => <Badge key={i} tone="gray">{i}</Badge>)}
             </div>
           )}
-          {(p.links?.length > 0 || p.linkedinUrl || p.websiteUrl) && (
-            <div className="row" style={{ marginTop: '0.6rem' }}>
-              {p.linkedinUrl && <a href={p.linkedinUrl} target="_blank" rel="noreferrer">LinkedIn</a>}
-              {p.websiteUrl && <a href={p.websiteUrl} target="_blank" rel="noreferrer">Website</a>}
-              {(p.links || []).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer">{l.label}</a>)}
-            </div>
-          )}
+
+          <SocialLinks p={p} />
         </Card>
 
         {p.bio && (
@@ -104,6 +113,28 @@ export default function PublicProfile() {
           )}
         </Card>
       </main>
+    </div>
+  );
+}
+
+// A compact row of social / research links. ORCID accepts a bare iD or a URL.
+function SocialLinks({ p }) {
+  const orcidHref = p.orcid ? (p.orcid.startsWith('http') ? p.orcid : `https://orcid.org/${p.orcid}`) : '';
+  const items = [
+    ['LinkedIn', p.linkedinUrl],
+    ['Website', p.websiteUrl],
+    ['GitHub', p.githubUrl],
+    ['X', p.twitterUrl],
+    ['Google Scholar', p.scholarUrl],
+    ['ORCID', orcidHref],
+    ...(p.links || []).map((l) => [l.label, l.url]),
+  ].filter(([, url]) => url);
+  if (!items.length) return null;
+  return (
+    <div className="row" style={{ marginTop: '0.6rem', gap: '0.75rem' }}>
+      {items.map(([label, url]) => (
+        <a key={label + url} href={url} target="_blank" rel="noreferrer">{label}</a>
+      ))}
     </div>
   );
 }

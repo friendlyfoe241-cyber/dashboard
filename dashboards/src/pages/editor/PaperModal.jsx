@@ -17,6 +17,9 @@ export default function PaperModal({ paper, role, onClose, onActed }) {
       onActed();
     } catch (e) {
       setError(e.message);
+    } finally {
+      // Always re-enable controls; if onActed() closed the modal this is a
+      // harmless no-op, but it stops the buttons sticking when it doesn't.
       setBusy(false);
     }
   };
