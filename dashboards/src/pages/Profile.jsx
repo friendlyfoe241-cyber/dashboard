@@ -72,6 +72,20 @@ export default function Profile() {
   const roleLine = user.role ? user.role : (user.tags || []).join(', ');
   const previewAffiliations = [form.affiliation1, form.affiliation2].filter(Boolean);
 
+  // Live completeness nudge — encourages filling out the profile that powers
+  // the public page, People search, and the mentor directory.
+  const checklist = [
+    ['Profile picture', !!form.avatarUrl.trim()],
+    ['One-line blurb', !!form.blurb.trim()],
+    ['Affiliation', !!form.affiliation1.trim()],
+    ['Bio', !!form.bio.trim()],
+    ['Research interests', !!form.interests.trim()],
+    ['A link or social', !!(form.linkedinUrl || form.websiteUrl || form.githubUrl || form.twitterUrl || form.scholarUrl || form.orcid || form.links.some((l) => l.url.trim()))],
+  ];
+  const completed = checklist.filter(([, done]) => done).length;
+  const pct = Math.round((completed / checklist.length) * 100);
+  const missing = checklist.filter(([, done]) => !done).map(([label]) => label);
+
   return (
     <div>
       <h1 className="page-title">My Profile</h1>
@@ -150,7 +164,21 @@ export default function Profile() {
           </form>
         </Card>
 
-        <Card>
+        <div className="stack" style={{ gap: '1rem' }}>
+          <Card>
+            <div className="card-row" style={{ marginBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0 }}>Profile strength</h3>
+              <strong style={{ color: pct === 100 ? 'var(--success)' : 'var(--brand-deep)' }}>{pct}%</strong>
+            </div>
+            <div className="profile-meter"><span style={{ width: `${pct}%` }} /></div>
+            {missing.length > 0 ? (
+              <p className="muted" style={{ margin: '0.6rem 0 0' }}>Add: {missing.join(' · ')}</p>
+            ) : (
+              <p className="muted" style={{ margin: '0.6rem 0 0' }}>🎉 Your profile is complete — nice.</p>
+            )}
+          </Card>
+
+          <Card>
           <h3>Preview</h3>
           <div className="row" style={{ marginTop: '0.5rem' }}>
             <span className="pfp pfp-lg">
@@ -174,7 +202,8 @@ export default function Profile() {
             <a href={publicUrl} target="_blank" rel="noreferrer">View public profile →</a>{' '}
             {form.public ? <Badge tone="green">public</Badge> : <Badge tone="gray">hidden</Badge>}
           </p>
-        </Card>
+          </Card>
+        </div>
       </div>
     </div>
   );

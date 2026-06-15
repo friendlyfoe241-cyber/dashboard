@@ -428,6 +428,20 @@ button.btn-sm {
   border-bottom: 1px solid var(--border);
 }
 .field-group-title:first-child { margin-top: 0; }
+/* Profile completeness meter. */
+.profile-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  overflow: hidden;
+}
+.profile-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sky-deep), var(--gold));
+  transition: width 0.4s ease;
+}
 input,
 textarea,
 select {
