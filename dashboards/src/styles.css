@@ -442,6 +442,19 @@ button.btn-sm {
   background: linear-gradient(90deg, var(--sky-deep), var(--gold));
   transition: width 0.4s ease;
 }
+/* Remove-button for repeatable link rows. */
+.link-remove {
+  flex: none;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--body-alt);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.link-remove:hover { border-color: var(--danger); color: var(--danger); }
 input,
 textarea,
 select {

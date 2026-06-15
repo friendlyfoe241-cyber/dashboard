@@ -5,6 +5,11 @@ import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import { imageSrc } from '../files.js';
 
+// Common social platforms for the repeatable "More social links" adder. The
+// dedicated fields above cover the researcher essentials (LinkedIn, GitHub, X,
+// Scholar, ORCID, Website); this list is for everything else.
+const SOCIAL_PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'ResearchGate', 'Bluesky', 'Mastodon', 'Facebook', 'Discord', 'Substack', 'Personal site'];
+
 // Everyone can edit their own public profile (shown on synthica.org and in-app).
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -40,10 +45,21 @@ export default function Profile() {
   if (!user) return <div className="page-loading">Loading…</div>;
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const setLink = (i, k) => (e) => {
+  const setLinkField = (i, k, value) => {
     const links = form.links.slice();
-    links[i] = { ...links[i], [k]: e.target.value };
+    links[i] = { ...links[i], [k]: value };
     setForm({ ...form, links });
+  };
+  const removeLink = (i) => setForm({ ...form, links: form.links.filter((_, j) => j !== i) });
+
+  const copyProfileLink = async () => {
+    const url = `${window.location.origin}/p/${user.slug || user.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Public profile link copied');
+    } catch {
+      toast.error(url);
+    }
   };
 
   const save = async (e) => {
@@ -135,15 +151,30 @@ export default function Profile() {
               <Field label="ORCID iD"><input value={form.orcid} onChange={set('orcid')} placeholder="0000-0002-1825-0097" /></Field>
             </div>
 
-            <div className="field-label">Other links</div>
-            {form.links.map((l, i) => (
-              <div key={i} className="row" style={{ marginBottom: '0.4rem' }}>
-                <input placeholder="Label (e.g. Portfolio)" value={l.label} onChange={setLink(i, 'label')} style={{ maxWidth: 160 }} />
-                <input placeholder="https://…" value={l.url} onChange={setLink(i, 'url')} />
-              </div>
-            ))}
-            <Button type="button" variant="ghost" className="btn-sm" onClick={() => setForm({ ...form, links: [...form.links, { label: '', url: '' }] })}>
-              + Add link
+            <div className="field-label">More social links</div>
+            <p className="muted" style={{ margin: '0 0 0.5rem' }}>Add any other socials — Instagram, YouTube, ResearchGate, and so on. Pick a platform and paste the link.</p>
+            {form.links.map((l, i) => {
+              const known = SOCIAL_PLATFORMS.includes(l.label);
+              return (
+                <div key={i} className="row" style={{ marginBottom: '0.4rem' }}>
+                  <select
+                    value={known ? l.label : 'Other'}
+                    onChange={(e) => setLinkField(i, 'label', e.target.value === 'Other' ? '' : e.target.value)}
+                    style={{ maxWidth: 150 }}
+                  >
+                    {SOCIAL_PLATFORMS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    <option value="Other">Other…</option>
+                  </select>
+                  {!known && (
+                    <input placeholder="Label" value={l.label} onChange={(e) => setLinkField(i, 'label', e.target.value)} style={{ maxWidth: 130 }} />
+                  )}
+                  <input placeholder="https://…" value={l.url} onChange={(e) => setLinkField(i, 'url', e.target.value)} />
+                  <button type="button" className="link-remove" aria-label="Remove link" onClick={() => removeLink(i)}>×</button>
+                </div>
+              );
+            })}
+            <Button type="button" variant="ghost" className="btn-sm" onClick={() => setForm({ ...form, links: [...form.links, { label: 'Instagram', url: '' }] })}>
+              + Add social link
             </Button>
 
             <div className="field-group-title">Private</div>
@@ -202,6 +233,7 @@ export default function Profile() {
             <a href={publicUrl} target="_blank" rel="noreferrer">View public profile →</a>{' '}
             {form.public ? <Badge tone="green">public</Badge> : <Badge tone="gray">hidden</Badge>}
           </p>
+          <Button type="button" variant="ghost" className="btn-sm" onClick={copyProfileLink}>🔗 Copy profile link</Button>
           </Card>
         </div>
       </div>

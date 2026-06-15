@@ -25,18 +25,12 @@
   </script>
   <style>
     /* Page-specific bits, built only from the site's brand tokens. */
-    .cert-wrap { max-width: 760px; margin: 0 auto; }
-    .cert-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem; }
-    .cert-tab {
-      font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer;
-      border: 1px solid var(--border); background: var(--white); color: var(--body);
-      border-radius: 28px; padding: 0.55rem 1.25rem; transition: all 0.2s ease;
-    }
-    .cert-tab:hover { border-color: var(--brand-blue); color: var(--brand-blue-dark); }
-    .cert-tab.active {
-      background: var(--brand-blue); color: #fff; border-color: var(--brand-blue);
-      box-shadow: 0 4px 14px rgba(37, 137, 237, 0.3);
-    }
+    .cert-wrap { max-width: 860px; margin: 0 auto; }
+    .cert-role { text-align: center; }
+    .cert-role-emoji { font-size: 2rem; display: block; margin-bottom: 0.4rem; }
+    .cert-role h3 { margin: 0 0 0.35rem; }
+    .cert-cta { text-align: center; }
+    .cert-cta .cert-actions { justify-content: center; }
     .cert-field-label {
       display: block; text-align: left; font-weight: 700; font-size: 0.85rem;
       color: var(--heading); margin: 0 0 0.4rem;
@@ -118,26 +112,36 @@
       </div>
 
       <div class="cert-wrap">
-        <div class="card" data-reveal>
-          <div class="cert-tabs" role="group" aria-label="Certificate type">
-            <button class="cert-tab active" data-type="associate">Associate Researcher</button>
-            <button class="cert-tab" data-type="independent">Independent Researcher</button>
-            <button class="cert-tab" data-type="lead">Lead Researcher</button>
-          </div>
+        <div class="grid grid-3" style="margin-bottom: 1.75rem;">
+          <article class="card cert-role" data-reveal="0">
+            <span class="cert-role-emoji" aria-hidden="true">🥉</span>
+            <h3>Associate Researcher</h3>
+            <p>Awarded for contributing to a research team and seeing a project through.</p>
+          </article>
+          <article class="card cert-role" data-reveal="100">
+            <span class="cert-role-emoji" aria-hidden="true">🔬</span>
+            <h3>Independent Researcher</h3>
+            <p>Awarded for driving your own original research from question to write-up.</p>
+          </article>
+          <article class="card cert-role" data-reveal="200">
+            <span class="cert-role-emoji" aria-hidden="true">🏅</span>
+            <h3>Lead Researcher</h3>
+            <p>Awarded for leading a team to a publishable research result.</p>
+          </article>
+        </div>
 
-          <label class="cert-field-label" for="cert-name">Recipient name</label>
-          <input id="cert-name" class="newsletter-input cert-input" type="text" autocomplete="name"
-                 placeholder="Type the name exactly as it should appear" />
-
+        <div class="card cert-cta" data-reveal>
+          <h3>Generate your certificate</h3>
+          <p>
+            Certificates are issued to your <strong>earned role</strong> — so each one is real, in your
+            name, and carries a verification code anyone can check below. Sign in and open
+            <strong>Account&nbsp;→&nbsp;Certificates</strong> to download yours.
+          </p>
           <div class="cert-actions">
-            <button class="btn btn-primary" id="cert-generate" type="button">Generate certificate</button>
-            <a class="btn btn-secondary" id="cert-download" href="#" download="Synthica Certificate.png" hidden>Download PNG</a>
+            <a class="btn btn-primary" data-app-link="/login" href="https://app.synthica.org/login">Sign in to generate yours &rarr;</a>
+            <a class="btn btn-secondary" href="research-group.html">How do I earn one?</a>
           </div>
-
-          <div class="cert-preview-wrap" hidden>
-            <canvas class="cert-canvas" id="cert-canvas"></canvas>
-            <p class="cert-hint">Tip: right-click → save, or use the Download button above.</p>
-          </div>
+          <p class="cert-hint">Not assigned a role yet? Join the research group and an auditor assigns your role as you progress.</p>
         </div>
       </div>
     </div>
@@ -183,73 +187,11 @@
 
   <script src="script.js"></script>
   <script>
-    /* Branded certificate generator — same templates + typography as the
-       official Synthica generators, drawn on a canvas over the brand theme. */
+    /* Public certificate verification. Generation is intentionally NOT here —
+       certificates are issued in-app to a member's earned role, so anyone can
+       only *verify* a code, never mint an arbitrary one. */
     (function () {
       var API = (window.SYNTHICA_API_BASE || 'http://localhost:4000').replace(/\/$/, '');
-      var TEMPLATES = {
-        associate: { src: 'assets/certs/associate.jpg', label: 'Associate Researcher' },
-        independent: { src: 'assets/certs/independent.jpg', label: 'Independent Researcher' },
-        lead: { src: 'assets/certs/lead.jpg', label: 'Lead Researcher' },
-      };
-      var type = 'associate';
-
-      var nameInput = document.getElementById('cert-name');
-      var canvas = document.getElementById('cert-canvas');
-      var previewWrap = document.querySelector('.cert-preview-wrap');
-      var downloadBtn = document.getElementById('cert-download');
-
-      document.querySelectorAll('.cert-tab').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-          document.querySelectorAll('.cert-tab').forEach(function (t) { t.classList.remove('active'); });
-          tab.classList.add('active');
-          type = tab.dataset.type;
-        });
-      });
-
-      function loadImage(src) {
-        return new Promise(function (resolve, reject) {
-          var img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = function () { resolve(img); };
-          img.onerror = function () { reject(new Error('template')); };
-          img.src = src;
-        });
-      }
-
-      document.getElementById('cert-generate').addEventListener('click', async function () {
-        var name = nameInput.value.trim();
-        if (!name) { nameInput.focus(); return; }
-        var tmpl;
-        try { tmpl = await loadImage(TEMPLATES[type].src); } catch (e) { alert('Could not load the certificate template.'); return; }
-        try { await document.fonts.load('700 100px "Cinzel"'); await document.fonts.ready; } catch (e) {}
-
-        var W = tmpl.naturalWidth, H = tmpl.naturalHeight;
-        canvas.width = W; canvas.height = H;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(tmpl, 0, 0, W, H);
-
-        var size = Math.floor(W * 0.034);
-        ctx.font = '700 ' + size + 'px "Cinzel", serif';
-        while (ctx.measureText(name).width > W * 0.6 && size > 20) {
-          size -= 2; ctx.font = '700 ' + size + 'px "Cinzel", serif';
-        }
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#c9a84c';
-        ctx.fillText(name, W / 2, H * 0.328);
-
-        ctx.font = Math.floor(W * 0.011) + 'px "Garet", sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillStyle = '#9aa0a8';
-        ctx.fillText('synthica.org', W * 0.915, H * 0.885);
-
-        previewWrap.hidden = false;
-        downloadBtn.hidden = false;
-        downloadBtn.href = canvas.toDataURL('image/png');
-        downloadBtn.download = 'Synthica ' + TEMPLATES[type].label + ' Certificate - ' + name + '.png';
-        previewWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      });
 
       // --- Verification ---
       var verifyResult = document.getElementById('verify-result');

@@ -59,18 +59,18 @@ export default function Certificates() {
   const [busyType, setBusyType] = useState('');
   const toast = useToast();
 
+  const [preview, setPreview] = useState(null);
   useEffect(() => { api.myCertificates().then(setData).catch(() => setData({ eligible: [], issued: [] })); }, []);
 
-  const download = async (type) => {
+  // Generate (or re-fetch) the certificate and show a live preview; downloading
+  // is a second click off that preview.
+  const generate = async (type) => {
     setBusyType(type);
     try {
       const cert = await api.issueCertificate(type); // idempotent: same code every time
       const url = await renderCertificate({ type, name: cert.name, code: cert.code });
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Synthica ${CERT_META[type].label} Certificate - ${cert.name}.png`;
-      a.click();
-      toast.success(`Certificate downloaded — verification code ${cert.code}`);
+      setPreview({ type, code: cert.code, name: cert.name, url });
+      toast.success(`Certificate ready — verification code ${cert.code}`);
       setData(await api.myCertificates());
     } catch (e) { toast.error(e.message); } finally { setBusyType(''); }
   };
@@ -98,16 +98,32 @@ export default function Certificates() {
                 {cert
                   ? <p className="login-hint" style={{ margin: '0 0 0.6rem' }}>Issued {new Date(cert.issuedAt).toLocaleDateString()} · code <code>{cert.code}</code></p>
                   : <p className="login-hint" style={{ margin: '0 0 0.6rem' }}>Ready to generate.</p>}
-                <Button disabled={busyType === type} onClick={() => download(type)}>
-                  {busyType === type ? 'Generating…' : cert ? 'Download again' : 'Generate & download'}
+                <Button disabled={busyType === type} onClick={() => generate(type)}>
+                  {busyType === type ? 'Generating…' : cert ? 'Preview & download' : 'Generate'}
                 </Button>
               </Card>
             );
           })}
         </div>
+
+        {preview && (
+          <div style={{ marginTop: '1.25rem' }}>
+            <h3 style={{ margin: '0 0 0.5rem' }}>{CERT_META[preview.type].label} — preview</h3>
+            <img
+              src={preview.url}
+              alt={`${CERT_META[preview.type].label} certificate for ${preview.name}`}
+              style={{ width: '100%', maxWidth: 640, borderRadius: 12, boxShadow: '0 12px 32px rgba(4,30,66,0.18)', display: 'block' }}
+            />
+            <div className="row" style={{ marginTop: '0.75rem' }}>
+              <a className="btn btn-primary btn-sm" href={preview.url} download={`Synthica ${CERT_META[preview.type].label} Certificate - ${preview.name}.png`}>Download PNG</a>
+              <span className="login-hint">Verification code <code>{preview.code}</code></span>
+            </div>
+          </div>
+        )}
+
         {data.issued.length > 0 && (
-          <p className="login-hint" style={{ marginBottom: 0 }}>
-            Verification: anyone can confirm a certificate at <code>/api/certificates/&lt;code&gt;</code> on the Synthica API.
+          <p className="login-hint" style={{ marginTop: '1rem', marginBottom: 0 }}>
+            Verification: anyone can confirm a certificate by its code at <code>synthica.org/certificate.html</code>.
           </p>
         )}
       </Card>
