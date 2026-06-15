@@ -36,3 +36,11 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      # Guaranteed owner login. Production refuses the shared demo password, so
+      # without this a fresh deploy has NO usable accounts. Set both in the
+      # Render dashboard; the matching account is created (or password-reset) on
+      # every boot as a platform admin.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

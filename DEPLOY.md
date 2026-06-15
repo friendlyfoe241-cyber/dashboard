@@ -79,6 +79,8 @@ If the client id is unset, the button simply doesn't render — everything else 
 | **Discord queue alerts** | Director → Admin → Integrations → paste a channel webhook (Discord → Channel → Integrations → Webhooks → New). Or set `DISCORD_WEBHOOK_URL`. |
 | **WhatsApp alerts** | Point `WHATSAPP_WEBHOOK_URL` (or Admin → Integrations) at a Twilio/Make/Zapier webhook that forwards `{text}` to WhatsApp. |
 | **Author emails** | Set `RESEND_API_KEY` (https://resend.com) + `EMAIL_FROM`. Without it, decision emails are logged only. |
+| **Weekly digest** | Emails approved researchers the open programs, project spots, and next week's deadlines. On an always-on instance set `ENABLE_DIGESTS=true` (sends Mondays 13:00 UTC). On free tiers that sleep, point an external cron (e.g. cron-job.org) at `POST /api/admin/digest/send` with a director token — or use the button on the Admin page. |
+| **Per-paper share cards** | Built in: `GET /api/journal/publications/:id/share` serves per-paper OG tags + a 1200×630 card image for link unfurls. Share that URL (not the static article page) on socials. Set `SITE_URL` so it forwards readers to your marketing site's article page. |
 | **Persistent data** | **Postgres (recommended)** — set `DATA_PROVIDER=postgres` + `DATABASE_URL`; the empty database is seeded automatically on first boot. Or Google Sheets — see [`docs/GOOGLE_SHEETS.md`](docs/GOOGLE_SHEETS.md): set `DATA_PROVIDER=sheets`, `SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, then `npm run seed:sheet`. |
 
 ---
@@ -92,6 +94,8 @@ If the client id is unset, the button simply doesn't render — everything else 
 | backend | `NODE_ENV` | prod | set to `production` (backend won't boot without AUTH_SECRET) |
 | backend | `CORS_ORIGINS` | **yes (prod)** | comma-separated allowed origins, e.g. `https://app.synthica.org` |
 | backend | `FRONTEND_URL` | for emails | dashboards base URL (verify/reset links) |
+| backend | `SITE_URL` | optional | marketing site base URL for paper share pages (default `https://www.synthica.org`) |
+| backend | `ENABLE_DIGESTS` | optional | `true` to send the weekly researcher digest from this instance (needs always-on) |
 | backend | `GOOGLE_CLIENT_ID` | for Google login | `…apps.googleusercontent.com` |
 | backend | `RESEND_API_KEY` | optional | author decision emails |
 | backend | `EMAIL_FROM` | optional | `Synthica <noreply@synthica.org>` |
@@ -103,9 +107,12 @@ If the client id is unset, the button simply doesn't render — everything else 
 | backend | `SHEETS_SPREADSHEET_ID` | if sheets | spreadsheet id from URL |
 | backend | `GOOGLE_SERVICE_ACCOUNT_JSON` | if sheets | service-account JSON (inline) |
 | backend | `ALLOW_DEMO_LOGINS` | leave unset | in production the shared demo password (`demo1234`) is refused at login; set `true` only on a staging demo |
+| backend | `ADMIN_EMAIL` | **strongly recommended (prod)** | guaranteed owner login; this account is created/password-reset as a platform admin on every boot |
+| backend | `ADMIN_PASSWORD` | with `ADMIN_EMAIL` | the password for that account (use a long random string) |
 | dashboards (build) | `VITE_API_BASE` | **yes** | `https://<backend>` (no trailing slash) |
 | dashboards (build) | `VITE_GOOGLE_CLIENT_ID` | for Google login | same client id |
-| website (inline) | `window.SYNTHICA_API_BASE` | optional | `https://<backend>` |
+| website (inline) | `window.SYNTHICA_API_BASE` | recommended | `https://<backend>` — powers the live impact counters, featured papers, and the mentor directory on the marketing site |
+| website (inline) | `window.SYNTHICA_APP_URL` | recommended | dashboards URL (default `https://app.synthica.org`) — where the "Get involved" funnel sends people |
 
 Generate a secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
@@ -117,7 +124,8 @@ Generate a secret: `node -e "console.log(require('crypto').randomBytes(32).toStr
 - [ ] `NODE_ENV=production` on the backend (enables the demo-password block + config guards)
 - [ ] `CORS_ORIGINS` set to your real frontend origins
 - [ ] `DATA_PROVIDER=postgres` + `DATABASE_URL` (the blueprint sets this up; first boot auto-seeds) — or `sheets` with its vars + `npm run seed:sheet` once
-- [ ] **Staff accounts secured**: change the passwords for `admin`, `director`, and `auditor` (all seeds share `demo1234`, which prod refuses at login — accounts are unusable until you set real passwords; easiest is a password reset per account, or edit the stored hash) and enable 2FA on them from Account
+- [ ] **Owner login set**: production refuses the shared demo password, so a fresh deploy has **no usable account**. Set `ADMIN_EMAIL` + `ADMIN_PASSWORD` — on every boot that account is created (or password-reset) as a platform admin so you can always sign in. This is the recommended way in.
+- [ ] **Staff accounts secured**: change the passwords for the seeded `director`/`auditor` (all seeds share `demo1234`, which prod refuses at login). Sign in via the `ADMIN_EMAIL` account above, then set real passwords / promote real staff, and enable 2FA from Account
 - [ ] **At least one auditor/admin can sign in** — new sign-ups are gated behind role assignment, so an empty staff bench means nobody ever gets in
 - [ ] `VITE_API_BASE` set on dashboards; `GOOGLE_CLIENT_ID` + `VITE_GOOGLE_CLIENT_ID` set in both places (if using Google sign-in)
 - [ ] `RESEND_API_KEY` + `EMAIL_FROM` set (role-approval welcome emails, verification, decisions; logged-only without it)

@@ -104,6 +104,42 @@ async function loadFromProvider() {
   return loaded ? Object.assign(buildSeed(), loaded) : buildSeed();
 }
 
+// Guaranteed owner login. When ADMIN_EMAIL + ADMIN_PASSWORD are set, make sure
+// an account with that email exists and uses that password — created as a
+// platform admin if missing, password-reset if it exists. This is the escape
+// hatch for production, where the shared demo password is refused at login and
+// the seeded staff accounts would otherwise be unreachable.
+function bootstrapAdmin() {
+  const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!email || !password) return;
+  let u = [...db.editors, ...db.researchers].find((x) => x.email && x.email.toLowerCase() === email);
+  if (!u) {
+    const base = email.split('@')[0] || 'admin';
+    const taken = (uname) => [...db.editors, ...db.researchers].some((x) => x.username.toLowerCase() === uname);
+    const username = taken(base) ? `${base}.admin` : base;
+    u = {
+      id: `usr_admin_${Date.now()}`,
+      name: 'Platform Admin',
+      username,
+      kind: 'editor',
+      role: EDITOR_ROLES.ADMIN,
+      category: '',
+      email,
+      discord: '',
+      slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
+      institution: '', bio: '', avatarUrl: '', interests: [], links: [], following: [],
+      public: false,
+      twoFactorSecret: '',
+      twoFactorEnabled: false,
+    };
+    db.editors.push(u);
+  }
+  u.password = hashPassword(password);
+  u.emailVerified = true;
+  console.log(`[store] admin bootstrap: ${email} signs in with ADMIN_PASSWORD (${u.kind}${u.role ? `/${u.role}` : ''})`);
+}
+
 // Load the active provider's data. Called once at server startup.
 export async function init() {
   const name = (process.env.DATA_PROVIDER || 'memory').toLowerCase();
@@ -119,6 +155,7 @@ export async function init() {
     provider = null;
     db = buildSeed();
   }
+  bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
   console.log(`[store] data provider: ${name}`);
@@ -129,6 +166,7 @@ export async function init() {
 // provider, or the seed when in memory.
 export async function reset() {
   db = provider ? await loadFromProvider() : buildSeed();
+  bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
 }
