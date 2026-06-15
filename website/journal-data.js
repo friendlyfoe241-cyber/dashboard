@@ -144,6 +144,20 @@ const esc = (v) =>
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 
+// esc() neutralizes HTML but NOT a javascript: scheme inside an href. Any
+// user-supplied URL that becomes a link must pass through safeHref first.
+const safeHref = (v) => {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(s);
+  const candidate = hasScheme ? s : `https://${s}`;
+  try {
+    return ['http:', 'https:', 'mailto:'].includes(new URL(candidate).protocol) ? candidate : '';
+  } catch {
+    return '';
+  }
+};
+
 // Build initials (max two) from a display name for the fallback avatar.
 const initialsOf = (name) =>
   String(name || '?')
@@ -401,8 +415,9 @@ async function renderProfile() {
   // Secondary line: research group, contact email, DOB (only if opted in).
   const metaBits = [];
   if (profile.researchGroup) {
-    metaBits.push(profile.researchGroupUrl
-      ? `🔬 <a href="${esc(profile.researchGroupUrl)}" target="_blank" rel="noopener">${esc(profile.researchGroup)}</a>`
+    const rgHref = safeHref(profile.researchGroupUrl);
+    metaBits.push(rgHref
+      ? `🔬 <a href="${esc(rgHref)}" target="_blank" rel="noopener">${esc(profile.researchGroup)}</a>`
       : `🔬 ${esc(profile.researchGroup)}`);
   }
   if (profile.contactEmail) metaBits.push(`✉️ <a href="mailto:${esc(profile.contactEmail)}">${esc(profile.contactEmail)}</a>`);
@@ -416,18 +431,19 @@ async function renderProfile() {
   // Action buttons: socials first, then any custom links[] — ghost buttons that
   // open in a new tab.
   const orcidHref = profile.orcid ? (String(profile.orcid).startsWith('http') ? profile.orcid : `https://orcid.org/${profile.orcid}`) : '';
-  const actions = [];
-  if (profile.linkedinUrl) actions.push({ label: 'LinkedIn', url: profile.linkedinUrl });
-  if (profile.websiteUrl) actions.push({ label: 'Website', url: profile.websiteUrl });
-  if (profile.githubUrl) actions.push({ label: 'GitHub', url: profile.githubUrl });
-  if (profile.twitterUrl) actions.push({ label: 'X', url: profile.twitterUrl });
-  if (profile.scholarUrl) actions.push({ label: 'Google Scholar', url: profile.scholarUrl });
-  if (orcidHref) actions.push({ label: 'ORCID', url: orcidHref });
-  if (Array.isArray(profile.links)) {
-    for (const l of profile.links) {
-      if (l && l.url) actions.push({ label: l.label || l.url, url: l.url });
-    }
-  }
+  const candidateActions = [
+    { label: 'LinkedIn', url: profile.linkedinUrl },
+    { label: 'Website', url: profile.websiteUrl },
+    { label: 'GitHub', url: profile.githubUrl },
+    { label: 'X', url: profile.twitterUrl },
+    { label: 'Google Scholar', url: profile.scholarUrl },
+    { label: 'ORCID', url: orcidHref },
+    ...(Array.isArray(profile.links) ? profile.links.filter((l) => l && l.url).map((l) => ({ label: l.label || l.url, url: l.url })) : []),
+  ];
+  // safeHref() drops anything that isn't a real http(s)/mailto link.
+  const actions = candidateActions
+    .map((a) => ({ label: a.label, url: safeHref(a.url) }))
+    .filter((a) => a.url);
   const linksBlock = actions.length
     ? `<div class="profile-links">${actions
         .map(

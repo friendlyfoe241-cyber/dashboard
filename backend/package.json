@@ -9,6 +9,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed:sheet": "node scripts/seed-sheet.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:workflow": "node scripts/test-workflow.js"
   },
   "dependencies": {
@@ -17,5 +19,8 @@
     "express": "^4.19.2",
     "googleapis": "^144.0.0",
     "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }

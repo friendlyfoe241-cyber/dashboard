@@ -15,6 +15,7 @@ export default function Admin() {
     <div>
       <h1 className="page-title">Admin</h1>
       <p className="page-sub">Analytics, integrations, applications, audit log, and announcements.</p>
+      <EmailStatusBanner />
       {isDirector && <NewsPoster />}
       <AnalyticsCards />
       <People isDirector={isDirector} />
@@ -25,6 +26,19 @@ export default function Admin() {
       {isDirector && <Integrations />}
       {isDirector && <Backup />}
       <SetupGuide />
+    </div>
+  );
+}
+
+// Warns when no email provider is configured — verification + password-reset
+// emails silently don't send in that state, which is easy to miss in prod.
+function EmailStatusBanner() {
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
+  if (!cfg || cfg.emailConfigured !== false) return null;
+  return (
+    <div className="login-error" style={{ background: '#fffbeb', color: '#92400e', borderColor: '#fde68a', marginBottom: '1rem' }}>
+      ⚠️ Email delivery isn’t configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won’t actually send. Set it in your backend env to enable them.
     </div>
   );
 }

@@ -5,6 +5,11 @@
 const API_KEY = process.env.RESEND_API_KEY || '';
 const FROM = process.env.EMAIL_FROM || 'Synthica <noreply@synthica.org>';
 
+// Whether real email delivery is configured. Without it, verification, password
+// reset, and digests are silently logged-only — surfaced via /api/config so the
+// Admin page can warn that those flows won't actually send.
+export const emailEnabled = () => !!API_KEY;
+
 export async function sendEmail({ to, subject, text }) {
   if (!to) return { ok: false, skipped: true };
   if (!API_KEY) {

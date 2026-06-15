@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { Card, Badge, Pfp } from '../components/ui.jsx';
 import { imageSrc } from '../files.js';
+import { safeHref } from '../url.js';
 import { useReloadOnFocus } from '../useReload.js';
 
 // Public member profile — works without login, resolves by id or slug.
@@ -60,7 +61,7 @@ export default function PublicProfile() {
           {(p.researchGroup || p.dob || p.contactEmail) && (
             <div className="stack" style={{ marginTop: '0.7rem', gap: '0.2rem' }}>
               {p.researchGroup && (
-                <div className="muted">🔬 {p.researchGroupUrl ? <a href={p.researchGroupUrl} target="_blank" rel="noreferrer">{p.researchGroup}</a> : p.researchGroup}</div>
+                <div className="muted">🔬 {safeHref(p.researchGroupUrl) ? <a href={safeHref(p.researchGroupUrl)} target="_blank" rel="noreferrer">{p.researchGroup}</a> : p.researchGroup}</div>
               )}
               {p.contactEmail && <div className="muted">✉️ <a href={`mailto:${p.contactEmail}`}>{p.contactEmail}</a></div>}
               {p.dob && <div className="muted">🎂 {p.dob}</div>}
@@ -118,6 +119,7 @@ export default function PublicProfile() {
 }
 
 // A compact row of social / research links. ORCID accepts a bare iD or a URL.
+// Every href is run through safeHref so a legacy javascript: value can't fire.
 function SocialLinks({ p }) {
   const orcidHref = p.orcid ? (p.orcid.startsWith('http') ? p.orcid : `https://orcid.org/${p.orcid}`) : '';
   const items = [
@@ -128,7 +130,7 @@ function SocialLinks({ p }) {
     ['Google Scholar', p.scholarUrl],
     ['ORCID', orcidHref],
     ...(p.links || []).map((l) => [l.label, l.url]),
-  ].filter(([, url]) => url);
+  ].map(([label, url]) => [label, safeHref(url)]).filter(([, url]) => url);
   if (!items.length) return null;
   return (
     <div className="row" style={{ marginTop: '0.6rem', gap: '0.75rem' }}>

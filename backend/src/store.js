@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { STAGE, STAGE_LABEL, EDITOR_ROLES, ASSOCIATE_TOTAL_ROUNDS, TASK_STATUS, freshOnboarding, CATEGORIES } from './domain.js';
 import * as seed from './seed.js';
 import { verifyPassword, hashPassword } from './passwords.js';
+import { safeUrl } from './url.js';
 import { notifyMove, notifyEvent } from './notify.js';
 import { emailDecision, sendEmail } from './email.js';
 import { registerDoi } from './doi.js';
@@ -377,7 +378,10 @@ export function listProfiles() {
 }
 
 const cleanLinks = (arr) =>
-  arr.filter((l) => l && l.url).map((l) => ({ label: String(l.label || l.url).slice(0, 40), url: String(l.url).slice(0, 300) })).slice(0, 6);
+  arr
+    .map((l) => ({ label: String((l && l.label) || (l && l.url) || '').slice(0, 40), url: safeUrl(l && l.url) }))
+    .filter((l) => l.url)
+    .slice(0, 6);
 
 export function updateProfile(userId, patch) {
   const u = getUserById(userId);
@@ -387,19 +391,21 @@ export function updateProfile(userId, patch) {
   if (typeof patch.bio === 'string') u.bio = patch.bio.slice(0, 1000);
   if (typeof patch.blurb === 'string') u.blurb = patch.blurb.trim().slice(0, 140);
   if (patch.congratsSeen === true) u.newRoleCongrats = null;
-  if (typeof patch.avatarUrl === 'string') u.avatarUrl = patch.avatarUrl.trim().slice(0, 400);
-  if (typeof patch.resumeUrl === 'string') u.resumeUrl = patch.resumeUrl.trim().slice(0, 400);
+  // URL fields run through safeUrl() — they render as <a href>/<img src> on
+  // public pages, so a javascript:/data: scheme would be stored XSS.
+  if (typeof patch.avatarUrl === 'string') u.avatarUrl = safeUrl(patch.avatarUrl, 400);
+  if (typeof patch.resumeUrl === 'string') u.resumeUrl = safeUrl(patch.resumeUrl, 400);
   if (typeof patch.discord === 'string') u.discord = patch.discord.trim().slice(0, 60);
-  if (typeof patch.linkedinUrl === 'string') u.linkedinUrl = patch.linkedinUrl.trim().slice(0, 300);
-  if (typeof patch.websiteUrl === 'string') u.websiteUrl = patch.websiteUrl.trim().slice(0, 300);
-  if (typeof patch.githubUrl === 'string') u.githubUrl = patch.githubUrl.trim().slice(0, 300);
-  if (typeof patch.twitterUrl === 'string') u.twitterUrl = patch.twitterUrl.trim().slice(0, 300);
-  if (typeof patch.scholarUrl === 'string') u.scholarUrl = patch.scholarUrl.trim().slice(0, 300);
+  if (typeof patch.linkedinUrl === 'string') u.linkedinUrl = safeUrl(patch.linkedinUrl);
+  if (typeof patch.websiteUrl === 'string') u.websiteUrl = safeUrl(patch.websiteUrl);
+  if (typeof patch.githubUrl === 'string') u.githubUrl = safeUrl(patch.githubUrl);
+  if (typeof patch.twitterUrl === 'string') u.twitterUrl = safeUrl(patch.twitterUrl);
+  if (typeof patch.scholarUrl === 'string') u.scholarUrl = safeUrl(patch.scholarUrl);
   if (typeof patch.orcid === 'string') u.orcid = patch.orcid.trim().slice(0, 60);
   if (typeof patch.pronouns === 'string') u.pronouns = patch.pronouns.trim().slice(0, 40);
   if (typeof patch.contactEmail === 'string') u.contactEmail = patch.contactEmail.trim().slice(0, 120);
   if (typeof patch.researchGroup === 'string') u.researchGroup = patch.researchGroup.trim().slice(0, 120);
-  if (typeof patch.researchGroupUrl === 'string') u.researchGroupUrl = patch.researchGroupUrl.trim().slice(0, 300);
+  if (typeof patch.researchGroupUrl === 'string') u.researchGroupUrl = safeUrl(patch.researchGroupUrl);
   // Date of birth (YYYY-MM-DD) — stored, but only shown publicly if dobPublic.
   if (typeof patch.dob === 'string') u.dob = patch.dob.trim().slice(0, 10);
   if (typeof patch.dobPublic === 'boolean') u.dobPublic = patch.dobPublic;
@@ -953,8 +959,8 @@ function buildPublication(input, { source, verified, addedBy, authorUserId }) {
     volume: Number(input.volume) || null,
     issue: Number(input.issue) || null,
     pages: String(input.pages || '').slice(0, 20),
-    pdfUrl: String(input.pdfUrl || '').trim().slice(0, 500),
-    sourceUrl: String(input.sourceUrl || '').trim().slice(0, 500),
+    pdfUrl: safeUrl(input.pdfUrl, 500),
+    sourceUrl: safeUrl(input.sourceUrl, 500),
     license: String(input.license || 'CC BY 4.0').slice(0, 40),
     openAccess: input.openAccess !== false,
     sections: abstract ? [{ heading: 'Abstract', body: abstract }] : [],
@@ -1035,8 +1041,8 @@ export function editPublication({ id, patch, actor }) {
   if (patch.category && CATEGORIES.includes(patch.category)) pub.category = patch.category;
   if (typeof patch.articleType === 'string' && ARTICLE_TYPES.includes(patch.articleType)) pub.articleType = patch.articleType;
   if (typeof patch.abstract === 'string') pub.abstract = patch.abstract.slice(0, 5000);
-  if (typeof patch.pdfUrl === 'string') pub.pdfUrl = patch.pdfUrl.trim().slice(0, 500);
-  if (typeof patch.sourceUrl === 'string') pub.sourceUrl = patch.sourceUrl.trim().slice(0, 500);
+  if (typeof patch.pdfUrl === 'string') pub.pdfUrl = safeUrl(patch.pdfUrl, 500);
+  if (typeof patch.sourceUrl === 'string') pub.sourceUrl = safeUrl(patch.sourceUrl, 500);
   if (typeof patch.doi === 'string' && patch.doi.trim()) pub.doi = patch.doi.trim().slice(0, 120);
   if (patch.publishedAt) pub.publishedAt = String(patch.publishedAt).slice(0, 10);
   if (patch.volume !== undefined) pub.volume = Number(patch.volume) || null;
@@ -1069,6 +1075,8 @@ export function submitToJournal({ userId, title, category, abstract, pdfUrl, coA
   if (!u) throw httpError(404, 'Researcher not found');
   if (!title?.trim() || !abstract?.trim() || !pdfUrl?.trim())
     throw httpError(400, 'Title, abstract, and paper link are required');
+  const safePdf = safeUrl(pdfUrl, 500);
+  if (!safePdf) throw httpError(400, 'The paper link must be a valid http(s) URL');
   if (!CATEGORIES.includes(category)) throw httpError(400, 'Pick a valid subject category');
   // @username co-author tags must resolve to real members (typos fail loudly).
   const coAuthorIds = [];
@@ -1090,7 +1098,7 @@ export function submitToJournal({ userId, title, category, abstract, pdfUrl, coA
     coAuthorIds,
     category,
     abstract: abstract.trim(),
-    pdfUrl: pdfUrl.trim(),
+    pdfUrl: safePdf,
     submittedAt: at,
     stage: STAGE.REVIEW,
     assignedReviewers: pickReviewers(category),
@@ -1119,10 +1127,12 @@ export function addRevision({ paperId, userId, url, note }) {
   if (!sub) throw httpError(404, 'Paper not found');
   if (sub.submittedBy !== userId) throw httpError(403, 'Only the submitter can revise this paper');
   if (!url?.trim()) throw httpError(400, 'A link to the revised paper is required');
+  const safeRevision = safeUrl(url, 500);
+  if (!safeRevision) throw httpError(400, 'The revised paper link must be a valid http(s) URL');
   sub.revisions = sub.revisions || [];
   const version = sub.revisions.length + 1;
-  sub.revisions.push({ version, url: url.trim(), note: note || '', at: now(), byName: getResearcherById(userId)?.name });
-  sub.pdfUrl = url.trim();
+  sub.revisions.push({ version, url: safeRevision, note: note || '', at: now(), byName: getResearcherById(userId)?.name });
+  sub.pdfUrl = safeRevision;
   sub.revisionRequested = false;
   log(sub, { type: 'revision', version });
   if (sub.assignee) pushNotif(sub.assignee, { type: 'paper', title: '🔁 Revised paper submitted', body: `"${sub.title}" — v${version}`, link: '/editor' });
@@ -1756,7 +1766,7 @@ export function addProjectAnnouncement({ projectId, userId, body }) {
 export function updateResume(userId, resumeUrl) {
   const r = getResearcherById(userId);
   if (!r) throw httpError(404, 'Researcher not found');
-  r.resumeUrl = (resumeUrl || '').trim();
+  r.resumeUrl = safeUrl(resumeUrl, 400);
   schedulePersist();
   return { resumeUrl: r.resumeUrl };
 }
@@ -1832,7 +1842,9 @@ export function addProjectLink({ projectId, userId, label, url }) {
   if (!memberOf(p, userId)) throw httpError(403, 'Only team members can add links');
   if (!url?.trim()) throw httpError(400, 'A URL is required');
   if (!p.links) p.links = [];
-  const link = { id: `link_${Date.now()}`, label: (label || url).trim(), url: url.trim(), addedBy: userId, at: now() };
+  const safe = safeUrl(url, 500);
+  if (!safe) throw httpError(400, 'That link isn’t a valid http(s) URL');
+  const link = { id: `link_${Date.now()}`, label: String(label || url).trim().slice(0, 120), url: safe, addedBy: userId, at: now() };
   p.links.push(link);
   schedulePersist();
   return link;
@@ -2022,7 +2034,7 @@ export function registerResearcher({ name, email, discord, password, username, r
     approved: false,
     email: email.trim(),
     discord: discord.trim(),
-    resumeUrl: String(resumeUrl || '').trim().slice(0, 400),
+    resumeUrl: safeUrl(resumeUrl, 400),
     gpa: '',
     experienceSummary: '',
     researchExperience: null,
@@ -2097,7 +2109,7 @@ export function addNews({ authorId, authorName, title, body, audience, bannerUrl
     body: body.trim().slice(0, 4000),
     authorName: authorName || 'Synthica',
     audience: audience || 'all',
-    bannerUrl: (bannerUrl || '').trim().slice(0, 400),
+    bannerUrl: safeUrl(bannerUrl, 400),
     at: new Date().toISOString(),
   };
   if (!db.news) db.news = [];
@@ -2364,7 +2376,7 @@ export function createListing({ userId, title, category, spots, description, ban
   const listing = {
     id: `list_${Date.now()}`, title: title.trim(), category: category || '',
     spots: Number(spots) || 1, leadName: u.name, leadId: userId,
-    description: (description || '').trim(), bannerUrl: String(bannerUrl || '').trim().slice(0, 400),
+    description: (description || '').trim(), bannerUrl: safeUrl(bannerUrl, 400),
     lookingFor: String(lookingFor || '').trim().slice(0, 200),
   };
   db.listings.push(listing);
@@ -2393,7 +2405,7 @@ export function updateListing({ listingId, leadId, title, category, spots, descr
   if (typeof category === 'string' && category) l.category = category;
   if (spots !== undefined) l.spots = Math.max(1, Number(spots) || 1);
   if (typeof description === 'string') l.description = description.trim().slice(0, 1000);
-  if (typeof bannerUrl === 'string') l.bannerUrl = bannerUrl.trim().slice(0, 400);
+  if (typeof bannerUrl === 'string') l.bannerUrl = safeUrl(bannerUrl, 400);
   if (typeof lookingFor === 'string') l.lookingFor = lookingFor.trim().slice(0, 200);
   recordAudit({ id: leadId }, 'edit_listing', l.title);
   schedulePersist();

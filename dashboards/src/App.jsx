@@ -1,15 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useAuth, RequireAuth } from './auth.jsx';
 import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import Verify from './pages/Verify.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import EditorApp from './pages/editor/EditorApp.jsx';
-import ResearcherApp from './pages/researcher/ResearcherApp.jsx';
-import Archive from './pages/Archive.jsx';
-import PublicProfile from './pages/PublicProfile.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+
+// Route-level code splitting: the two dashboards (and heavier public pages)
+// load on demand, so a researcher never downloads the editor app and first
+// paint ships a much smaller bundle. Login stays eager — it's the entry point.
+const Register = lazy(() => import('./pages/Register.jsx'));
+const Verify = lazy(() => import('./pages/Verify.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
+const EditorApp = lazy(() => import('./pages/editor/EditorApp.jsx'));
+const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
+const Archive = lazy(() => import('./pages/Archive.jsx'));
+const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
+
+const PageFallback = () => <div className="page-loading"><div className="spinner" /></div>;
 
 // Send a logged-in user to the right dashboard based on their account kind.
 function HomeRedirect() {
@@ -27,6 +34,7 @@ function HomeRedirect() {
 export default function App() {
   return (
     <ErrorBoundary>
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -55,6 +63,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </ErrorBoundary>
   );
 }

@@ -13,7 +13,7 @@ import { login, issueToken, issuePurposeToken, verifyPurposeToken } from './src/
 import { requireAuth } from './src/auth.js';
 import * as store from './src/store.js';
 import * as notify from './src/notify.js';
-import { sendEmail } from './src/email.js';
+import { sendEmail, emailEnabled } from './src/email.js';
 import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
 import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
@@ -35,6 +35,10 @@ if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
 // users, papers, and applications back to the demo seed.
 if (process.env.NODE_ENV === 'production' && (process.env.DATA_PROVIDER || 'memory').toLowerCase() === 'memory') {
   console.warn('[data] DATA_PROVIDER=memory in production — ALL DATA IS LOST ON RESTART. Set DATA_PROVIDER=sheets.');
+}
+// Without an email provider, verification + password reset silently no-op.
+if (process.env.NODE_ENV === 'production' && !emailEnabled()) {
+  console.warn('[email] RESEND_API_KEY not set — password reset & verification emails will NOT be delivered.');
 }
 
 // CORS: lock to CORS_ORIGINS (comma-separated) if set; otherwise open (dev).
@@ -84,12 +88,16 @@ function rateLimiter({ windowMs, max }) {
 }
 const authLimiter = rateLimiter({ windowMs: 60_000, max: 10 });
 
-// Turn thrown { status, message } errors into JSON responses.
+// Turn thrown { status, message } errors into JSON responses. Unexpected 5xx
+// errors are logged server-side (with method+path) so production failures are
+// visible instead of vanishing into a generic JSON body.
 const wrap = (fn) => (req, res) => {
   try {
     fn(req, res);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'Server error' });
+    const status = err.status || 500;
+    if (status >= 500) console.error(`[error] ${req.method} ${req.path} →`, err.stack || err.message);
+    res.status(status).json({ error: err.message || 'Server error' });
   }
 };
 
@@ -134,7 +142,7 @@ app.post('/api/2fa/enable', requireAuth, wrap((req, res) => res.json(store.enabl
 app.post('/api/2fa/disable', requireAuth, wrap((req, res) => res.json(store.disableTwoFactor(req.user.id, (req.body || {}).code))));
 
 // Tells the frontend which auth options are available.
-app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), demoLogins: store.demoLoginsEnabled() }));
+app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), demoLogins: store.demoLoginsEnabled(), emailConfigured: emailEnabled() }));
 
 // Google Sign-In: verify the ID token, find/create the user, issue our token.
 app.post('/api/auth/google', authLimiter, async (req, res) => {
