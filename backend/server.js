@@ -319,6 +319,13 @@ app.get('/api/competitions', requireAuth, wrap((_req, res) => res.json(store.lis
 app.post('/api/competitions', requireAuth, canPostNews, wrap((req, res) => res.json(store.addCompetition({ actor: req.user, ...(req.body || {}) }))));
 app.delete('/api/competitions/:id', requireAuth, canPostNews, wrap((req, res) => res.json(store.deleteCompetition({ id: req.params.id, actor: req.user }))));
 
+// --- Community feed ---------------------------------------------------------
+app.get('/api/posts', requireAuth, wrap((req, res) => res.json(store.listPosts(req.user.id))));
+app.post('/api/posts', requireAuth, wrap((req, res) => res.json(store.createPost({ userId: req.user.id, ...(req.body || {}) }))));
+app.post('/api/posts/:id/like', requireAuth, wrap((req, res) => res.json(store.togglePostLike({ postId: req.params.id, userId: req.user.id }))));
+app.post('/api/posts/:id/comments', requireAuth, wrap((req, res) => res.json(store.addPostComment({ postId: req.params.id, userId: req.user.id, text: (req.body || {}).text }))));
+app.delete('/api/posts/:id', requireAuth, wrap((req, res) => res.json(store.deletePost({ postId: req.params.id, userId: req.user.id }))));
+
 // --- Referrals --------------------------------------------------------------
 app.get('/api/me/referrals', requireAuth, wrap((req, res) => res.json(store.myReferralStats(req.user.id))));
 app.get('/api/admin/referrals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.referralLeaderboard())));

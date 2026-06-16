@@ -40,6 +40,7 @@ function buildSeed() {
     certificates: clone(seed.certificates || []),
     groups: clone(seed.groups || []),
     competitions: clone(seed.competitions || []),
+    posts: clone(seed.posts || []),
   };
 }
 
@@ -2294,6 +2295,94 @@ export function deleteCompetition({ id, actor }) {
   schedulePersist();
   return { ok: true };
 }
+
+// --- community feed (member posts, likes, comments) ------------------------
+
+const authorCard = (id) => {
+  const u = getUserById(id);
+  return { id, name: u?.name || 'Member', slug: u?.slug || id, avatarUrl: u?.avatarUrl || '', role: u ? roleDisplay(u) : '' };
+};
+
+function shapePost(p, viewerId) {
+  return {
+    id: p.id,
+    author: authorCard(p.authorId),
+    text: p.text,
+    linkUrl: p.linkUrl || '',
+    imageUrl: p.imageUrl || '',
+    likeCount: (p.likes || []).length,
+    likedByMe: (p.likes || []).includes(viewerId),
+    comments: (p.comments || []).map((c) => ({ id: c.id, author: authorCard(c.authorId), text: c.text, at: c.at })),
+    commentCount: (p.comments || []).length,
+    at: p.at,
+    canDelete: p.authorId === viewerId || isStaff(getUserById(viewerId)),
+  };
+}
+
+export function listPosts(viewerId) {
+  return [...(db.posts || [])]
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .map((p) => shapePost(p, viewerId));
+}
+
+export function createPost({ userId, text, linkUrl, imageUrl }) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.approved === false) throw httpError(403, 'Your account is pending approval');
+  if (!text?.trim() && !linkUrl?.trim() && !imageUrl?.trim()) throw httpError(400, 'Write something to post');
+  if (!Array.isArray(db.posts)) db.posts = [];
+  const post = {
+    id: uid('post'),
+    authorId: userId,
+    text: String(text || '').trim().slice(0, 2000),
+    linkUrl: safeUrl(linkUrl, 400),
+    imageUrl: safeUrl(imageUrl, 400),
+    likes: [],
+    comments: [],
+    at: now(),
+  };
+  db.posts.unshift(post);
+  schedulePersist();
+  return shapePost(post, userId);
+}
+
+export function togglePostLike({ postId, userId }) {
+  const p = (db.posts || []).find((x) => x.id === postId);
+  if (!p) throw httpError(404, 'Post not found');
+  if (!Array.isArray(p.likes)) p.likes = [];
+  const i = p.likes.indexOf(userId);
+  if (i === -1) {
+    p.likes.push(userId);
+    if (p.authorId !== userId) pushNotif(p.authorId, { type: 'post', title: `${getUserById(userId)?.name || 'Someone'} liked your post`, body: p.text.slice(0, 80), link: '/researcher/community' });
+  } else {
+    p.likes.splice(i, 1);
+  }
+  schedulePersist();
+  return shapePost(p, userId);
+}
+
+export function addPostComment({ postId, userId, text }) {
+  const p = (db.posts || []).find((x) => x.id === postId);
+  if (!p) throw httpError(404, 'Post not found');
+  if (!text?.trim()) throw httpError(400, 'Write a comment');
+  if (!Array.isArray(p.comments)) p.comments = [];
+  p.comments.push({ id: uid('cmt'), authorId: userId, text: String(text).trim().slice(0, 1000), at: now() });
+  if (p.authorId !== userId) pushNotif(p.authorId, { type: 'post', title: `${getUserById(userId)?.name || 'Someone'} commented on your post`, body: String(text).slice(0, 80), link: '/researcher/community' });
+  schedulePersist();
+  return shapePost(p, userId);
+}
+
+export function deletePost({ postId, userId }) {
+  const idx = (db.posts || []).findIndex((x) => x.id === postId);
+  if (idx === -1) throw httpError(404, 'Post not found');
+  const p = db.posts[idx];
+  if (p.authorId !== userId && !isStaff(getUserById(userId))) throw httpError(403, 'Only the author or staff can delete this');
+  db.posts.splice(idx, 1);
+  schedulePersist();
+  return { ok: true };
+}
+
+export const postCountFor = (userId) => (db.posts || []).filter((p) => p.authorId === userId).length;
 
 // --- in-app notifications --------------------------------------------------
 

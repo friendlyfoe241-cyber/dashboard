@@ -172,6 +172,12 @@ export const api = {
   competitions: () => request('/competitions'),
   addCompetition: (body) => request('/competitions', { method: 'POST', body }),
   deleteCompetition: (id) => request(`/competitions/${id}`, { method: 'DELETE' }),
+  // community feed
+  posts: () => request('/posts'),
+  createPost: (body) => request('/posts', { method: 'POST', body }),
+  likePost: (id) => request(`/posts/${id}/like`, { method: 'POST' }),
+  commentPost: (id, text) => request(`/posts/${id}/comments`, { method: 'POST', body: { text } }),
+  deletePost: (id) => request(`/posts/${id}`, { method: 'DELETE' }),
   // referrals
   myReferrals: () => request('/me/referrals'),
   referralLeaderboard: () => request('/admin/referrals'),

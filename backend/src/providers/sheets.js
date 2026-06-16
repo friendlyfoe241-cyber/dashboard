@@ -75,6 +75,9 @@ export const SCHEMAS = {
   Competitions: [
     ['id'], ['title'], ['description'], ['url'], ['category'], ['deadline'], ['prize'], ['postedById'], ['postedByName'], ['at'],
   ],
+  Posts: [
+    ['id'], ['authorId'], ['text'], ['linkUrl'], ['imageUrl'], ['likes', 'json'], ['comments', 'json'], ['at'],
+  ],
   Applications: [
     ['id'], ['kind'], ['userId'], ['userName'], ['listingId'], ['programId'], ['role'], ['message'], ['answers', 'json'],
     ['resumeUrl'], ['status'], ['assignedTag'], ['reviewedBy'], ['reviewedAt'], ['at'],
@@ -195,6 +198,7 @@ export async function createSheetsProvider() {
         certificates: await readTab(sheets, spreadsheetId, 'Certificates').catch(() => []),
         groups: await readTab(sheets, spreadsheetId, 'Groups').catch(() => []),
         competitions: await readTab(sheets, spreadsheetId, 'Competitions').catch(() => []),
+        posts: await readTab(sheets, spreadsheetId, 'Posts').catch(() => []),
       };
     },
 
@@ -215,6 +219,7 @@ export async function createSheetsProvider() {
       await writeTab(sheets, spreadsheetId, 'Certificates', db.certificates || []).catch(() => {});
       await writeTab(sheets, spreadsheetId, 'Groups', db.groups || []).catch(() => {});
       await writeTab(sheets, spreadsheetId, 'Competitions', db.competitions || []).catch(() => {});
+      await writeTab(sheets, spreadsheetId, 'Posts', db.posts || []).catch(() => {});
     },
   };
 }

@@ -702,4 +702,30 @@ export const competitions = [
   },
 ];
 
+// Community feed — member-written posts (questions, opportunities, updates)
+// with likes and comments. Author name/avatar are resolved at read time.
+const hoursAgo = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+export const posts = [
+  {
+    id: id('post'),
+    authorId: leadId,
+    text: 'Kicking off our reef-genomics project this summer! 🌊 If anyone has experience with R for ecology data, I’d love to collaborate — drop a comment.',
+    linkUrl: '', imageUrl: '',
+    likes: [assocId, caseyId],
+    comments: [
+      { id: id('cmt'), authorId: assocId, text: 'Count me in — I use R all the time!', at: hoursAgo(1) },
+    ],
+    at: hoursAgo(3),
+  },
+  {
+    id: id('post'),
+    authorId: assocId,
+    text: 'Opportunity: my school is running a free data-science bootcamp over break, open to all Synthica members. Comment if you want the link!',
+    linkUrl: '', imageUrl: '',
+    likes: [leadId],
+    comments: [],
+    at: hoursAgo(20),
+  },
+];
+
 export const allUsers = () => [...editors, ...researchers];
