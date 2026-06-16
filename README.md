@@ -88,6 +88,30 @@ Submission (subject classification + Drive PDF link)
 The whole pipeline is exercised in one pass — see the integration test snippet in
 `backend/` route handlers and the end-to-end flow described above.
 
+## Track 4 — researcher portal (community)
+
+Beyond projects and the journal, the researcher dashboard is a full community portal:
+
+- **Projects** — tasks, roster, ideas, and **per-member roles** (e.g. "Head of Data
+  Collection") that the lead assigns and that auto-appear on each member's profile.
+- **Suggested people** — leads get teammates ranked by shared interests and invite them
+  in one click.
+- **Research Groups** — interest hubs run by a lead that bundle several projects, a member
+  roster, open **positions**, and shared links (a "guild" of projects). Group membership
+  shows on profiles.
+- **Programs** — structured cohorts (apply → milestones), reviewed by auditors.
+- **Competitions board** — opportunities posted by staff (senior editors+).
+- **Events** — project, group, chapter, and **platform-wide workshops** (staff) all land on
+  each member's Calendar.
+- **Referrals** — every member gets a referral link (`/register?ref=CODE`); signups are
+  credited to the referrer, with an admin leaderboard for future rewards.
+- **Certificates** — role certificates (Associate/Independent/Lead) generated in-app with a
+  public verification code; profiles carry rich data (affiliations, socials, research group).
+
+These are all served by the same store/provider layer — no schema migration needed on
+Postgres (the default), and the Sheets provider auto-creates the `Groups`/`Competitions`
+tabs on first write.
+
 ## Swapping the mock for Google Sheets
 
 The store interface in [`backend/src/store.js`](backend/src/store.js) is the only thing

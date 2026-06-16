@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { Button, Field } from '../components/ui.jsx';
 import GoogleButton from '../components/GoogleButton.jsx';
@@ -9,6 +9,8 @@ import GoogleButton from '../components/GoogleButton.jsx';
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const ref = params.get('ref') || ''; // referral code from a shared invite link
   const [form, setForm] = useState({ name: '', email: '', discord: '', password: '', resumeUrl: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,7 +22,7 @@ export default function Register() {
     setError('');
     setBusy(true);
     try {
-      await register(form);
+      await register({ ...form, ref });
       navigate('/researcher', { replace: true });
     } catch (err) {
       setError(err.message);
@@ -36,6 +38,7 @@ export default function Register() {
         <h1>Join Synthica</h1>
         <p className="sub">Create your researcher account — it's free.</p>
 
+        {ref && <div className="login-hint" style={{ marginTop: 0, color: 'var(--brand-deep)' }}>🎉 You were invited — your referrer gets the credit when you join.</div>}
         {error && <div className="login-error">{error}</div>}
 
         <GoogleButton onSuccess={() => navigate('/researcher', { replace: true })} onError={setError} />

@@ -84,6 +84,15 @@ export default function PublicProfile() {
           </Card>
         )}
 
+        {(p.groups || []).length > 0 && (
+          <Card style={{ marginBottom: '1rem' }}>
+            <h3 style={{ marginTop: 0 }}>Research groups</h3>
+            <div className="row" style={{ gap: '0.4rem' }}>
+              {p.groups.map((g) => <Badge key={g.id} tone="blue">{g.name}</Badge>)}
+            </div>
+          </Card>
+        )}
+
         {(p.currentProjects || []).length > 0 && (
           <Card style={{ marginBottom: '1rem' }}>
             <h3 style={{ marginTop: 0 }}>Current projects</h3>

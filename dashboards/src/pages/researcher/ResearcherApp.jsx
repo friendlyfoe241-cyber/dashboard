@@ -13,6 +13,9 @@ import MyProjects from './MyProjects.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
 import Programs from './Programs.jsx';
+import Groups from './Groups.jsx';
+import GroupDetail from './GroupDetail.jsx';
+import Competitions from './Competitions.jsx';
 import Calendar from './Calendar.jsx';
 import Drive from './Drive.jsx';
 import Tools from '../Tools.jsx';
@@ -50,6 +53,8 @@ export default function ResearcherApp() {
   const nav = [
     { to: '/researcher', label: 'Home', end: true },
     { to: '/researcher/projects', label: 'My Projects' },
+    { to: '/researcher/groups', label: 'Groups' },
+    { to: '/researcher/competitions', label: 'Competitions' },
     { to: '/researcher/calendar', label: 'Calendar' },
     { to: '/researcher/drive', label: 'Drive' },
     { to: '/researcher/journal', label: 'Synthica Journal' },
@@ -73,6 +78,9 @@ export default function ResearcherApp() {
         <Route path="journal" element={<MyJournal />} />
         <Route path="opportunities" element={<Opportunities />} />
         <Route path="programs" element={<Programs />} />
+        <Route path="groups" element={<Groups />} />
+        <Route path="groups/:id" element={<GroupDetail />} />
+        <Route path="competitions" element={<Competitions />} />
         <Route path="account" element={<Account />} />
         {/* Deep-link routes kept so existing links still resolve. */}
         <Route path="hub" element={<ResearchHub />} />

@@ -300,6 +300,29 @@ app.get('/api/admin/export', requireAuth, requireDirector, wrap((_req, res) => {
   res.json(store.exportAll());
 }));
 
+// --- Research Groups (interest hubs holding multiple projects) --------------
+app.get('/api/groups', requireAuth, wrap((_req, res) => res.json(store.listGroups())));
+app.get('/api/groups/:id', requireAuth, wrap((req, res) => res.json(store.groupDetail(req.params.id, req.user.id))));
+app.post('/api/groups', requireAuth, wrap((req, res) => res.json(store.createGroup({ userId: req.user.id, ...(req.body || {}) }))));
+app.post('/api/groups/:id/join', requireAuth, wrap((req, res) => res.json(store.joinGroup({ groupId: req.params.id, userId: req.user.id }))));
+app.post('/api/groups/:id/leave', requireAuth, wrap((req, res) => res.json(store.leaveGroup({ groupId: req.params.id, userId: req.user.id }))));
+app.post('/api/groups/:id/projects', requireAuth, wrap((req, res) => res.json(store.addGroupProject({ groupId: req.params.id, leaderId: req.user.id, projectId: (req.body || {}).projectId }))));
+app.delete('/api/groups/:id/projects/:projectId', requireAuth, wrap((req, res) => res.json(store.removeGroupProject({ groupId: req.params.id, leaderId: req.user.id, projectId: req.params.projectId }))));
+app.post('/api/groups/:id/positions', requireAuth, wrap((req, res) => res.json(store.addGroupPosition({ groupId: req.params.id, leaderId: req.user.id, ...(req.body || {}) }))));
+app.post('/api/groups/:id/positions/:posId', requireAuth, wrap((req, res) => res.json(store.fillGroupPosition({ groupId: req.params.id, leaderId: req.user.id, positionId: req.params.posId, userId: (req.body || {}).userId }))));
+app.delete('/api/groups/:id/positions/:posId', requireAuth, wrap((req, res) => res.json(store.removeGroupPosition({ groupId: req.params.id, leaderId: req.user.id, positionId: req.params.posId }))));
+app.post('/api/groups/:id/links', requireAuth, wrap((req, res) => res.json(store.addGroupLink({ groupId: req.params.id, leaderId: req.user.id, ...(req.body || {}) }))));
+app.delete('/api/groups/:id/links/:linkId', requireAuth, wrap((req, res) => res.json(store.removeGroupLink({ groupId: req.params.id, leaderId: req.user.id, linkId: req.params.linkId }))));
+
+// --- Competitions board -----------------------------------------------------
+app.get('/api/competitions', requireAuth, wrap((_req, res) => res.json(store.listCompetitions())));
+app.post('/api/competitions', requireAuth, canPostNews, wrap((req, res) => res.json(store.addCompetition({ actor: req.user, ...(req.body || {}) }))));
+app.delete('/api/competitions/:id', requireAuth, canPostNews, wrap((req, res) => res.json(store.deleteCompetition({ id: req.params.id, actor: req.user }))));
+
+// --- Referrals --------------------------------------------------------------
+app.get('/api/me/referrals', requireAuth, wrap((req, res) => res.json(store.myReferralStats(req.user.id))));
+app.get('/api/admin/referrals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.referralLeaderboard())));
+
 // --- In-app notifications --------------------------------------------------
 app.get('/api/notifications', requireAuth, wrap((req, res) => res.json(store.listNotifications(req.user.id))));
 app.post('/api/notifications/read', requireAuth, wrap((req, res) => {
@@ -315,8 +338,8 @@ app.post('/api/news', requireAuth, canPostNews, wrap((req, res) => {
 
 // Public self-registration (researchers). Requires email + Discord.
 app.post('/api/register', authLimiter, wrap((req, res) => {
-  const { name, email, discord, password, username, resumeUrl } = req.body || {};
-  const user = store.registerResearcher({ name, email, discord, password, username, resumeUrl });
+  const { name, email, discord, password, username, resumeUrl, ref } = req.body || {};
+  const user = store.registerResearcher({ name, email, discord, password, username, resumeUrl, ref });
   // Email a verification link (logged if no email provider configured).
   const vt = issuePurposeToken(user.id, 'verify', 60 * 60 * 24);
   sendEmail({

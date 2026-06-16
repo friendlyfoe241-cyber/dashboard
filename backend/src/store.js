@@ -38,6 +38,8 @@ function buildSeed() {
     events: clone(seed.events || []),
     programs: clone(seed.programs || []),
     certificates: clone(seed.certificates || []),
+    groups: clone(seed.groups || []),
+    competitions: clone(seed.competitions || []),
   };
 }
 
@@ -358,6 +360,7 @@ function publicProfileOf(u) {
     // the member explicitly opts in via dobPublic.
     dob: u.dobPublic ? (u.dob || '') : '',
     links: u.links || [], category: u.category || null, currentProjects, publications,
+    groups: (db.groups || []).filter((g) => (g.members || []).includes(u.id)).map((g) => ({ id: g.id, name: g.name })),
   };
 }
 
@@ -2084,7 +2087,53 @@ export function chooseIdea({ projectId, userId, ideaId }) {
 
 // Public self-registration for researchers. Requires a point of contact
 // (email + Discord). Returns the new (safe) user; the route issues a token.
-export function registerResearcher({ name, email, discord, password, username, resumeUrl }) {
+// --- referrals --------------------------------------------------------------
+
+const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function genReferralCode(user) {
+  const base = String(user.username || 'yel').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || 'YEL';
+  const taken = (c) => [...db.editors, ...db.researchers].some((u) => u.referralCode === c);
+  let code;
+  do {
+    code = `${base}-${Array.from(randomBytes(3)).map((b) => REF_ALPHABET[b % REF_ALPHABET.length]).join('')}`;
+  } while (taken(code));
+  return code;
+}
+
+// Lazily assign + return a user's referral code (so seed/old accounts get one).
+export function referralCodeFor(userId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!u.referralCode) { u.referralCode = genReferralCode(u); schedulePersist(); }
+  return u.referralCode;
+}
+
+const userByReferralCode = (code) => {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) return null;
+  return [...db.editors, ...db.researchers].find((u) => u.referralCode === c) || null;
+};
+
+export function myReferralStats(userId) {
+  const code = referralCodeFor(userId);
+  const referred = db.researchers
+    .filter((r) => r.referredBy === userId)
+    .map((r) => ({ name: r.name, at: r.createdAt || '' }))
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  return { code, count: referred.length, referred };
+}
+
+// Admin leaderboard — who has referred the most members (for future rewards).
+export function referralLeaderboard() {
+  const counts = new Map();
+  for (const r of db.researchers) if (r.referredBy) counts.set(r.referredBy, (counts.get(r.referredBy) || 0) + 1);
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, name: getUserById(id)?.name || id, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 100);
+}
+
+export function registerResearcher({ name, email, discord, password, username, resumeUrl, ref }) {
   if (!name?.trim() || !email?.trim()) throw httpError(400, 'Name and email are required');
   if (!discord?.trim()) throw httpError(400, 'A Discord username is required');
   if (!password || password.length < 6) throw httpError(400, 'Password must be at least 6 characters');
@@ -2124,7 +2173,17 @@ export function registerResearcher({ name, email, discord, password, username, r
     following: [],
     public: true,
     emailVerified: false,
+    createdAt: now(),
+    referralCode: '',
+    referredBy: null,
   };
+  user.referralCode = genReferralCode(user);
+  // Credit the referrer if a valid code was used (and it isn't self-referral).
+  const referrer = userByReferralCode(ref);
+  if (referrer && referrer.id !== user.id) {
+    user.referredBy = referrer.id;
+    pushNotif(referrer.id, { type: 'referral', title: '🎉 Someone joined with your link', body: `${user.name} signed up — thanks for spreading the word!`, link: '/researcher/account' });
+  }
   db.researchers.push(user);
   claimProjectInvites(user);
   // Surface every new member in the auditor's onboarding queue for role assignment.
@@ -2195,6 +2254,47 @@ export function addNews({ authorId, authorName, title, body, audience, bannerUrl
   return item;
 }
 
+// --- competitions board ----------------------------------------------------
+
+export function listCompetitions() {
+  return [...(db.competitions || [])].sort((a, b) => {
+    // Soonest open deadline first; undated last.
+    if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
+    return a.deadline ? -1 : b.deadline ? 1 : new Date(b.at) - new Date(a.at);
+  });
+}
+
+export function addCompetition({ actor, title, description, url, category, deadline, prize }) {
+  if (!title?.trim()) throw httpError(400, 'A title is required');
+  if (!Array.isArray(db.competitions)) db.competitions = [];
+  const c = {
+    id: uid('cmp'),
+    title: title.trim().slice(0, 160),
+    description: String(description || '').trim().slice(0, 2000),
+    url: safeUrl(url, 400),
+    category: CATEGORIES.includes(category) ? category : '',
+    deadline: deadline ? String(deadline).slice(0, 10) : '',
+    prize: String(prize || '').trim().slice(0, 120),
+    postedById: actor?.id || null,
+    postedByName: actor?.name || 'Synthica',
+    at: now(),
+  };
+  db.competitions.unshift(c);
+  recordAudit(actor, 'post_competition', c.title);
+  notifyEvent({ title: '🏆 New competition', body: c.title });
+  schedulePersist();
+  return c;
+}
+
+export function deleteCompetition({ id, actor }) {
+  const idx = (db.competitions || []).findIndex((c) => c.id === id);
+  if (idx === -1) throw httpError(404, 'Competition not found');
+  db.competitions.splice(idx, 1);
+  recordAudit(actor, 'delete_competition', id);
+  schedulePersist();
+  return { ok: true };
+}
+
 // --- in-app notifications --------------------------------------------------
 
 export function listNotifications(userId) {
@@ -2215,18 +2315,20 @@ export function markNotificationsRead(userId, ids) {
 
 // --- shared calendar: lead-set deadlines + task/pathway due dates -----------
 
-const EVENT_TYPES = ['task', 'paper', 'event'];
+const EVENT_TYPES = ['task', 'paper', 'event', 'workshop', 'meetup'];
 const isStaff = (u) => u?.kind === 'editor';
 
-// Leads set deadlines for their projects; staff can also post platform-wide
-// ones (no project). Everyone affected sees them on their Calendar page.
-export function addEvent({ userId, title, type, dueAt, projectId, chapterId }) {
+// Deadlines + events. Scoped to a project (lead), a chapter (leader), a research
+// group (group leader), or platform-wide (staff only — e.g. global workshops).
+// Everyone affected sees them on their Calendar page.
+export function addEvent({ userId, title, type, dueAt, projectId, chapterId, groupId }) {
   const u = getUserById(userId);
   if (!u) throw httpError(404, 'User not found');
   if (!title?.trim()) throw httpError(400, 'A title is required');
   if (!dueAt || Number.isNaN(new Date(dueAt).getTime())) throw httpError(400, 'A valid date is required');
   let project = null;
   let chapter = null;
+  let group = null;
   if (projectId) {
     project = getProject(projectId);
     if (!project) throw httpError(404, 'Project not found');
@@ -2235,8 +2337,12 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId }) {
     chapter = db.chapters.find((c) => c.id === chapterId);
     if (!chapter) throw httpError(404, 'Chapter not found');
     if (chapter.leaderId !== userId && !isStaff(u)) throw httpError(403, 'Only the chapter leader can set its events');
+  } else if (groupId) {
+    group = getGroup(groupId);
+    if (!group) throw httpError(404, 'Group not found');
+    if (group.leaderId !== userId && !isStaff(u)) throw httpError(403, 'Only the group leader can set its events');
   } else if (!isStaff(u)) {
-    throw httpError(403, 'Pick one of your projects or your chapter — platform-wide deadlines are staff-only');
+    throw httpError(403, 'Pick one of your projects, your chapter, or a group — platform-wide events are staff-only');
   }
   if (!Array.isArray(db.events)) db.events = [];
   const ev = {
@@ -2246,6 +2352,7 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId }) {
     dueAt: String(dueAt).slice(0, 10),
     projectId: project?.id || null,
     chapterId: chapter?.id || null,
+    groupId: group?.id || null,
     createdBy: userId,
     createdByName: u.name,
     at: now(),
@@ -2256,11 +2363,13 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId }) {
     ? project.members.filter((id) => id !== userId)
     : chapter
       ? (chapter.members || []).map((m) => m.userId).filter((id) => id !== userId)
-      : [];
-  const ctx = project?.title || chapter?.name || '';
+      : group
+        ? group.members.filter((id) => id !== userId)
+        : [];
+  const ctx = project?.title || chapter?.name || group?.name || '';
   for (const id of audience)
     pushNotif(id, { type: 'deadline', title: `📅 New ${ev.type}: ${ev.title}`, body: `${ctx} · ${ev.dueAt}`, link: '/researcher/calendar' });
-  recordAudit(u, 'add_deadline', `${ev.title} (${ev.dueAt})`);
+  recordAudit(u, 'add_event', `${ev.title} (${ev.dueAt})`);
   schedulePersist();
   return ev;
 }
@@ -2283,14 +2392,17 @@ export function calendarFor(userId) {
   const myProjectIds = new Set(myProjects.map((p) => p.id));
   const items = [];
   const myChapterIds = new Set(chaptersOf(userId).map((c) => c.id));
+  const myGroupIds = new Set((db.groups || []).filter((g) => (g.members || []).includes(userId)).map((g) => g.id));
   for (const ev of db.events || []) {
     if (ev.projectId && !myProjectIds.has(ev.projectId)) continue;
     if (ev.chapterId && !myChapterIds.has(ev.chapterId)) continue;
+    if (ev.groupId && !myGroupIds.has(ev.groupId)) continue;
     const project = ev.projectId ? getProject(ev.projectId) : null;
     const chapter = ev.chapterId ? db.chapters.find((c) => c.id === ev.chapterId) : null;
+    const group = ev.groupId ? getGroup(ev.groupId) : null;
     items.push({
       id: ev.id, date: ev.dueAt, title: ev.title, kind: ev.type,
-      context: project?.title || chapter?.name || 'All Synthica', byName: ev.createdByName,
+      context: project?.title || chapter?.name || group?.name || 'All Synthica', byName: ev.createdByName,
       canDelete: ev.createdBy === userId,
     });
   }
@@ -2440,6 +2552,178 @@ export function addChapterMember({ leaderId, name, email, discord }) {
 // --- leads: create listings/projects + review their own applicants ---------
 
 const isLead = (u) => u && Array.isArray(u.tags) && u.tags.includes('lead_researcher');
+
+// --- Research Groups (interest hubs holding multiple projects) --------------
+
+const getGroup = (id) => (db.groups || []).find((g) => g.id === id) || null;
+const groupLeaderName = (g) => getUserById(g.leaderId)?.name || 'Lead';
+
+// Public-ish list for discovery.
+export function listGroups() {
+  return (db.groups || []).map((g) => ({
+    id: g.id, name: g.name, category: g.category || '', description: g.description || '',
+    bannerUrl: g.bannerUrl || '', leaderName: groupLeaderName(g),
+    memberCount: (g.members || []).length, projectCount: (g.projectIds || []).length,
+  }));
+}
+
+// Full detail for the group page (members + their projects + positions + links).
+export function groupDetail(groupId, viewerId) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  const members = (g.members || []).map((mid) => {
+    const u = getResearcherById(mid) || getUserById(mid);
+    return u ? { id: u.id, name: u.name, slug: u.slug || u.id, avatarUrl: u.avatarUrl || '', role: roleDisplay(u), isLeader: u.id === g.leaderId } : null;
+  }).filter(Boolean);
+  const projects = (g.projectIds || [])
+    .map((pid) => getProject(pid))
+    .filter(Boolean)
+    .map((p) => ({ id: p.id, title: p.title, category: p.category, memberCount: p.members.length }));
+  const positions = (g.positions || []).map((pos) => ({
+    ...pos, filledByName: pos.filledBy ? (getUserById(pos.filledBy)?.name || '') : '',
+  }));
+  return {
+    id: g.id, name: g.name, description: g.description || '', category: g.category || '',
+    bannerUrl: g.bannerUrl || '', leaderId: g.leaderId, leaderName: groupLeaderName(g),
+    members, projects, positions, links: g.links || [],
+    isLeader: viewerId === g.leaderId, isMember: (g.members || []).includes(viewerId),
+    // Projects the viewer leads that aren't yet in the group (for the "add project" picker).
+    addableProjects: viewerId === g.leaderId
+      ? db.projects.filter((p) => p.leadId === viewerId && !(g.projectIds || []).includes(p.id)).map((p) => ({ id: p.id, title: p.title }))
+      : [],
+  };
+}
+
+export function createGroup({ userId, name, description, category, bannerUrl }) {
+  const u = getResearcherById(userId);
+  if (!isLead(u)) throw httpError(403, 'Only lead researchers can create research groups');
+  if (!name?.trim()) throw httpError(400, 'A group name is required');
+  if (!Array.isArray(db.groups)) db.groups = [];
+  const g = {
+    id: uid('grp'),
+    name: name.trim().slice(0, 100),
+    description: String(description || '').trim().slice(0, 1200),
+    category: CATEGORIES.includes(category) ? category : '',
+    leaderId: userId,
+    bannerUrl: safeUrl(bannerUrl, 400),
+    members: [userId],
+    projectIds: [],
+    positions: [],
+    links: [],
+    createdAt: now(),
+  };
+  db.groups.push(g);
+  recordAudit(u, 'create_group', g.name);
+  schedulePersist();
+  return g;
+}
+
+export function joinGroup({ groupId, userId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  if (!g.members.includes(userId)) {
+    g.members.push(userId);
+    if (userId !== g.leaderId) pushNotif(g.leaderId, { type: 'group', title: `${getUserById(userId)?.name || 'Someone'} joined ${g.name}`, body: '', link: `/researcher/groups/${g.id}` });
+  }
+  schedulePersist();
+  return groupDetail(groupId, userId);
+}
+
+export function leaveGroup({ groupId, userId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  if (userId === g.leaderId) throw httpError(400, 'The group leader can’t leave — transfer or delete the group instead');
+  g.members = g.members.filter((m) => m !== userId);
+  (g.positions || []).forEach((pos) => { if (pos.filledBy === userId) pos.filledBy = null; });
+  schedulePersist();
+  return groupDetail(groupId, userId);
+}
+
+const requireGroupLeader = (g, leaderId) => { if (g.leaderId !== leaderId) throw httpError(403, 'Only the group leader can do that'); };
+
+export function addGroupProject({ groupId, leaderId, projectId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (p.leadId !== leaderId) throw httpError(403, 'You can only add projects you lead');
+  if (!Array.isArray(g.projectIds)) g.projectIds = [];
+  if (!g.projectIds.includes(projectId)) g.projectIds.push(projectId);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+export function removeGroupProject({ groupId, leaderId, projectId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  g.projectIds = (g.projectIds || []).filter((id) => id !== projectId);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+export function addGroupPosition({ groupId, leaderId, title, description }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  if (!title?.trim()) throw httpError(400, 'A position title is required');
+  if (!Array.isArray(g.positions)) g.positions = [];
+  g.positions.push({ id: uid('pos'), title: title.trim().slice(0, 80), description: String(description || '').trim().slice(0, 200), filledBy: null });
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+// Assign a member to a position (userId null leaves it open).
+export function fillGroupPosition({ groupId, leaderId, positionId, userId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  const pos = (g.positions || []).find((p) => p.id === positionId);
+  if (!pos) throw httpError(404, 'Position not found');
+  if (userId && !g.members.includes(userId)) throw httpError(400, 'Pick someone who is a group member');
+  pos.filledBy = userId || null;
+  if (userId) pushNotif(userId, { type: 'group', title: `You're now ${pos.title}`, body: `in ${g.name}`, link: `/researcher/groups/${g.id}` });
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+export function removeGroupPosition({ groupId, leaderId, positionId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  g.positions = (g.positions || []).filter((p) => p.id !== positionId);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+export function addGroupLink({ groupId, leaderId, label, url }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  const safe = safeUrl(url, 400);
+  if (!safe) throw httpError(400, 'That link isn’t a valid http(s) URL');
+  if (!Array.isArray(g.links)) g.links = [];
+  g.links.push({ id: uid('glink'), label: String(label || url).trim().slice(0, 80), url: safe });
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+export function removeGroupLink({ groupId, leaderId, linkId }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  g.links = (g.links || []).filter((l) => l.id !== linkId);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
+}
+
+// Groups the user leads or belongs to (for the profile + their groups list).
+export function groupsForUser(userId) {
+  return (db.groups || [])
+    .filter((g) => (g.members || []).includes(userId) || g.leaderId === userId)
+    .map((g) => ({ id: g.id, name: g.name, category: g.category || '', isLeader: g.leaderId === userId }));
+}
 
 export function createListing({ userId, title, category, spots, description, bannerUrl, lookingFor }) {
   const u = getResearcherById(userId);

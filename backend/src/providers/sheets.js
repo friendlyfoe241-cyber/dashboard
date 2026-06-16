@@ -38,6 +38,10 @@ export const SCHEMAS = {
     ['gpa'], ['researchExperience', 'num'], ['leadRecommended', 'bool'], ['approved', 'bool'],
     ['leadershipExperience', 'num'], ['wantsChapterLead', 'bool'], ['onboardingRejected', 'bool'],
     ['blurb'], ['newRoleCongrats'], ['experienceSummary'], ['priorLead', 'bool'], ['legacyProject', 'json'],
+    // Rich profile + referrals.
+    ['affiliations', 'json'], ['pronouns'], ['contactEmail'], ['researchGroup'], ['researchGroupUrl'],
+    ['githubUrl'], ['twitterUrl'], ['scholarUrl'], ['orcid'], ['dob'], ['dobPublic', 'bool'],
+    ['referralCode'], ['referredBy'], ['createdAt'],
   ],
   Submissions: [
     ['id'], ['title'], ['authorName'], ['authorEmail'], ['authorDiscord'], ['submittedBy'], ['category'],
@@ -56,13 +60,20 @@ export const SCHEMAS = {
   ],
   Projects: [
     ['id'], ['title'], ['category'], ['description'], ['leadId'],
-    ['members', 'json'], ['announcements', 'json'], ['tasks', 'json'], ['links', 'json'], ['ideas', 'json'], ['invites', 'json'],
+    ['members', 'json'], ['announcements', 'json'], ['tasks', 'json'], ['links', 'json'], ['ideas', 'json'], ['invites', 'json'], ['roles', 'json'],
   ],
   Listings: [
     ['id'], ['title'], ['category'], ['spots', 'num'], ['leadName'], ['leadId'], ['description'], ['bannerUrl'], ['lookingFor'],
   ],
   Events: [
-    ['id'], ['title'], ['type'], ['dueAt'], ['projectId'], ['chapterId'], ['createdBy'], ['createdByName'], ['at'],
+    ['id'], ['title'], ['type'], ['dueAt'], ['projectId'], ['chapterId'], ['groupId'], ['createdBy'], ['createdByName'], ['at'],
+  ],
+  Groups: [
+    ['id'], ['name'], ['description'], ['category'], ['leaderId'], ['bannerUrl'],
+    ['members', 'json'], ['projectIds', 'json'], ['positions', 'json'], ['links', 'json'], ['createdAt'],
+  ],
+  Competitions: [
+    ['id'], ['title'], ['description'], ['url'], ['category'], ['deadline'], ['prize'], ['postedById'], ['postedByName'], ['at'],
   ],
   Applications: [
     ['id'], ['kind'], ['userId'], ['userName'], ['listingId'], ['programId'], ['role'], ['message'], ['answers', 'json'],
@@ -182,6 +193,8 @@ export async function createSheetsProvider() {
         events: await readTab(sheets, spreadsheetId, 'Events').catch(() => []),
         programs: await readTab(sheets, spreadsheetId, 'Programs').catch(() => []),
         certificates: await readTab(sheets, spreadsheetId, 'Certificates').catch(() => []),
+        groups: await readTab(sheets, spreadsheetId, 'Groups').catch(() => []),
+        competitions: await readTab(sheets, spreadsheetId, 'Competitions').catch(() => []),
       };
     },
 
@@ -200,6 +213,8 @@ export async function createSheetsProvider() {
       // Best-effort: deployments created before these tabs existed keep working.
       await writeTab(sheets, spreadsheetId, 'Programs', db.programs || []).catch(() => {});
       await writeTab(sheets, spreadsheetId, 'Certificates', db.certificates || []).catch(() => {});
+      await writeTab(sheets, spreadsheetId, 'Groups', db.groups || []).catch(() => {});
+      await writeTab(sheets, spreadsheetId, 'Competitions', db.competitions || []).catch(() => {});
     },
   };
 }

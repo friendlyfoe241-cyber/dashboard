@@ -663,4 +663,43 @@ export const programs = [
 // Issued role certificates (verifiable by code).
 export const certificates = [];
 
+// Research Groups — interest-based hubs run by a lead, holding several projects,
+// a member roster, open positions, and shared links (a "guild" of projects).
+export const groups = [
+  {
+    id: id('grp'),
+    name: 'Climate & Sensing Lab',
+    description: 'A hub for student projects on environmental sensing, climate data, and sustainability. We share tooling, datasets, and review each other’s work.',
+    category: 'Chemistry',
+    leaderId: leadId,
+    bannerUrl: '',
+    members: [leadId, assocId, caseyId],
+    projectIds: [projects[0].id, projects[1].id],
+    positions: [
+      { id: id('pos'), title: 'Data Lead', description: 'Owns shared datasets + pipelines', filledBy: assocId },
+      { id: id('pos'), title: 'Outreach Coordinator', description: 'Recruits members + partner schools', filledBy: null },
+    ],
+    links: [
+      { id: id('glink'), label: 'Group handbook', url: 'https://example.com/climate-lab-handbook' },
+      { id: id('glink'), label: 'Shared data drive', url: 'https://drive.google.com/drive/folders/EXAMPLE' },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// Competitions board — opportunities posted by staff (and leads).
+export const competitions = [
+  {
+    id: id('cmp'),
+    title: 'Global Research Challenge 2026',
+    description: 'A worldwide research competition for high-school students across all subjects. Cash prizes and publication for finalists.',
+    url: 'https://globalresearchchallenge.org',
+    category: '',
+    deadline: new Date(Date.now() + 45 * 864e5).toISOString().slice(0, 10),
+    prize: '$5,000 + publication',
+    postedByName: 'Synthica',
+    at: new Date().toISOString(),
+  },
+];
+
 export const allUsers = () => [...editors, ...researchers];

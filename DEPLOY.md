@@ -139,6 +139,15 @@ Generate a secret: `node -e "console.log(require('crypto').randomBytes(32).toStr
 2. An **auditor/director/admin** reviews the Onboarding queue (Admin page), sees the scores + written experience + suggested role, and approves with a role.
 3. The member gets a welcome email + in-app congrats and lands in their dashboard.
 
+### Community portal features (no extra config)
+- **Research Groups, per-project roles, suggested people, Programs, Competitions board,
+  platform-wide events/workshops, and referral tracking** all run on the existing
+  store/provider layer. On Postgres (the default) nothing to do; on Sheets the new
+  `Groups` and `Competitions` tabs (and added columns) are created automatically on the
+  next write — existing spreadsheets keep working.
+- **Referrals**: members share `<app>/register?ref=CODE`; signups are credited to the
+  referrer and surfaced on the Admin → Referral leaderboard (build rewards on top later).
+
 ### Already handled (no action needed)
 - CORS locking via `CORS_ORIGINS`; security headers; per-IP auth rate limiting
 - Email verification + password reset flows; scrypt password hashing; optional TOTP 2FA

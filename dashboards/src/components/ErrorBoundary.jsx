@@ -20,9 +20,16 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
-    // When error state becomes true, auto-reload immediately
+    // Auto-reload once to recover from a transient error (e.g. a stale chunk),
+    // but NEVER loop: if we already reloaded in the last 10s, show the fallback
+    // instead so a persistent render error can't brick the app forever.
     if (this.state.hasError && !prevState.hasError) {
-      window.location.reload();
+      let last = 0;
+      try { last = Number(sessionStorage.getItem('eb.reloadedAt')) || 0; } catch { /* ignore */ }
+      if (Date.now() - last > 10000) {
+        try { sessionStorage.setItem('eb.reloadedAt', String(Date.now())); } catch { /* ignore */ }
+        window.location.reload();
+      }
     }
   }
 

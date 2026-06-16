@@ -488,6 +488,15 @@ async function renderProfile() {
       </section>`
     : '';
 
+  // Research groups the member belongs to.
+  const groups = Array.isArray(profile.groups) ? profile.groups.filter((g) => g && g.name) : [];
+  const groupsBlock = groups.length
+    ? `<section class="profile-section">
+        <h2 class="profile-section-title">Research groups</h2>
+        <div class="profile-tags">${groups.map((g) => `<span class="tag">${esc(g.name)}</span>`).join('')}</div>
+      </section>`
+    : '';
+
   const pubs = Array.isArray(profile.publications) ? profile.publications : [];
   const pubsBlock = pubs.length
     ? `<section class="profile-section">
@@ -528,6 +537,7 @@ async function renderProfile() {
     <div class="profile-body">
       ${interestsBlock}
       ${profile.bio ? `<section class="profile-section"><p class="profile-bio">${esc(profile.bio)}</p></section>` : ''}
+      ${groupsBlock}
       ${projectsBlock}
       ${pubsBlock}
     </div>`;

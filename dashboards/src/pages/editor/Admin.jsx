@@ -21,6 +21,9 @@ export default function Admin() {
       <People isDirector={isDirector} />
       <Applications />
       <ProgramsPanel isDirector={isDirector} />
+      <CompetitionsAdmin />
+      <GlobalEvents />
+      <ReferralLeaderboard />
       <Archive />
       <AuditLog />
       {isDirector && <Integrations />}
@@ -808,6 +811,93 @@ function ProgramsPanel({ isDirector }) {
           </Card>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Post competitions to the members' Competitions board.
+function CompetitionsAdmin() {
+  const toast = useToast();
+  const [comps, setComps] = useState([]);
+  const [form, setForm] = useState({ title: '', description: '', url: '', category: '', deadline: '', prize: '' });
+  const load = useCallback(() => { api.competitions().then(setComps).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  const post = (e) => {
+    e.preventDefault();
+    api.addCompetition(form).then(() => { setForm({ title: '', description: '', url: '', category: '', deadline: '', prize: '' }); load(); toast.success('Competition posted'); }).catch((er) => toast.error(er.message));
+  };
+  const remove = (id) => api.deleteCompetition(id).then(() => { load(); toast.success('Removed'); }).catch((er) => toast.error(er.message));
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Competitions <Badge tone="gray">{comps.length}</Badge></h2>
+      <Card style={{ marginBottom: '0.8rem' }}>
+        <form onSubmit={post}>
+          <div className="grid grid-2">
+            <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+            <Field label="Link"><input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://…" /></Field>
+          </div>
+          <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <div className="grid grid-3">
+            <Field label="Category"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="">—</option>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Deadline"><input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} /></Field>
+            <Field label="Prize"><input value={form.prize} onChange={(e) => setForm({ ...form, prize: e.target.value })} placeholder="e.g. $5,000" /></Field>
+          </div>
+          <Button type="submit">Post competition</Button>
+        </form>
+      </Card>
+      <div className="stack">
+        {comps.map((c) => (
+          <Card key={c.id}><div className="card-row"><div><strong>{c.title}</strong> {c.deadline && <Badge tone="gray">{c.deadline}</Badge>}</div><button className="btn btn-ghost btn-sm" onClick={() => remove(c.id)}>Delete</button></div></Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Post a platform-wide event (workshop, meetup) that shows on everyone's calendar.
+function GlobalEvents() {
+  const toast = useToast();
+  const [form, setForm] = useState({ title: '', type: 'workshop', dueAt: '' });
+  const post = (e) => {
+    e.preventDefault();
+    api.addEvent({ title: form.title, type: form.type, dueAt: form.dueAt }).then(() => { setForm({ title: '', type: 'workshop', dueAt: '' }); toast.success('Event posted to all calendars'); }).catch((er) => toast.error(er.message));
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Global events</h2>
+      <Card>
+        <p className="muted" style={{ marginTop: 0 }}>Workshops and platform-wide events appear on every member's Calendar.</p>
+        <form onSubmit={post} className="row" style={{ alignItems: 'flex-end' }}>
+          <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+          <Field label="Type"><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="workshop">workshop</option><option value="meetup">meetup</option><option value="event">event</option></select></Field>
+          <Field label="Date"><input type="date" value={form.dueAt} onChange={(e) => setForm({ ...form, dueAt: e.target.value })} required /></Field>
+          <Button type="submit">Post</Button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Who's referred the most members (for future rewards).
+function ReferralLeaderboard() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { api.referralLeaderboard().then(setRows).catch(() => setRows([])); }, []);
+  if (!rows) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Referral leaderboard</h2>
+      <Card>
+        {rows.length === 0 ? <p className="muted" style={{ margin: 0 }}>No referrals yet.</p> : (
+          <div className="stack">
+            {rows.map((r, i) => (
+              <div key={r.id} className="card-row info-block">
+                <div><strong>#{i + 1}</strong> {r.name}</div>
+                <Badge tone="green">{r.count} referred</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
