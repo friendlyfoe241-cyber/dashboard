@@ -20,7 +20,7 @@ const optionalUser = (req) => {
 };
 import * as store from './src/store.js';
 import * as notify from './src/notify.js';
-import { sendEmail, emailEnabled } from './src/email.js';
+import { sendEmail, emailEnabled, welcomeEmail, actionEmail } from './src/email.js';
 import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
 import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
@@ -362,13 +362,10 @@ app.post('/api/news', requireAuth, canPostNews, wrap((req, res) => {
 app.post('/api/register', authLimiter, wrap((req, res) => {
   const { name, email, discord, password, username, resumeUrl, ref } = req.body || {};
   const user = store.registerResearcher({ name, email, discord, password, username, resumeUrl, ref });
-  // Email a verification link (logged if no email provider configured).
+  // Branded welcome email with a verification link (logged if no provider).
   const vt = issuePurposeToken(user.id, 'verify', 60 * 60 * 24);
-  sendEmail({
-    to: user.email,
-    subject: 'Verify your Synthica email',
-    text: `Welcome to Synthica! Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}`,
-  });
+  const { subject, html, text } = welcomeEmail({ name: user.name, verifyUrl: `${FRONTEND_URL || ''}/verify?token=${vt}`, communityUrl: `${FRONTEND_URL || ''}/researcher/community` });
+  sendEmail({ to: user.email, subject, html, text });
   res.json({ token: issueToken(user), user });
 }));
 
@@ -381,7 +378,7 @@ app.post('/api/auth/verify-email', wrap((req, res) => {
 
 app.post('/api/auth/resend-verification', authLimiter, requireAuth, wrap((req, res) => {
   const vt = issuePurposeToken(req.user.id, 'verify', 60 * 60 * 24);
-  sendEmail({ to: req.user.email, subject: 'Verify your Synthica email', text: `Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}` });
+  actionEmail({ to: req.user.email, subject: 'Confirm your Synthica email', heading: 'Confirm your email', intro: `Hi ${req.user.name?.split(' ')[0] || 'there'},`, blocks: ['Click below to confirm your email address and secure your account.'], button: { label: 'Confirm email', url: `${FRONTEND_URL || ''}/verify?token=${vt}` } });
   res.json({ ok: true });
 }));
 
@@ -390,7 +387,7 @@ app.post('/api/auth/forgot-password', authLimiter, wrap((req, res) => {
   const user = store.getUserByEmail((req.body || {}).email || '');
   if (user && user.password) {
     const rt = issuePurposeToken(user.id, 'reset', 60 * 60);
-    sendEmail({ to: user.email, subject: 'Reset your Synthica password', text: `Reset your password:\n${FRONTEND_URL || ''}/reset?token=${rt}` });
+    actionEmail({ to: user.email, subject: 'Reset your Synthica password', heading: 'Reset your password', intro: `Hi ${user.name?.split(' ')[0] || 'there'},`, blocks: ['We received a request to reset your password. Click below to choose a new one — this link expires in an hour. If you didn’t ask for this, you can ignore this email.'], button: { label: 'Reset password', url: `${FRONTEND_URL || ''}/reset?token=${rt}` }, signoff: 'Stay secure,' });
   }
   res.json({ ok: true });
 }));

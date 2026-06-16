@@ -11,7 +11,7 @@ import * as seed from './seed.js';
 import { verifyPassword, hashPassword } from './passwords.js';
 import { safeUrl } from './url.js';
 import { notifyMove, notifyEvent } from './notify.js';
-import { emailDecision, sendEmail } from './email.js';
+import { emailDecision, sendEmail, actionEmail } from './email.js';
 import { registerDoi } from './doi.js';
 import { generateSecret as totpGenerateSecret, otpauthUrl as totpOtpauthUrl, verifyTotp } from './totp.js';
 
@@ -1508,10 +1508,17 @@ export function setApplicationStatus({ id, status, reviewerId, assignTag }) {
         // One-time in-app congrats + a welcome email with the assigned role.
         u.newRoleCongrats = TAG_LABEL[tag] || tag;
         if (u.email) {
-          sendEmail({
+          const site = (process.env.FRONTEND_URL || 'https://app.synthica.org').replace(/\/$/, '');
+          actionEmail({
             to: u.email,
-            subject: `Welcome to Synthica — you're a ${TAG_LABEL[tag] || tag}!`,
-            text: `Hi ${u.name},\n\nCongrats! Your Synthica membership was approved and you've been assigned the role of ${TAG_LABEL[tag] || tag}.\n\nSign in to get started: ${process.env.FRONTEND_URL || 'https://app.synthica.org'}\n\n— The Synthica Team`,
+            subject: `You're approved — welcome as a ${TAG_LABEL[tag] || tag}! 🎉`,
+            heading: `You're in — welcome aboard! 🎉`,
+            intro: `Hi ${String(u.name || 'there').split(/\s+/)[0]},`,
+            blocks: [
+              `Congrats! Your membership was approved and you've been assigned the role of <strong>${TAG_LABEL[tag] || tag}</strong>.`,
+              `Sign in to set up your profile, join a research group, and start exploring competitions and programs.`,
+            ],
+            button: { label: 'Open your dashboard', url: `${site}/researcher` },
           });
         }
       }
