@@ -209,13 +209,12 @@ function LinksCard({ project, onChange }) {
             <div className="card-row">
               <a href={l.url} target="_blank" rel="noreferrer">{l.label}</a>
               <button
-                className="link-btn muted"
-                style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}
+                className="btn btn-sm"
+                style={{ marginLeft: '0.5rem', color: 'var(--red, #e53)', border: '1px solid var(--red, #e53)' }}
                 onClick={() => remove(l.id)}
                 disabled={deleting === l.id}
-                title="Delete link"
               >
-                {deleting === l.id ? '…' : '✕'}
+                {deleting === l.id ? '…' : 'Delete'}
               </button>
             </div>
             <Embed url={l.url} height={300} title={l.label} />
