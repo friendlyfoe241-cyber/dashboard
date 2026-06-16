@@ -478,7 +478,10 @@ async function renderProfile() {
             (proj) => `
           <article class="article-item">
             <h3 class="article-item-title">${esc(proj.title)}</h3>
-            ${proj.category ? `<div class="article-item-meta"><span class="badge-cat">${esc(proj.category)}</span></div>` : ''}
+            <div class="article-item-meta">
+              ${proj.category ? `<span class="badge-cat">${esc(proj.category)}</span>` : ''}
+              ${proj.role ? `<span class="badge-cat" style="background:#eaf2ff;color:#1a6bb5">${esc(proj.role)}</span>` : ''}
+            </div>
           </article>`
           )
           .join('')}</div>

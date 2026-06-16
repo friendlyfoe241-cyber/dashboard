@@ -89,7 +89,10 @@ export default function PublicProfile() {
             <h3 style={{ marginTop: 0 }}>Current projects</h3>
             <div className="stack">
               {p.currentProjects.map((pr) => (
-                <div key={pr.id} className="muted">{pr.title} <Badge tone="gray">{pr.category}</Badge></div>
+                <div key={pr.id} className="muted">
+                  {pr.title} <Badge tone="gray">{pr.category}</Badge>
+                  {pr.role && <> <Badge tone="blue">{pr.role}</Badge></>}
+                </div>
               ))}
             </div>
           </Card>

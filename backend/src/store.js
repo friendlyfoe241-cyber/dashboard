@@ -333,7 +333,11 @@ function publicProfileOf(u) {
     .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
   const currentProjects = db.projects
     .filter((p) => p.members.includes(u.id))
-    .map((p) => ({ id: p.id, title: p.title, category: p.category }));
+    .map((p) => ({
+      id: p.id, title: p.title, category: p.category,
+      // The member's role on the project auto-surfaces on their profile.
+      role: (p.roles || []).find((r) => r.userId === u.id)?.title || (p.leadId === u.id ? 'Project Lead' : ''),
+    }));
   // Affiliations: prefer the new multi-slot field, fall back to the legacy
   // single institution so older records still show something.
   const affiliations = (u.affiliations && u.affiliations.length)
@@ -1776,10 +1780,78 @@ export function updateResume(userId, resumeUrl) {
 export function projectTeam(projectId) {
   const p = getProject(projectId);
   if (!p) return [];
+  const roleOf = (mid) => (p.roles || []).find((r) => r.userId === mid)?.title || '';
   return p.members
     .map((mid) => getResearcherById(mid))
     .filter(Boolean)
-    .map((m) => ({ id: m.id, name: m.name, email: m.email, discord: m.discord, isLead: m.id === p.leadId }));
+    .map((m) => ({ id: m.id, name: m.name, email: m.email, discord: m.discord, isLead: m.id === p.leadId, role: roleOf(m.id), avatarUrl: m.avatarUrl || '', slug: m.slug || m.id }));
+}
+
+// Lead assigns (or clears, with an empty title) a member's role on the project —
+// e.g. "Head of Data Collection". Roles auto-surface on the member's profile.
+export function setProjectRole({ projectId, leadId, userId, title }) {
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (p.leadId !== leadId) throw httpError(403, 'Only the project lead can assign roles');
+  if (!p.members.includes(userId)) throw httpError(400, 'That person is not on this project');
+  if (!Array.isArray(p.roles)) p.roles = [];
+  const clean = String(title || '').trim().slice(0, 60);
+  p.roles = p.roles.filter((r) => r.userId !== userId);
+  if (clean) {
+    p.roles.push({ userId, title: clean });
+    if (userId !== leadId) pushNotif(userId, { type: 'project', title: `You're now ${clean}`, body: `on ${p.title}`, link: `/researcher/project/${p.id}` });
+  }
+  recordAudit(getUserById(leadId), 'project_role', `${getResearcherById(userId)?.name}: ${clean || '(cleared)'} on ${p.title}`);
+  schedulePersist();
+  return p;
+}
+
+// One-click invite of an existing member (used by the "suggested people" list).
+export function inviteToProjectById({ projectId, leadId, userId }) {
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (p.leadId !== leadId) throw httpError(403, 'Only the project lead can invite people');
+  const person = getResearcherById(userId);
+  if (!person) throw httpError(404, 'Person not found');
+  if (p.members.includes(userId)) throw httpError(409, 'They are already on this project');
+  p.members.push(userId);
+  const lead = getUserById(leadId);
+  pushNotif(userId, { type: 'project', title: `You were added to ${p.title}`, body: `Invited by ${lead?.name || 'the project lead'}`, link: `/researcher/project/${p.id}` });
+  sendEmail({
+    to: person.email,
+    subject: `You've been added to "${p.title}" on Synthica`,
+    text: `Hi ${person.name},\n\n${lead?.name || 'A project lead'} added you to the project "${p.title}".\nSign in to see it: ${process.env.FRONTEND_URL || 'https://app.synthica.org'}/researcher/project/${p.id}\n\n— The Synthica Team`,
+  });
+  recordAudit(lead, 'invite_member', `${person.name} -> ${p.title}`);
+  schedulePersist();
+  return { status: 'added', name: person.name };
+}
+
+// Suggested teammates for a lead: approved, public researchers not already on
+// the team, ranked by how much their interests overlap the project's interests
+// (the team's interests + the project category).
+export function suggestedPeopleForProject(projectId, requesterId) {
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (p.leadId !== requesterId) throw httpError(403, 'Only the project lead can see suggestions');
+  const wanted = new Set();
+  for (const mid of p.members) for (const i of (getResearcherById(mid)?.interests || [])) wanted.add(i.toLowerCase());
+  if (p.category) wanted.add(p.category.toLowerCase());
+  const memberSet = new Set(p.members);
+  const pendingEmails = new Set((p.invites || []).map((i) => i.email));
+  return db.researchers
+    .filter((r) => r.approved !== false && r.public !== false && !memberSet.has(r.id) && !pendingEmails.has((r.email || '').toLowerCase()))
+    .map((r) => {
+      const shared = (r.interests || []).filter((i) => wanted.has(String(i).toLowerCase()));
+      return {
+        id: r.id, name: r.name, slug: r.slug || r.id, avatarUrl: r.avatarUrl || '',
+        role: roleDisplay(r), blurb: r.blurb || '', institution: r.institution || '',
+        interests: r.interests || [], shared, score: shared.length,
+      };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, 12);
 }
 
 // Link a paper or media resource to a project (any member). Used to embed

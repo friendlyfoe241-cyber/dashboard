@@ -98,14 +98,16 @@ export default function ProjectDetail() {
                   <span className="badge badge-blue" style={{ borderRadius: '999px' }}>
                     {String(m.name || '?').split(' ').map((p) => p[0] || '').join('').slice(0, 2)}
                   </span>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div>
-                      {m.name} {m.isLead && <Badge tone="gold">lead</Badge>}
+                      <Link to={`/p/${m.slug || m.id}`}>{m.name}</Link> {m.isLead && <Badge tone="gold">lead</Badge>}
+                      {m.role && <> <Badge tone="blue">{m.role}</Badge></>}
                     </div>
                     <div className="muted" style={{ fontSize: '0.78rem' }}>
                       <a href={`mailto:${m.email}`}>{m.email}</a>
                       {m.discord && <> · Discord: {m.discord}</>}
                     </div>
+                    {project.isLead && <RoleEditor projectId={id} member={m} onChange={load} />}
                   </div>
                 </div>
               ))}
@@ -113,6 +115,7 @@ export default function ProjectDetail() {
             {project.isLead && <InviteByEmail projectId={id} invites={project.invites || []} onChange={load} />}
           </Card>
 
+          {project.isLead && <SuggestedPeople projectId={id} onChange={load} />}
           {project.isLead && <LeadControls projectId={id} onPosted={load} />}
         </div>
       </div>
@@ -413,5 +416,72 @@ function InviteByEmail({ projectId, invites, onChange }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Lead sets a member's role (e.g. "Head of Data Collection"); it shows on the
+// roster and auto-appears on that member's public profile.
+function RoleEditor({ projectId, member, onChange }) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(member.role || '');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { await api.setProjectRole(projectId, member.id, title.trim()); toast.success('Role updated'); setEditing(false); onChange(); }
+    catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  if (!editing) {
+    return <button className="btn btn-ghost btn-sm" style={{ marginTop: '0.25rem' }} onClick={() => { setTitle(member.role || ''); setEditing(true); }}>{member.role ? 'Edit role' : '+ Set role'}</button>;
+  }
+  return (
+    <div className="row" style={{ marginTop: '0.3rem', gap: '0.3rem' }}>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Head of Data Collection" maxLength={60} style={{ maxWidth: 220 }} />
+      <Button className="btn-sm" disabled={busy} onClick={save}>Save</Button>
+      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+    </div>
+  );
+}
+
+// Suggested teammates ranked by shared interests — the lead invites with one click.
+function SuggestedPeople({ projectId, onChange }) {
+  const toast = useToast();
+  const [people, setPeople] = useState(null);
+  const [busyId, setBusyId] = useState('');
+  const load = useCallback(() => api.suggestedForProject(projectId).then(setPeople).catch(() => setPeople([])), [projectId]);
+  useEffect(() => { load(); }, [load]);
+
+  const invite = async (person) => {
+    setBusyId(person.id);
+    try { await api.inviteMemberById(projectId, person.id); toast.success(`${person.name} added to the project`); load(); onChange(); }
+    catch (e) { toast.error(e.message); } finally { setBusyId(''); }
+  };
+
+  if (!people) return null;
+  return (
+    <Card>
+      <h3>Suggested people</h3>
+      <p className="muted" style={{ margin: '0.2rem 0 0.6rem' }}>Researchers whose interests match this project. Invite them to your team.</p>
+      {people.length === 0 ? (
+        <p className="muted">No interest matches yet — try the Research Hub to recruit, or fill out your project's category.</p>
+      ) : (
+        <div className="stack">
+          {people.map((p) => (
+            <div key={p.id} className="info-block">
+              <div className="card-row">
+                <div>
+                  <Link to={`/p/${p.slug || p.id}`}><strong>{p.name}</strong></Link> <span className="muted" style={{ fontSize: '0.78rem' }}>{p.role}{p.institution ? ` · ${p.institution}` : ''}</span>
+                  {p.blurb && <div className="muted" style={{ fontSize: '0.82rem' }}>{p.blurb}</div>}
+                  <div className="row" style={{ gap: '0.3rem', marginTop: '0.3rem' }}>
+                    {p.shared.slice(0, 4).map((i) => <Badge key={i} tone="green">{i}</Badge>)}
+                  </div>
+                </div>
+                <Button className="btn-sm" disabled={busyId === p.id} onClick={() => invite(p)}>{busyId === p.id ? 'Inviting…' : 'Invite'}</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

@@ -691,6 +691,20 @@ app.post('/api/researcher/projects/:id/links', requireAuth, researcherOnly, wrap
   res.json(store.addProjectLink({ projectId: req.params.id, userId: req.user.id, label, url }));
 }));
 
+// Lead assigns a member's role (auto-shown on their profile) + suggested people.
+app.post('/api/researcher/projects/:id/roles', requireAuth, researcherOnly, wrap((req, res) => {
+  const { userId, title } = req.body || {};
+  res.json(store.setProjectRole({ projectId: req.params.id, leadId: req.user.id, userId, title }));
+}));
+
+app.get('/api/researcher/projects/:id/suggested', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.suggestedPeopleForProject(req.params.id, req.user.id));
+}));
+
+app.post('/api/researcher/projects/:id/invite-member', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.inviteToProjectById({ projectId: req.params.id, leadId: req.user.id, userId: (req.body || {}).userId }));
+}));
+
 app.get('/api/researcher/projects/:id/stats', requireAuth, researcherOnly, wrap((req, res) => {
   const project = store.getProject(req.params.id);
   if (!project || !project.members.includes(req.user.id))
