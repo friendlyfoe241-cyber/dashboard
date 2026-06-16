@@ -8,6 +8,8 @@ const KIND_META = {
   paper: { icon: '📄', tone: 'gold', label: 'Paper' },
   task: { icon: '✅', tone: 'blue', label: 'Task' },
   event: { icon: '📅', tone: 'gray', label: 'Event' },
+  workshop: { icon: '🎓', tone: 'blue', label: 'Workshop' },
+  meetup: { icon: '🤝', tone: 'blue', label: 'Meetup' },
   pathway: { icon: '🧭', tone: 'gray', label: 'Pathway' },
 };
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -51,6 +53,11 @@ export default function Calendar() {
 
   const remove = (it) =>
     api.deleteEvent(it.id).then(() => { toast.success('Deadline removed'); load(); }).catch((e) => toast.error(e.message));
+
+  const rsvp = (it) =>
+    api.rsvpEvent(it.eventId, !it.going)
+      .then((r) => setItems((cur) => cur.map((x) => (x.eventId === it.eventId && x.kind === it.kind ? { ...x, going: r.going, rsvpCount: r.rsvpCount } : x))))
+      .catch((e) => toast.error(e.message));
 
   return (
     <div>
@@ -106,7 +113,7 @@ export default function Calendar() {
               <p className="muted" style={{ margin: 0 }}>Nothing due this day.</p>
             ) : (
               <div className="stack">
-                {byDate[selected].map((it) => <CalRow key={it.id} it={it} onRemove={remove} />)}
+                {byDate[selected].map((it) => <CalRow key={it.id} it={it} onRemove={remove} onRsvp={rsvp} />)}
               </div>
             )}
           </div>
@@ -118,7 +125,7 @@ export default function Calendar() {
             <p className="muted" style={{ margin: 0 }}>No upcoming deadlines. Enjoy the calm 🌤</p>
           ) : (
             <div className="stack">
-              {upcoming.map((it) => <CalRow key={it.id} it={it} onRemove={remove} showDate />)}
+              {upcoming.map((it) => <CalRow key={it.id} it={it} onRemove={remove} onRsvp={rsvp} showDate />)}
             </div>
           )}
         </Card>
@@ -127,7 +134,7 @@ export default function Calendar() {
   );
 }
 
-function CalRow({ it, onRemove, showDate }) {
+function CalRow({ it, onRemove, onRsvp, showDate }) {
   const meta = KIND_META[it.kind] || KIND_META.event;
   const overdue = it.date < new Date().toISOString().slice(0, 10);
   return (
@@ -138,8 +145,14 @@ function CalRow({ it, onRemove, showDate }) {
         <div className="muted" style={{ fontSize: '0.78rem' }}>
           {showDate && <>{new Date(`${it.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · </>}
           {it.context}{it.byName ? ` · set by ${it.byName}` : ''}
+          {it.rsvpable && it.rsvpCount > 0 && ` · ${it.rsvpCount} going`}
         </div>
       </div>
+      {it.rsvpable && onRsvp && (
+        <button className={`btn btn-sm ${it.going ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onRsvp(it)}>
+          {it.going ? '✓ Going' : 'RSVP'}
+        </button>
+      )}
       <Badge tone={overdue ? 'red' : meta.tone}>{overdue ? 'overdue' : meta.label}</Badge>
       {it.canDelete && <button className="link-btn" onClick={() => onRemove(it)} aria-label="Delete">✕</button>}
     </div>

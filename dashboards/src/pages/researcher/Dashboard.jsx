@@ -39,6 +39,7 @@ export default function Dashboard() {
         ))}
       </p>
 
+      <MemberStats />
       <Pathway />
       <LatestNews />
       <UpcomingDeadlines />
@@ -51,6 +52,33 @@ export default function Dashboard() {
 
       <CertificateGenerator user={user} />
     </div>
+  );
+}
+
+// At-a-glance member stats (LinkedIn-style): profile views, posts, projects, …
+function MemberStats() {
+  const [s, setS] = useState(null);
+  useEffect(() => { api.myStats().then(setS).catch(() => {}); }, []);
+  if (!s) return null;
+  const stats = [
+    ['Profile views', s.profileViews],
+    ['Posts', s.posts],
+    ['Projects', s.projects],
+    ['Groups', s.groups],
+    ['Publications', s.publications],
+    ['Referrals', s.referrals],
+  ];
+  return (
+    <Card style={{ marginBottom: '1.25rem' }}>
+      <div className="row" style={{ gap: 'clamp(1rem, 4vw, 2.5rem)', flexWrap: 'wrap' }}>
+        {stats.map(([label, n]) => (
+          <div key={label} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--brand-deep)' }}>{n}</div>
+            <div className="muted" style={{ fontSize: '0.78rem' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

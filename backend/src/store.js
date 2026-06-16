@@ -376,6 +376,29 @@ export function getPublicProfile(key) {
   return publicProfileOf(u);
 }
 
+// Count a profile view (skipping the owner's own visits). Low-stakes vanity
+// metric; the debounced persist coalesces bursts.
+export function recordProfileView(key, viewerId) {
+  const u = getUserById(key) || getUserBySlug(key);
+  if (!u || !isVisible(u)) return;
+  if (viewerId && viewerId === u.id) return;
+  u.profileViews = (u.profileViews || 0) + 1;
+  schedulePersist();
+}
+
+// Personal stats for the member's own dashboard (LinkedIn-style).
+export function myStats(userId) {
+  const u = getUserById(userId);
+  return {
+    profileViews: u?.profileViews || 0,
+    posts: postCountFor(userId),
+    projects: db.projects.filter((p) => p.members.includes(userId)).length,
+    groups: (db.groups || []).filter((g) => (g.members || []).includes(userId)).length,
+    referrals: db.researchers.filter((r) => r.referredBy === userId).length,
+    publications: db.publications.filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId)).length,
+  };
+}
+
 export function listProfiles() {
   return [...db.editors, ...db.researchers]
     .filter(isVisible)
@@ -2442,6 +2465,7 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId, gro
     projectId: project?.id || null,
     chapterId: chapter?.id || null,
     groupId: group?.id || null,
+    rsvps: [],
     createdBy: userId,
     createdByName: u.name,
     at: now(),
@@ -2461,6 +2485,18 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId, gro
   recordAudit(u, 'add_event', `${ev.title} (${ev.dueAt})`);
   schedulePersist();
   return ev;
+}
+
+// RSVP to (or un-RSVP from) an event.
+export function rsvpEvent({ eventId, userId, going }) {
+  const ev = (db.events || []).find((e) => e.id === eventId);
+  if (!ev) throw httpError(404, 'Event not found');
+  if (!Array.isArray(ev.rsvps)) ev.rsvps = [];
+  const i = ev.rsvps.indexOf(userId);
+  if (going && i === -1) ev.rsvps.push(userId);
+  if (!going && i !== -1) ev.rsvps.splice(i, 1);
+  schedulePersist();
+  return { eventId, rsvpCount: ev.rsvps.length, going: ev.rsvps.includes(userId) };
 }
 
 export function deleteEvent({ id, userId }) {
@@ -2493,6 +2529,11 @@ export function calendarFor(userId) {
       id: ev.id, date: ev.dueAt, title: ev.title, kind: ev.type,
       context: project?.title || chapter?.name || group?.name || 'All Synthica', byName: ev.createdByName,
       canDelete: ev.createdBy === userId,
+      // RSVP applies to gatherings (not task/paper deadlines).
+      eventId: ev.id,
+      rsvpable: ['event', 'workshop', 'meetup'].includes(ev.type),
+      rsvpCount: (ev.rsvps || []).length,
+      going: (ev.rsvps || []).includes(userId),
     });
   }
   for (const p of myProjects)

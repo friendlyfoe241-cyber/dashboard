@@ -10,7 +10,14 @@ import express from 'express';
 import cors from 'cors';
 
 import { login, issueToken, issuePurposeToken, verifyPurposeToken } from './src/auth.js';
-import { requireAuth } from './src/auth.js';
+import { requireAuth, userFromToken } from './src/auth.js';
+
+// Resolve the user from a Bearer token if present, without requiring it (used
+// for public routes that behave slightly differently when signed in).
+const optionalUser = (req) => {
+  const h = req.headers.authorization || '';
+  return h.startsWith('Bearer ') ? userFromToken(h.slice(7)) : null;
+};
 import * as store from './src/store.js';
 import * as notify from './src/notify.js';
 import { sendEmail, emailEnabled } from './src/email.js';
@@ -168,8 +175,13 @@ app.get('/api/profiles', wrap((_req, res) => res.json(store.listProfiles())));
 app.get('/api/profiles/:id', wrap((req, res) => {
   const p = store.getPublicProfile(req.params.id);
   if (!p) return res.status(404).json({ error: 'Profile not found' });
+  // Count the view (skips the owner's own visits when signed in).
+  store.recordProfileView(req.params.id, optionalUser(req)?.id);
   res.json(p);
 }));
+
+// Personal stats (profile views, posts, …) for the signed-in member.
+app.get('/api/me/stats', requireAuth, wrap((req, res) => res.json(store.myStats(req.user.id))));
 
 // --- Admin: analytics, application review, audit, backup -------------------
 // The platform Admin account passes every admin gate — it sees everything.
@@ -629,8 +641,12 @@ app.post('/api/researcher/listings', requireAuth, researcherOnly, wrap((req, res
 app.get('/api/calendar', requireAuth, wrap((req, res) => res.json(store.calendarFor(req.user.id))));
 
 app.post('/api/events', requireAuth, wrap((req, res) => {
-  const { title, type, dueAt, projectId, chapterId } = req.body || {};
-  res.json(store.addEvent({ userId: req.user.id, title, type, dueAt, projectId, chapterId }));
+  const { title, type, dueAt, projectId, chapterId, groupId } = req.body || {};
+  res.json(store.addEvent({ userId: req.user.id, title, type, dueAt, projectId, chapterId, groupId }));
+}));
+
+app.post('/api/events/:id/rsvp', requireAuth, wrap((req, res) => {
+  res.json(store.rsvpEvent({ eventId: req.params.id, userId: req.user.id, going: !!(req.body || {}).going }));
 }));
 
 app.delete('/api/events/:id', requireAuth, wrap((req, res) => {

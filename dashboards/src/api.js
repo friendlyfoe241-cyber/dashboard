@@ -154,7 +154,9 @@ export const api = {
   chooseIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/choose`, { method: 'POST' }),
   calendar: () => request('/calendar'),
   addEvent: (body) => request('/events', { method: 'POST', body }),
+  rsvpEvent: (id, going) => request(`/events/${id}/rsvp`, { method: 'POST', body: { going } }),
   deleteEvent: (id) => request(`/events/${id}`, { method: 'DELETE' }),
+  myStats: () => request('/me/stats'),
   // research groups
   groups: () => request('/groups'),
   group: (id) => request(`/groups/${id}`),
