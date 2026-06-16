@@ -168,6 +168,7 @@ function LinksCard({ project, onChange }) {
   const [form, setForm] = useState({ label: '', url: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(null);
   const links = project.links || [];
 
   const add = async (e) => {
@@ -185,6 +186,18 @@ function LinksCard({ project, onChange }) {
     }
   };
 
+  const remove = async (linkId) => {
+    setDeleting(linkId);
+    try {
+      await api.deleteProjectLink(project.id, linkId);
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <Card>
       <h3>Paper &amp; media</h3>
@@ -193,7 +206,18 @@ function LinksCard({ project, onChange }) {
       <div className="stack" style={{ marginTop: '0.5rem' }}>
         {links.map((l) => (
           <div key={l.id} className="info-block">
-            <a href={l.url} target="_blank" rel="noreferrer">{l.label}</a>
+            <div className="card-row">
+              <a href={l.url} target="_blank" rel="noreferrer">{l.label}</a>
+              <button
+                className="link-btn muted"
+                style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}
+                onClick={() => remove(l.id)}
+                disabled={deleting === l.id}
+                title="Delete link"
+              >
+                {deleting === l.id ? '…' : '✕'}
+              </button>
+            </div>
             <Embed url={l.url} height={300} title={l.label} />
           </div>
         ))}

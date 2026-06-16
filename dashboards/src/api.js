@@ -144,6 +144,7 @@ export const api = {
   completeTask: (id, taskId, done) => request(`/researcher/projects/${id}/tasks/${taskId}/complete`, { method: 'POST', body: { done } }),
   addAnnouncement: (id, body) => request(`/researcher/projects/${id}/announcements`, { method: 'POST', body }),
   addProjectLink: (id, body) => request(`/researcher/projects/${id}/links`, { method: 'POST', body }),
+  deleteProjectLink: (id, linkId) => request(`/researcher/projects/${id}/links/${linkId}`, { method: 'DELETE' }),
   inviteToProject: (id, email) => request(`/researcher/projects/${id}/invite`, { method: 'POST', body: { email } }),
   inviteMemberById: (id, userId) => request(`/researcher/projects/${id}/invite-member`, { method: 'POST', body: { userId } }),
   setProjectRole: (id, userId, title) => request(`/researcher/projects/${id}/roles`, { method: 'POST', body: { userId, title } }),

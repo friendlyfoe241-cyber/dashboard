@@ -740,6 +740,10 @@ app.post('/api/researcher/projects/:id/links', requireAuth, researcherOnly, wrap
   res.json(store.addProjectLink({ projectId: req.params.id, userId: req.user.id, label, url }));
 }));
 
+app.delete('/api/researcher/projects/:id/links/:linkId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteProjectLink({ projectId: req.params.id, linkId: req.params.linkId, userId: req.user.id }));
+}));
+
 // Lead assigns a member's role (auto-shown on their profile) + suggested people.
 app.post('/api/researcher/projects/:id/roles', requireAuth, researcherOnly, wrap((req, res) => {
   const { userId, title } = req.body || {};
