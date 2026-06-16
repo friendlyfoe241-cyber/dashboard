@@ -402,7 +402,7 @@ function Archive() {
     api.adminPublications().then(setPubs).catch(() => {});
     api.adminArchiveQueue().then(setQueue).catch(() => {});
   }, []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const verify = (id, status) =>
     api.verifyPublication(id, status).then(() => { toast.success(`Paper ${status}`); load(); }).catch((e) => toast.error(e.message));
@@ -603,7 +603,7 @@ function Applications() {
   const toast = useToast();
   const [apps, setApps] = useState([]);
   const load = useCallback(() => { api.adminApplications().then(setApps).catch(() => {}); }, []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const review = (id, status, assignTag) =>
     api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
@@ -714,7 +714,7 @@ function ProgramsPanel({ isDirector }) {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' });
   const load = useCallback(() => { api.adminPrograms().then(setPrograms).catch(() => {}); }, []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const reviewApp = (id, status) =>
     api.reviewProgramApplication(id, status).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));

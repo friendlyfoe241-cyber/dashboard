@@ -40,6 +40,7 @@ export default function Dashboard() {
       </p>
 
       <Pathway />
+      <LatestNews />
       <UpcomingDeadlines />
       <Feed />
 
@@ -53,20 +54,49 @@ export default function Dashboard() {
   );
 }
 
+// Latest announcements widget — the freshest few, with a link to the full page.
+function LatestNews() {
+  const [news, setNews] = useState(null);
+  useEffect(() => { api.news().then(setNews).catch(() => setNews([])); }, []);
+  if (!news || news.length === 0) return null;
+  const fmt = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return (
+    <Card style={{ marginBottom: '1.25rem' }}>
+      <div className="card-row" style={{ marginBottom: '0.6rem' }}>
+        <div className="section-head" style={{ margin: 0 }}><div className="section-badge">📣 Latest news</div></div>
+        <Link to="/researcher/news" className="muted" style={{ fontSize: '0.82rem' }}>View all →</Link>
+      </div>
+      <div className="stack">
+        {news.slice(0, 3).map((n) => (
+          <div key={n.id} className="info-block" style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+            {n.bannerUrl && <img src={imageSrc(n.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flex: 'none' }} />}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700 }}>{n.title}</div>
+              <div className="muted" style={{ fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</div>
+              <div className="muted" style={{ fontSize: '0.74rem' }}>{n.authorName} · {fmt(n.at)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // Personal guided research to-dos (title, deliverable, due date). This is the
 // single progress tracker — it replaces the old hardcoded "progress checklist".
 function Pathway() {
   const { user } = useAuth();
-  
-  // Don't render until user is loaded
-  if (!user) return null;
-  
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [form, setForm] = useState({ title: '', deliverable: '', dueAt: '' });
-  const load = useCallback(() => api.pathway().then(setItems).catch(() => {}), []);
-  useEffect(load, [load]);
+  // Note: braces so the effect returns undefined — `useEffect(load)` where load
+  // returns the fetch Promise crashes under StrictMode ("destroy is not a function").
+  const load = useCallback(() => { api.pathway().then(setItems).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  // Hooks above must run unconditionally (parent already guards a null user).
+  if (!user) return null;
 
   const add = async (e) => {
     e.preventDefault();
@@ -451,8 +481,8 @@ function ChapterPanel() {
   const [form, setForm] = useState({ name: '', email: '', discord: '' });
   const [busy, setBusy] = useState(false);
 
-  const load = () => api.chapter().then(setChapter).catch((e) => setError(e.message));
-  useEffect(load, []);
+  const load = useCallback(() => { api.chapter().then(setChapter).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { load(); }, [load]);
 
   if (error) return null; // not a chapter leader / no chapter
   if (!chapter) return null;

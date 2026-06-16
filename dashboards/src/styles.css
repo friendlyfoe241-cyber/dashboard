@@ -765,9 +765,15 @@ textarea {
 .archive-body { max-width: 860px; margin: 0 auto; padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 3rem; }
 
 /* ---------- Login v2 (portal sign-in) ---------- */
+/* Fills the viewport exactly — the page itself never scrolls; the card only
+   scrolls internally as a last resort on very short screens. */
 .login-v2 {
   position: relative;
   overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
   background: linear-gradient(160deg, #0c2d54 0%, #1a6bb5 45%, #4999e8 80%, #99ccff 100%);
 }
 .aurora { position: absolute; inset: 0; pointer-events: none; filter: blur(60px); opacity: 0.55; }
@@ -789,7 +795,8 @@ textarea {
   gap: clamp(1.5rem, 5vw, 4rem);
   width: 100%;
   max-width: 1040px;
-  padding: 2rem 1.5rem;
+  max-height: 100dvh;
+  padding: clamp(0.75rem, 2vh, 1.75rem) 1.5rem;
 }
 .login-aside {
   flex: 1 1 0;
@@ -818,7 +825,7 @@ textarea {
   color: rgba(255, 255, 255, 0.82);
   max-width: 440px; margin: 0 0 1.5rem;
 }
-.login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
 .login-aside-list li {
   display: flex; align-items: center; gap: 0.7rem;
   font-size: 0.92rem; font-weight: 500;
@@ -835,14 +842,27 @@ textarea {
 .login-card-v2 {
   position: relative;
   z-index: 1;
-  flex: 0 0 420px;
-  max-width: 420px;
+  flex: 0 0 410px;
+  max-width: 410px;
   width: 100%;
+  /* Tighter than the base card so every step fits the viewport without scroll. */
+  padding: 1.6rem 1.75rem;
+  max-height: calc(100dvh - 1.5rem);
+  overflow-y: auto;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 20px 60px rgba(4, 30, 66, 0.35);
   animation: card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Compact the card's internals so the (tallest) sign-up step fits one screen. */
+.login-card-v2 h1 { font-size: 1.55rem; }
+.login-card-v2 p.sub { margin-bottom: 0.9rem; }
+.login-card-v2 .field { margin-bottom: 0.6rem; }
+.login-card-v2 .login-brand { margin-bottom: 0.6rem; }
+.login-card-v2 .login-divider { margin: 0.7rem 0; }
+.login-card-v2 .login-hint { margin-top: 0.7rem; }
+.login-card-v2 .login-foot { margin-top: 0.7rem; }
+.login-card-v2 .login-demo { margin-top: 0.7rem; }
 /* Single-column on narrow screens: hide the info panel, keep the clean card. */
 @media (max-width: 860px) {
   .login-split { flex-direction: column; max-width: 420px; padding: 1.5rem; }

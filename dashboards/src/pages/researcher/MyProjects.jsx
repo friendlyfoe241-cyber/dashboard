@@ -43,7 +43,7 @@ function Applicants() {
   const toast = useToast();
   const [apps, setApps] = useState([]);
   const load = useCallback(() => api.listingApplications().then(setApps).catch(() => {}), []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
   const review = (a, status) => api.reviewListingApplication(a.id, status).then(() => { toast.success(`Applicant ${status}`); load(); }).catch((e) => toast.error(e.message));
   if (!apps.length) return null;
   return (

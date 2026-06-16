@@ -18,7 +18,7 @@ export default function ResearchHub() {
   const [error, setError] = useState('');
 
   const load = useCallback(() => api.listings().then(setListings).catch((e) => setError(e.message)), []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const categories = ['All', ...new Set(listings.map((l) => l.category))];
   const shown = filter === 'All' ? listings : listings.filter((l) => l.category === filter);
@@ -111,7 +111,7 @@ function MyListings({ onChanged }) {
   const [mine, setMine] = useState([]);
   const [editing, setEditing] = useState(null); // listing id
   const load = useCallback(() => api.myListings().then(setMine).catch(() => {}), []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const refresh = () => { load(); onChanged(); };
   const review = (a, status) =>

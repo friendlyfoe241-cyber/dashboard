@@ -52,7 +52,7 @@ export default function ApplicationHub() {
   const [busy, setBusy] = useState(false);
 
   const load = () => api.myApplications().then(setApps).catch((e) => setError(e.message));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   // Prefill name/email/discord from the logged-in user when the role changes.
   useEffect(() => {

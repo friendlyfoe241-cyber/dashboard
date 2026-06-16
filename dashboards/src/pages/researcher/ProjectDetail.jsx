@@ -19,7 +19,7 @@ export default function ProjectDetail() {
     api.project(id).then(setProject).catch((e) => setError(e.message));
   }, [id]);
 
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   if (error) return <div className="login-error">{error}</div>;
   if (!project) return <p className="muted">Loading project…</p>;

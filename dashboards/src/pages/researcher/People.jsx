@@ -9,7 +9,7 @@ export default function People() {
   const [people, setPeople] = useState([]);
   const [q, setQ] = useState('');
   const load = useCallback(() => api.people().then(setPeople).catch(() => {}), []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const toggle = (p) => (p.following ? api.unfollow(p.id) : api.follow(p.id)).then(load);
   const needle = q.toLowerCase();

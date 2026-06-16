@@ -16,7 +16,7 @@ export default function MyJournal() {
     api.mySubmissions().then(setSubs).catch((e) => setError(e.message));
     api.myPublications().then(setPubs).catch(() => {});
   }, []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div>

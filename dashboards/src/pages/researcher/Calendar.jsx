@@ -24,7 +24,7 @@ export default function Calendar() {
   const [open, setOpen] = useState(false);
 
   const load = useCallback(() => api.calendar().then(setItems).catch(() => {}), []);
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const byDate = useMemo(() => {
     const m = {};
