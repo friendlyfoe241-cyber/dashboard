@@ -16,6 +16,7 @@ import Programs from './Programs.jsx';
 import Groups from './Groups.jsx';
 import GroupDetail from './GroupDetail.jsx';
 import Competitions from './Competitions.jsx';
+import News from './News.jsx';
 import Calendar from './Calendar.jsx';
 import Drive from './Drive.jsx';
 import Tools from '../Tools.jsx';
@@ -55,6 +56,7 @@ export default function ResearcherApp() {
     { to: '/researcher/projects', label: 'My Projects' },
     { to: '/researcher/groups', label: 'Groups' },
     { to: '/researcher/competitions', label: 'Competitions' },
+    { to: '/researcher/news', label: 'News' },
     { to: '/researcher/calendar', label: 'Calendar' },
     { to: '/researcher/drive', label: 'Drive' },
     { to: '/researcher/journal', label: 'Synthica Journal' },
@@ -81,6 +83,7 @@ export default function ResearcherApp() {
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />
         <Route path="competitions" element={<Competitions />} />
+        <Route path="news" element={<News />} />
         <Route path="account" element={<Account />} />
         {/* Deep-link routes kept so existing links still resolve. */}
         <Route path="hub" element={<ResearchHub />} />

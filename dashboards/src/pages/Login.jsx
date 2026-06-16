@@ -16,6 +16,19 @@ const DEMO_ACCOUNTS = [
   { label: 'Independent researcher', email: 'testindependent@synthica.org' },
 ];
 
+// What's inside the portal — shown on the login's left panel so first-time
+// visitors know what they're signing into.
+const PORTAL_FEATURES = [
+  ['💬', 'Live community feed & discussions'],
+  ['🔬', 'Research groups & projects'],
+  ['👥', 'Global member directory'],
+  ['🎓', 'Programs & cohorts'],
+  ['🏆', 'Competitions & opportunities'],
+  ['📅', 'Events, RSVPs & workshops'],
+  ['📜', 'Certificates & recognition'],
+  ['📣', 'Announcements & news'],
+];
+
 // Static layout wrapper. Must live at module scope: defining it inside Login
 // would create a new component type on every render, making React unmount and
 // remount the whole card on each keystroke (replaying the entry animation,
@@ -24,10 +37,25 @@ function Shell({ children }) {
   return (
     <div className="login-wrap login-v2">
       <Aurora />
-      <div className="login-card login-card-v2">
-        <div className="login-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
-        {children}
-        <div className="login-foot"><Link to="/archive">Browse the Synthica Archive →</Link></div>
+      <div className="login-split">
+        <aside className="login-aside">
+          <span className="login-aside-badge">✦ Open to all students — free</span>
+          <h2 className="login-aside-title">Everything Synthica,<br /><span className="login-aside-em">in one place</span></h2>
+          <p className="login-aside-sub">
+            Your unified home for community, programs, research, and opportunities.
+            Connect with members worldwide, join events, and never miss an update.
+          </p>
+          <ul className="login-aside-list">
+            {PORTAL_FEATURES.map(([icon, label]) => (
+              <li key={label}><span className="login-aside-ico" aria-hidden="true">{icon}</span>{label}</li>
+            ))}
+          </ul>
+        </aside>
+        <div className="login-card login-card-v2">
+          <div className="login-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
+          {children}
+          <div className="login-foot"><Link to="/archive">Browse the Synthica Archive →</Link></div>
+        </div>
       </div>
     </div>
   );

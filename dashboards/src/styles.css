@@ -780,13 +780,74 @@ textarea {
 @keyframes drift3 { to { transform: translate(60px, -70px) scale(1.05); } }
 @media (prefers-reduced-motion: reduce) { .aurora-blob { animation: none; } }
 
+/* Two-column login: info panel (left) + sign-in card (right). */
+.login-split {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: clamp(1.5rem, 5vw, 4rem);
+  width: 100%;
+  max-width: 1040px;
+  padding: 2rem 1.5rem;
+}
+.login-aside {
+  flex: 1 1 0;
+  min-width: 0;
+  color: #fff;
+  animation: card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.login-aside-badge {
+  display: inline-block;
+  background: rgba(255, 215, 0, 0.16);
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  color: #ffe480;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.8rem; border-radius: 999px;
+  margin-bottom: 1.1rem;
+}
+.login-aside-title {
+  font-size: clamp(1.9rem, 4vw, 2.9rem);
+  font-weight: 800; line-height: 1.05; margin: 0 0 0.9rem;
+  letter-spacing: -0.01em; color: #fff;
+}
+.login-aside-em { color: var(--gold); }
+.login-aside-sub {
+  font-size: 0.98rem; line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 440px; margin: 0 0 1.5rem;
+}
+.login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.login-aside-list li {
+  display: flex; align-items: center; gap: 0.7rem;
+  font-size: 0.92rem; font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+}
+.login-aside-ico {
+  flex: none;
+  width: 34px; height: 34px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 1rem;
+}
 .login-card-v2 {
   position: relative;
   z-index: 1;
+  flex: 0 0 420px;
+  max-width: 420px;
+  width: 100%;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 20px 60px rgba(4, 30, 66, 0.35);
   animation: card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Single-column on narrow screens: hide the info panel, keep the clean card. */
+@media (max-width: 860px) {
+  .login-split { flex-direction: column; max-width: 420px; padding: 1.5rem; }
+  .login-aside { display: none; }
+  .login-card-v2 { flex: 1 1 auto; }
 }
 @keyframes card-in { from { opacity: 0; transform: translateY(14px) scale(0.985); } }
 @media (prefers-reduced-motion: reduce) { .login-card-v2 { animation: none; } }
