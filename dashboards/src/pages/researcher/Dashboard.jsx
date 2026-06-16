@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
-import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
+import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import OnboardingWizard from '../../components/OnboardingWizard.jsx';
 import CertificateGenerator from '../../components/CertificateGenerator.jsx';
@@ -256,24 +256,38 @@ function Feed() {
   const [items, setItems] = useState([]);
   useEffect(() => { api.feed().then(setItems).catch(() => {}); }, []);
   if (!items?.length) return null;
-  const tone = { news: 'gray', following: 'blue', suggested: 'gold' };
-  const label = { news: 'announcement', following: 'from your network', suggested: 'for you' };
+  const tone = { news: 'gray', following: 'blue', suggested: 'gold', activity: 'blue', chapter: 'gray' };
+  const label = { news: 'announcement', following: 'from your network', suggested: 'for you', activity: 'activity', chapter: 'chapter' };
   return (
     <section style={{ marginBottom: '2rem' }}>
       <div className="section-head"><div className="section-badge">Your feed</div></div>
       <div className="stack">
         {items.map((it, i) => (
-          <Card key={i}>
-            {it.bannerUrl && <img src={imageSrc(it.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 12, marginBottom: '0.6rem', maxHeight: 200, objectFit: 'cover' }} />}
-            <div className="row" style={{ gap: '0.4rem' }}>
-              <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type || 'update'}</Badge>
-              <strong>{it.title || 'Untitled'}</strong>
-            </div>
-            <div style={{ marginTop: '0.25rem' }}>
-              {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body || ''}</a> : (it.body || '')}
-            </div>
-            {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {it.at ? new Date(it.at).toLocaleDateString() : ''}</div>}
-          </Card>
+          it.type === 'activity' ? (
+            <Card key={i}>
+              <div className="row" style={{ alignItems: 'center' }}>
+                <Pfp name={it.actor?.name} url={imageSrc(it.actor?.avatarUrl)} size="xs" />
+                <div style={{ flex: 1 }}>
+                  {it.link
+                    ? <Link to={it.link}>{it.title}</Link>
+                    : <span>{it.title}</span>}
+                  <div className="muted" style={{ fontSize: '0.74rem' }}>{it.at ? new Date(it.at).toLocaleDateString() : ''}</div>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <Card key={i}>
+              {it.bannerUrl && <img src={imageSrc(it.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 12, marginBottom: '0.6rem', maxHeight: 200, objectFit: 'cover' }} />}
+              <div className="row" style={{ gap: '0.4rem' }}>
+                <Badge tone={tone[it.type] || 'gray'}>{label[it.type] || it.type || 'update'}</Badge>
+                <strong>{it.title || 'Untitled'}</strong>
+              </div>
+              <div style={{ marginTop: '0.25rem' }}>
+                {it.doi ? <a href={`/article.html?doi=${encodeURIComponent(it.doi)}`} target="_blank" rel="noreferrer">{it.body || ''}</a> : (it.body || '')}
+              </div>
+              {it.by && <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{it.by} · {it.at ? new Date(it.at).toLocaleDateString() : ''}</div>}
+            </Card>
+          )
         ))}
       </div>
     </section>

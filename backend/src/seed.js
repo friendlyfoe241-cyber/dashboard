@@ -728,4 +728,7 @@ export const posts = [
   },
 ];
 
+// Activity stream (followers see what people they follow do). Populated at runtime.
+export const activities = [];
+
 export const allUsers = () => [...editors, ...researchers];

@@ -41,6 +41,7 @@ function buildSeed() {
     groups: clone(seed.groups || []),
     competitions: clone(seed.competitions || []),
     posts: clone(seed.posts || []),
+    activities: clone(seed.activities || []),
   };
 }
 
@@ -216,6 +217,24 @@ function pickOne(role, category) {
 
 function log(sub, event) {
   sub.history.push({ at: now(), ...event });
+}
+
+// --- activity stream (followers see what people they follow do) ------------
+// Records a public-ish action (joined a group, advanced a paper, became a lead)
+// so followers can see it in their feed. Capped to keep the snapshot bounded.
+function recordActivity(actorId, type, text, link) {
+  if (!actorId) return;
+  if (!Array.isArray(db.activities)) db.activities = [];
+  db.activities.push({ id: uid('act'), actorId, type, text, link: link || '', at: now() });
+  if (db.activities.length > 3000) db.activities = db.activities.slice(-3000);
+}
+
+// Announce a meaningful new role (Lead Researcher / Chapter Leader) to followers.
+function recordRoleActivity(userId, grantedTags) {
+  const ROLE_TAGS = { lead_researcher: 'Lead Researcher', chapter_leader: 'Chapter Leader', independent_researcher: 'Independent Researcher' };
+  for (const t of grantedTags || []) {
+    if (ROLE_TAGS[t]) recordActivity(userId, 'role', `became a ${ROLE_TAGS[t]}`, `/p/${getUserById(userId)?.slug || userId}`);
+  }
 }
 
 // --- read API --------------------------------------------------------------
@@ -567,10 +586,12 @@ export function adminSetUserRole({ userId, kind, role, category, addTags, remove
   if (role !== undefined) u.role = role || null;
   if (category !== undefined) u.category = category || null;
   if (!Array.isArray(u.tags)) u.tags = [];
-  if (Array.isArray(addTags)) addTags.forEach((t) => { if (!u.tags.includes(t)) u.tags.push(t); });
+  const grantedAdmin = [];
+  if (Array.isArray(addTags)) addTags.forEach((t) => { if (!u.tags.includes(t)) { u.tags.push(t); grantedAdmin.push(t); } });
   if (Array.isArray(removeTags)) u.tags = u.tags.filter((t) => !removeTags.includes(t));
   u.approved = true; // an admin acting on the account activates it
   if ((addTags || []).includes('lead_researcher')) restoreLegacyProject(u, actor?.id);
+  recordRoleActivity(u.id, grantedAdmin);
   recordAudit(actor, 'set_role', `${u.name}: kind=${u.kind} role=${u.role || '-'} tags=[${u.tags.join(',')}]`);
   schedulePersist();
   const { password, twoFactorSecret, ...safe } = u;
@@ -1266,6 +1287,22 @@ function advance(sub, nextStage, note) {
     sub.assignee = null;
   }
   log(sub, { type: 'advance', to: nextStage, notifyDirector: true, label: note.label, decision: note.decision });
+  // Followers see the author's paper move to a later round of publishing.
+  const ROUND_NAME = {
+    [STAGE.SENIOR_SCREEN]: 'senior editor screening',
+    [STAGE.ASSOCIATE]: 'associate editor revisions',
+    [STAGE.SENIOR_FINAL]: 'senior editor final review',
+    [STAGE.CHIEF]: 'editor-in-chief review',
+    [STAGE.PUBLISHED]: 'publication 🎉',
+  };
+  if (sub.submittedBy) {
+    recordActivity(
+      sub.submittedBy,
+      nextStage === STAGE.PUBLISHED ? 'published' : 'paper_advance',
+      `advanced their paper “${sub.title}” to ${ROUND_NAME[nextStage] || 'the next round'}`,
+      nextStage === STAGE.PUBLISHED ? '/archive' : `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
+    );
+  }
   notifyMove({
     title: sub.title,
     paperId: sub.id,
@@ -1439,7 +1476,7 @@ export function setApplicationStatus({ id, status, reviewerId, assignTag }) {
       u.onboardingRejected = false;
       if (tag) {
         if (!Array.isArray(u.tags)) u.tags = [];
-        if (!u.tags.includes(tag)) u.tags.push(tag);
+        if (!u.tags.includes(tag)) { u.tags.push(tag); recordRoleActivity(u.id, [tag]); }
         a.assignedTag = tag;
         // Approving a returning lead restores the project they claimed.
         if (tag === 'lead_researcher') restoreLegacyProject(u, reviewerId);
@@ -1472,6 +1509,7 @@ export function auditorSetTags({ userId, addTags, removeTags, actor }) {
   if (!Array.isArray(u.tags)) u.tags = [];
   const granted = (Array.isArray(addTags) ? addTags : []).filter((t) => RESEARCHER_TAGS.has(t) && !u.tags.includes(t));
   granted.forEach((t) => u.tags.push(t));
+  recordRoleActivity(u.id, granted);
   (Array.isArray(removeTags) ? removeTags : []).forEach((t) => { u.tags = u.tags.filter((x) => x !== t); });
   if ((addTags || []).length) u.approved = true; // granting a role activates the member
   if (granted.includes('lead_researcher')) {
@@ -2051,6 +2089,18 @@ export function feedFor(userId) {
   for (const c of chaptersOf(userId))
     for (const ann of c.announcements || [])
       items.push({ type: 'chapter', title: `${c.name}: ${ann.title}`, body: ann.body, by: ann.byName, at: ann.at });
+  // Activity from people you follow (and yourself): joined a group, became a
+  // lead, advanced a paper to a later round, etc.
+  for (const a of db.activities || []) {
+    if (a.actorId !== userId && !following.has(a.actorId)) continue;
+    const actor = getUserById(a.actorId);
+    items.push({
+      type: 'activity',
+      actor: { name: actor?.name || 'Member', slug: actor?.slug || a.actorId, avatarUrl: actor?.avatarUrl || '' },
+      title: `${actor?.name || 'A member'} ${a.text}`,
+      link: a.link || '', at: a.at,
+    });
+  }
   for (const p of db.publications) {
     if (p.authorUserId && following.has(p.authorUserId)) {
       items.push({ type: 'following', title: `New paper from ${getUserById(p.authorUserId)?.name || 'someone you follow'}`, body: p.title, doi: p.doi, at: p.publishedAt });
@@ -2803,6 +2853,7 @@ export function createGroup({ userId, name, description, category, bannerUrl }) 
   };
   db.groups.push(g);
   recordAudit(u, 'create_group', g.name);
+  recordActivity(userId, 'group_founded', `founded the research group ${g.name}`, `/researcher/groups/${g.id}`);
   schedulePersist();
   return g;
 }
@@ -2813,6 +2864,7 @@ export function joinGroup({ groupId, userId }) {
   if (!g.members.includes(userId)) {
     g.members.push(userId);
     if (userId !== g.leaderId) pushNotif(g.leaderId, { type: 'group', title: `${getUserById(userId)?.name || 'Someone'} joined ${g.name}`, body: '', link: `/researcher/groups/${g.id}` });
+    if (userId !== g.leaderId) recordActivity(userId, 'group_joined', `joined the research group ${g.name}`, `/researcher/groups/${g.id}`);
   }
   schedulePersist();
   return groupDetail(groupId, userId);
@@ -2934,9 +2986,10 @@ export function createProject({ userId, title, category, description }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can create projects');
   if (!title?.trim()) throw httpError(400, 'A title is required');
-  const p = { id: `proj_${Date.now()}`, title: title.trim(), category: category || '', description: (description || '').trim(), leadId: userId, members: [userId], announcements: [], tasks: [], links: [], ideas: [] };
+  const p = { id: `proj_${Date.now()}`, title: title.trim(), category: category || '', description: (description || '').trim(), leadId: userId, members: [userId], announcements: [], tasks: [], links: [], ideas: [], roles: [] };
   db.projects.push(p);
   recordAudit({ id: userId, name: u.name }, 'create_project', p.title);
+  recordActivity(userId, 'project_started', `started the project ${p.title}`, `/researcher/project/${p.id}`);
   schedulePersist();
   return p;
 }
