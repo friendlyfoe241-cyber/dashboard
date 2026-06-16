@@ -57,6 +57,7 @@ export const SCHEMAS = {
     ['issue', 'num'], ['pages'], ['pdfUrl'], ['license'], ['openAccess', 'bool'],
     ['sections', 'json'], ['metrics', 'json'], ['citationCount', 'num'],
     ['authorUserIds', 'json'], ['source'], ['verified', 'bool'], ['addedBy'], ['sourceUrl'], ['featured', 'bool'],
+    ['references', 'json'],
   ],
   Projects: [
     ['id'], ['title'], ['category'], ['description'], ['leadId'],

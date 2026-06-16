@@ -51,6 +51,25 @@ const EDITOR_ROLES = ['reviews', 'associate', 'senior', 'chief', 'director', 'au
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 const ARTICLE_TYPES = ['Article', 'Letter', 'Analysis', 'Review', 'Preprint', 'Dataset', 'Conference Paper'];
 
+// Parse hosted full text into sections; a line beginning "## " starts a section.
+function parseFullText(text) {
+  const t = String(text || '').trim();
+  if (!t) return [];
+  const out = [];
+  let cur = { heading: '', body: '' };
+  for (const line of t.split('\n')) {
+    const m = line.match(/^##\s+(.*)/);
+    if (m) {
+      if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+      cur = { heading: m[1].trim(), body: '' };
+    } else {
+      cur.body += line + '\n';
+    }
+  }
+  if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+  return out;
+}
+
 // People lookup + role management. Auditors review/re-assign researcher roles
 // (with the same signals + suggestion shown at onboarding); directors also get
 // editor-role and bulk powers.
@@ -528,7 +547,7 @@ function UploadForm({ onDone }) {
   useEffect(() => { api.profiles().then(setProfiles).catch(() => {}); }, []);
   const [f, setF] = useState({
     title: '', category: CATS[0], articleType: 'Article', abstract: '', doi: '',
-    pdfUrl: '', sourceUrl: '', publishedAt: '', keywords: '', volume: '', issue: '', pages: '',
+    pdfUrl: '', sourceUrl: '', publishedAt: '', keywords: '', volume: '', issue: '', pages: '', fullText: '', references: '',
   });
   const [authors, setAuthors] = useState([{ name: '', affiliation: '', userId: '' }]);
   const [busy, setBusy] = useState(false);
@@ -543,8 +562,12 @@ function UploadForm({ onDone }) {
     e.preventDefault();
     setBusy(true);
     try {
+      // Host full text: each "## Heading" line starts a new section.
+      const sections = parseFullText(f.fullText);
       await api.adminAddPublication({
         ...f,
+        sections,
+        references: f.references,
         authors: authors.filter((a) => a.name.trim()).map((a) => ({ name: a.name, affiliation: a.affiliation, userId: a.userId || null })),
       });
       toast.success('Paper added to the archive');
@@ -587,6 +610,12 @@ function UploadForm({ onDone }) {
           <Field label="Source / external URL"><input value={f.sourceUrl} onChange={(e) => set({ sourceUrl: e.target.value })} placeholder="https://arxiv.org/abs/…" /></Field>
         </div>
         <Field label="Keywords (comma-separated)"><input value={f.keywords} onChange={(e) => set({ keywords: e.target.value })} placeholder="ecology, microplastics" /></Field>
+        <Field label="Full text (optional — start a section with “## Heading”)">
+          <textarea value={f.fullText} onChange={(e) => set({ fullText: e.target.value })} rows={6} placeholder={'## Introduction\nText…\n\n## Methods\nText…'} />
+        </Field>
+        <Field label="References (one per line)">
+          <textarea value={f.references} onChange={(e) => set({ references: e.target.value })} rows={4} placeholder={'Smith, J. (2023). Title. Journal, 1(2), 3–4.'} />
+        </Field>
         <div className="grid grid-3">
           <Field label="Volume"><input value={f.volume} onChange={(e) => set({ volume: e.target.value })} /></Field>
           <Field label="Issue"><input value={f.issue} onChange={(e) => set({ issue: e.target.value })} /></Field>

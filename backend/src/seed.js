@@ -281,6 +281,11 @@ function publication(title, authors, category, doiSuffix, year, abstract, extra 
       { heading: 'Results', body: 'Key findings and figures.' },
       { heading: 'Discussion', body: 'Interpretation, limitations, and future work.' },
     ],
+    // Bibliography (reference list) for the hosted full-text article.
+    references: extra.references || [
+      'Smith, J. & Lee, K. (2023). Foundations of the field. Journal of Examples, 12(3), 45–67.',
+      'Patel, R. (2024). A related method. Proceedings of the Annual Conference, 110–118.',
+    ],
     metrics: {
       accesses: extra.accesses ?? 200 + Math.floor(Math.random() * 4000),
       citations: extra.citations ?? Math.floor(Math.random() * 8),

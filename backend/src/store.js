@@ -1052,6 +1052,20 @@ function buildPublication(input, { source, verified, addedBy, authorUserId }) {
     : String(input.keywords || '').split(',').map((k) => k.trim()).filter(Boolean).slice(0, 12);
 
   const abstract = String(input.abstract || '').slice(0, 5000);
+  // Full-text hosting: structured sections (Introduction, Methods, …) and a
+  // reference list let the journal host the whole article, not just metadata.
+  const sections = Array.isArray(input.sections)
+    ? input.sections
+        .filter((s) => s && (s.heading || s.body))
+        .map((s) => ({ heading: String(s.heading || '').slice(0, 200), body: String(s.body || '').slice(0, 30000) }))
+        .slice(0, 40)
+    : [];
+  const references = (Array.isArray(input.references)
+    ? input.references
+    : String(input.references || '').split('\n'))
+    .map((r) => String(r).trim().slice(0, 600))
+    .filter(Boolean)
+    .slice(0, 300);
   return {
     id: uid('pub'),
     doi: String(input.doi || '').trim() || nextSynthicaDoi(),
@@ -1074,7 +1088,8 @@ function buildPublication(input, { source, verified, addedBy, authorUserId }) {
     sourceUrl: safeUrl(input.sourceUrl, 500),
     license: String(input.license || 'CC BY 4.0').slice(0, 40),
     openAccess: input.openAccess !== false,
-    sections: abstract ? [{ heading: 'Abstract', body: abstract }] : [],
+    sections, // full-text body (abstract is rendered separately)
+    references, // bibliography
     metrics: { accesses: 0, citations: Number(input.citationCount) || 0, altmetric: 0 },
     citationCount: Number(input.citationCount) || 0,
     source,
@@ -1162,6 +1177,16 @@ export function editPublication({ id, patch, actor }) {
   if (patch.keywords !== undefined) {
     pub.keywords = (Array.isArray(patch.keywords) ? patch.keywords : String(patch.keywords).split(','))
       .map((k) => String(k).trim()).filter(Boolean).slice(0, 12);
+  }
+  if (patch.references !== undefined) {
+    pub.references = (Array.isArray(patch.references) ? patch.references : String(patch.references).split('\n'))
+      .map((r) => String(r).trim().slice(0, 600)).filter(Boolean).slice(0, 300);
+  }
+  if (Array.isArray(patch.sections)) {
+    pub.sections = patch.sections
+      .filter((s) => s && (s.heading || s.body))
+      .map((s) => ({ heading: String(s.heading || '').slice(0, 200), body: String(s.body || '').slice(0, 30000) }))
+      .slice(0, 40);
   }
   recordAudit(actor, 'edit_paper', `${pub.title} (${pub.doi})`);
   schedulePersist();
