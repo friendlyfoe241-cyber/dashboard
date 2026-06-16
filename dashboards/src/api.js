@@ -174,6 +174,8 @@ export const api = {
   competitions: () => request('/competitions'),
   addCompetition: (body) => request('/competitions', { method: 'POST', body }),
   deleteCompetition: (id) => request(`/competitions/${id}`, { method: 'DELETE' }),
+  // search
+  search: (q) => request(`/search?q=${encodeURIComponent(q)}`),
   // community feed
   posts: () => request('/posts'),
   createPost: (body) => request('/posts', { method: 'POST', body }),

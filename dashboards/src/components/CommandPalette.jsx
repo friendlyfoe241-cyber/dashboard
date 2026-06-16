@@ -36,12 +36,35 @@ export default function CommandPalette({ nav = [] }) {
     Promise.all(tasks).then(() => setExtra(out));
   }, [open]); // eslint-disable-line
 
+  // Live global search across people, projects, groups, and publications.
+  const [results, setResults] = useState([]);
+  useEffect(() => {
+    const needle = q.trim();
+    if (!open || needle.length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      api.search(needle).then((r) => {
+        const out = [];
+        for (const p of r.people || []) out.push({ label: `👤 ${p.name}${p.role ? ` · ${p.role}` : ''}`, to: `/p/${p.slug}` });
+        if (user?.kind === 'researcher') {
+          for (const pr of r.projects || []) out.push({ label: `📁 ${pr.title}`, to: `/researcher/project/${pr.id}` });
+          for (const g of r.groups || []) out.push({ label: `🔬 ${g.name}`, to: `/researcher/groups/${g.id}` });
+        }
+        for (const pub of r.publications || []) out.push({ label: `📄 ${pub.title}`, to: '/archive' });
+        setResults(out);
+      }).catch(() => setResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q, open, user?.kind]);
+
   const items = useMemo(() => {
     const base = nav.map((n) => ({ label: n.label, to: n.to }));
-    const all = [...base, ...extra];
     const needle = q.trim().toLowerCase();
-    return needle ? all.filter((i) => i.label.toLowerCase().includes(needle)) : all;
-  }, [nav, extra, q]);
+    const local = [...base, ...extra];
+    const filtered = needle ? local.filter((i) => i.label.toLowerCase().includes(needle)) : local;
+    // Local nav matches first, then live search results (deduped by destination).
+    const seen = new Set(filtered.map((i) => i.to + i.label));
+    return [...filtered, ...results.filter((r) => !seen.has(r.to + r.label))];
+  }, [nav, extra, q, results]);
 
   useEffect(() => setActive(0), [q, open]);
 
@@ -67,7 +90,7 @@ export default function CommandPalette({ nav = [] }) {
         <input
           className="cmdk-input"
           autoFocus
-          placeholder="Jump to… (tabs, projects, announcements)"
+          placeholder="Search people, projects, groups, papers…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onKeyDown}

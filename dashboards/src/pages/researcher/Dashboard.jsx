@@ -61,11 +61,11 @@ function MemberStats() {
   useEffect(() => { api.myStats().then(setS).catch(() => {}); }, []);
   if (!s) return null;
   const stats = [
+    ['⭐ Reputation', s.reputation],
     ['Profile views', s.profileViews],
     ['Posts', s.posts],
     ['Projects', s.projects],
     ['Groups', s.groups],
-    ['Publications', s.publications],
     ['Referrals', s.referrals],
   ];
   return (
@@ -78,6 +78,11 @@ function MemberStats() {
           </div>
         ))}
       </div>
+      {(s.badges || []).length > 0 && (
+        <div className="row" style={{ gap: '0.4rem', marginTop: '0.9rem', flexWrap: 'wrap' }}>
+          {s.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}>{b.icon} {b.label}</Badge>)}
+        </div>
+      )}
     </Card>
   );
 }

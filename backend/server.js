@@ -331,6 +331,9 @@ app.get('/api/competitions', requireAuth, wrap((_req, res) => res.json(store.lis
 app.post('/api/competitions', requireAuth, canPostNews, wrap((req, res) => res.json(store.addCompetition({ actor: req.user, ...(req.body || {}) }))));
 app.delete('/api/competitions/:id', requireAuth, canPostNews, wrap((req, res) => res.json(store.deleteCompetition({ id: req.params.id, actor: req.user }))));
 
+// --- Global search ----------------------------------------------------------
+app.get('/api/search', requireAuth, wrap((req, res) => res.json(store.searchAll(req.query.q, req.user.id))));
+
 // --- Community feed ---------------------------------------------------------
 app.get('/api/posts', requireAuth, wrap((req, res) => res.json(store.listPosts(req.user.id))));
 app.post('/api/posts', requireAuth, wrap((req, res) => res.json(store.createPost({ userId: req.user.id, ...(req.body || {}) }))));

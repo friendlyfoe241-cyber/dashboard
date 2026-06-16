@@ -75,6 +75,13 @@ export default function PublicProfile() {
           )}
 
           <SocialLinks p={p} />
+
+          {(p.badges || []).length > 0 && (
+            <div className="row" style={{ marginTop: '0.7rem', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {p.reputation > 0 && <Badge tone="gold">⭐ {p.reputation} rep</Badge>}
+              {p.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}>{b.icon} {b.label}</Badge>)}
+            </div>
+          )}
         </Card>
 
         {p.bio && (

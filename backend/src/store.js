@@ -362,6 +362,7 @@ function publicProfileOf(u) {
     dob: u.dobPublic ? (u.dob || '') : '',
     links: u.links || [], category: u.category || null, currentProjects, publications,
     groups: (db.groups || []).filter((g) => (g.members || []).includes(u.id)).map((g) => ({ id: g.id, name: g.name })),
+    badges: badgesFor(u.id), reputation: reputationFor(u.id),
   };
 }
 
@@ -386,6 +387,35 @@ export function recordProfileView(key, viewerId) {
   schedulePersist();
 }
 
+const pubCountFor = (userId) => db.publications.filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId)).length;
+const refCountFor = (userId) => db.researchers.filter((r) => r.referredBy === userId).length;
+
+// Achievement badges, computed from a member's activity.
+const BADGE_DEFS = [
+  { id: 'published', label: 'Published Researcher', icon: '📜', earned: (u) => pubCountFor(u.id) > 0 },
+  { id: 'lead', label: 'Project Lead', icon: '🧭', earned: (u) => db.projects.some((p) => p.leadId === u.id) },
+  { id: 'founder', label: 'Group Founder', icon: '🏛️', earned: (u) => (db.groups || []).some((g) => g.leaderId === u.id) },
+  { id: 'cohort', label: 'Cohort Member', icon: '🎓', earned: (u) => (db.programs || []).some((pr) => (pr.cohort || []).includes(u.id)) },
+  { id: 'chapter', label: 'Chapter Leader', icon: '🌍', earned: (u) => (db.chapters || []).some((c) => c.leaderId === u.id) },
+  { id: 'connector', label: 'Connector', icon: '🤝', earned: (u) => refCountFor(u.id) >= 3 },
+  { id: 'contributor', label: 'Community Contributor', icon: '💬', earned: (u) => postCountFor(u.id) >= 5 },
+];
+
+export function badgesFor(userId) {
+  const u = getUserById(userId);
+  if (!u) return [];
+  return BADGE_DEFS.filter((b) => b.earned(u)).map(({ id, label, icon }) => ({ id, label, icon }));
+}
+
+// Reputation = a weighted sum of contributions (drives future rewards/ranking).
+export function reputationFor(userId) {
+  return pubCountFor(userId) * 50
+    + db.projects.filter((p) => p.leadId === userId).length * 25
+    + (db.groups || []).filter((g) => g.leaderId === userId).length * 20
+    + refCountFor(userId) * 10
+    + postCountFor(userId) * 3;
+}
+
 // Personal stats for the member's own dashboard (LinkedIn-style).
 export function myStats(userId) {
   const u = getUserById(userId);
@@ -394,9 +424,38 @@ export function myStats(userId) {
     posts: postCountFor(userId),
     projects: db.projects.filter((p) => p.members.includes(userId)).length,
     groups: (db.groups || []).filter((g) => (g.members || []).includes(userId)).length,
-    referrals: db.researchers.filter((r) => r.referredBy === userId).length,
-    publications: db.publications.filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId)).length,
+    referrals: refCountFor(userId),
+    publications: pubCountFor(userId),
+    reputation: reputationFor(userId),
+    badges: badgesFor(userId),
   };
+}
+
+// Global search across people, projects (the viewer's), groups, and publications.
+export function searchAll(query, viewerId) {
+  const q = String(query || '').trim().toLowerCase();
+  const empty = { people: [], projects: [], groups: [], publications: [] };
+  if (q.length < 2) return empty;
+  const has = (s) => String(s || '').toLowerCase().includes(q);
+  const people = [...db.editors, ...db.researchers]
+    .filter(isVisible)
+    .filter((u) => has(u.name) || has(u.username) || has(u.institution) || (u.interests || []).some(has))
+    .slice(0, 8)
+    .map((u) => ({ id: u.id, slug: u.slug || u.id, name: u.name, role: roleDisplay(u), avatarUrl: u.avatarUrl || '', institution: u.institution || '' }));
+  // Only the viewer's own projects (project pages require membership).
+  const projects = db.projects
+    .filter((p) => p.members.includes(viewerId) && (has(p.title) || has(p.category) || has(p.description)))
+    .slice(0, 8)
+    .map((p) => ({ id: p.id, title: p.title, category: p.category }));
+  const groups = (db.groups || [])
+    .filter((g) => has(g.name) || has(g.category) || has(g.description))
+    .slice(0, 8)
+    .map((g) => ({ id: g.id, name: g.name, category: g.category, memberCount: (g.members || []).length }));
+  const publications = db.publications
+    .filter((p) => p.verified !== false && (has(p.title) || (p.authors || []).some((a) => has(a.name))))
+    .slice(0, 8)
+    .map((p) => ({ id: p.id, title: p.title, doi: p.doi, category: p.category }));
+  return { people, projects, groups, publications };
 }
 
 export function listProfiles() {

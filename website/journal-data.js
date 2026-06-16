@@ -488,6 +488,15 @@ async function renderProfile() {
       </section>`
     : '';
 
+  // Achievement badges + reputation.
+  const badges = Array.isArray(profile.badges) ? profile.badges : [];
+  const badgesBlock = badges.length
+    ? `<section class="profile-section">
+        <h2 class="profile-section-title">Achievements${profile.reputation ? ` <span class="profile-count">⭐ ${profile.reputation}</span>` : ''}</h2>
+        <div class="profile-tags">${badges.map((bd) => `<span class="tag">${esc(bd.icon)} ${esc(bd.label)}</span>`).join('')}</div>
+      </section>`
+    : '';
+
   // Research groups the member belongs to.
   const groups = Array.isArray(profile.groups) ? profile.groups.filter((g) => g && g.name) : [];
   const groupsBlock = groups.length
@@ -537,6 +546,7 @@ async function renderProfile() {
     <div class="profile-body">
       ${interestsBlock}
       ${profile.bio ? `<section class="profile-section"><p class="profile-bio">${esc(profile.bio)}</p></section>` : ''}
+      ${badgesBlock}
       ${groupsBlock}
       ${projectsBlock}
       ${pubsBlock}
