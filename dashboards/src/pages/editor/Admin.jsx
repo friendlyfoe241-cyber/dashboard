@@ -21,6 +21,8 @@ export default function Admin() {
       <People isDirector={isDirector} />
       <Applications />
       <ProgramsPanel isDirector={isDirector} />
+      {isDirector && <BroadcastEmail />}
+      <Moderation />
       <CompetitionsAdmin />
       <GlobalEvents />
       <ReferralLeaderboard />
@@ -124,6 +126,7 @@ function People({ isDirector }) {
                 <div>
                   <strong>{u.name}</strong> <Badge tone="gray">{u.kind}{u.role ? ` · ${u.role}` : ''}{u.category ? ` · ${u.category}` : ''}</Badge>
                   {!u.approved && <> <Badge tone="gold">pending approval</Badge></>}
+                  {u.suspended && <> <Badge tone="red">suspended</Badge></>}
                   <div className="muted" style={{ fontSize: '0.78rem' }}>{u.email}</div>
                   {u.kind === 'researcher' && (
                     <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.2rem' }}>
@@ -155,6 +158,7 @@ function People({ isDirector }) {
                   <Button className="btn-sm" variant="ghost" onClick={() => addTag(u, u.recommendation.tag)}>Apply suggestion</Button>
                 )}
                 {isDirector && <EditorRolePicker onPick={(role, cat) => makeEditor(u, role, cat)} />}
+                {isDirector && <MemberAdminActions u={u} onChanged={() => search(q)} />}
               </div>
             </div>
           ))}
@@ -927,6 +931,97 @@ function ReferralLeaderboard() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// Director-only: suspend/reactivate a member + send them a password-reset email.
+function MemberAdminActions({ u, onChanged }) {
+  const toast = useToast();
+  const suspend = () =>
+    api.adminSuspend(u.id, !u.suspended).then(() => { toast.success(u.suspended ? 'Reactivated' : 'Suspended'); onChanged(); }).catch((e) => toast.error(e.message));
+  const sendReset = () =>
+    api.adminSendReset(u.id).then(() => toast.success('Password-reset email sent')).catch((e) => toast.error(e.message));
+  return (
+    <>
+      <Button className="btn-sm" variant="ghost" onClick={suspend}>{u.suspended ? 'Reactivate' : 'Suspend'}</Button>
+      <Button className="btn-sm" variant="ghost" onClick={sendReset}>Send reset</Button>
+    </>
+  );
+}
+
+// Director-only: branded email broadcast to a member segment.
+function BroadcastEmail() {
+  const toast = useToast();
+  const [cfg, setCfg] = useState(null);
+  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
+  const send = async (e) => {
+    e.preventDefault();
+    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
+    setBusy(true);
+    try {
+      const r = await api.adminBroadcast(f);
+      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
+      setF({ subject: '', heading: '', body: '', audience: 'all' });
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
+      <Card>
+        {cfg && cfg.emailConfigured === false && (
+          <p className="muted" style={{ marginTop: 0, color: '#92400e' }}>⚠️ Email delivery isn’t configured — broadcasts will be logged only.</p>
+        )}
+        <form onSubmit={send}>
+          <div className="grid grid-2">
+            <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
+            <Field label="Audience">
+              <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
+                <option value="all">All members</option>
+                <option value="researchers">Researchers</option>
+                <option value="editors">Editors / staff</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
+          <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
+          <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
+          <span className="muted" style={{ marginLeft: '0.6rem', fontSize: '0.8rem' }}>Sent as a branded HTML email from your account.</span>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Community moderation: review and remove recent posts.
+function Moderation() {
+  const toast = useToast();
+  const [posts, setPosts] = useState([]);
+  const load = useCallback(() => { api.posts().then(setPosts).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  const remove = (id) => api.deletePost(id).then(() => { load(); toast.success('Post removed'); }).catch((e) => toast.error(e.message));
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Community moderation <Badge tone="gray">{posts.length}</Badge></h2>
+      {posts.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No community posts yet.</p></Card>
+      ) : (
+        <div className="stack">
+          {posts.slice(0, 12).map((p) => (
+            <Card key={p.id}>
+              <div className="card-row">
+                <div>
+                  <strong>{p.author?.name}</strong> <span className="muted" style={{ fontSize: '0.78rem' }}>· {new Date(p.at).toLocaleDateString()} · {p.likeCount} likes · {p.commentCount} comments</span>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>{(p.text || '').slice(0, 160)}{(p.text || '').length > 160 ? '…' : ''}</div>
+                </div>
+                <Button className="btn-sm" variant="ghost" onClick={() => remove(p.id)}>Delete</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

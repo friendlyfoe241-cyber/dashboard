@@ -252,6 +252,7 @@ export function authenticate(identifier, password) {
     (u) => u.username.toLowerCase() === id || (u.email && u.email.toLowerCase() === id),
   );
   if (!user || !verifyPassword(password, user.password)) return null;
+  if (user.suspended) throw httpError(403, 'This account has been suspended. Contact an administrator.');
   const { password: _pw, twoFactorSecret: _s, ...safe } = user;
   return safe;
 }
@@ -556,6 +557,27 @@ export function updateProfile(userId, patch) {
 
 // --- admin: people lookup + role management (multi-role enabler) ------------
 
+// Suspend / reactivate a member (suspended accounts can't sign in).
+export function setUserSuspended({ userId, suspended, actor }) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.id === actor?.id) throw httpError(400, "You can't suspend yourself");
+  u.suspended = !!suspended;
+  recordAudit(actor, suspended ? 'suspend_user' : 'reactivate_user', u.name);
+  schedulePersist();
+  return { id: u.id, suspended: u.suspended };
+}
+
+// Recipients for an admin email broadcast.
+export function broadcastRecipients(audience) {
+  const pick = audience === 'researchers' ? db.researchers
+    : audience === 'editors' ? db.editors
+    : [...db.editors, ...db.researchers];
+  return pick
+    .filter((u) => u.email && !u.suspended && u.approved !== false)
+    .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+}
+
 export function adminListUsers(q) {
   const needle = (q || '').toLowerCase();
   return [...db.editors, ...db.researchers]
@@ -565,6 +587,7 @@ export function adminListUsers(q) {
       role: u.role || null, category: u.category || null, tags: u.tags || [],
       // Onboarding signals so auditors can re-evaluate roles later, not just at sign-up.
       approved: u.approved !== false,
+      suspended: !!u.suspended,
       researchExperience: u.researchExperience ?? null,
       leadershipExperience: u.leadershipExperience ?? null,
       wantsChapterLead: !!u.wantsChapterLead,

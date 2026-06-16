@@ -345,6 +345,42 @@ app.delete('/api/posts/:id', requireAuth, wrap((req, res) => res.json(store.dele
 app.get('/api/me/referrals', requireAuth, wrap((req, res) => res.json(store.myReferralStats(req.user.id))));
 app.get('/api/admin/referrals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.referralLeaderboard())));
 
+// --- Admin: member moderation, suspension, broadcast ------------------------
+const escHtml = (s) => String(s == null ? '' : s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
+app.post('/api/admin/users/:id/suspend', requireAuth, requireDirector, wrap((req, res) => {
+  res.json(store.setUserSuspended({ userId: req.params.id, suspended: !!(req.body || {}).suspended, actor: req.user }));
+}));
+
+app.post('/api/admin/users/:id/send-reset', requireAuth, requireDirector, wrap((req, res) => {
+  const u = store.getUserById(req.params.id);
+  if (!u || !u.email) return res.status(404).json({ error: 'That member has no email on file' });
+  const rt = issuePurposeToken(u.id, 'reset', 60 * 60);
+  actionEmail({
+    to: u.email, subject: 'Reset your Synthica password', heading: 'Password reset',
+    intro: `Hi ${String(u.name || 'there').split(' ')[0]},`,
+    blocks: ['An administrator started a password reset for your account. Click below to choose a new password (link expires in an hour).'],
+    button: { label: 'Reset password', url: `${FRONTEND_URL || ''}/reset?token=${rt}` }, signoff: 'Stay secure,',
+  });
+  res.json({ ok: true });
+}));
+
+// Branded email broadcast to a member segment (director only).
+app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) => {
+  try {
+    const { subject, heading, body, audience } = req.body || {};
+    if (!subject?.trim() || !body?.trim()) return res.status(400).json({ error: 'A subject and message are required' });
+    const recipients = store.broadcastRecipients(audience);
+    const blocks = String(body).split(/\n{2,}/).map((p) => escHtml(p).replace(/\n/g, '<br>'));
+    for (const r of recipients) {
+      actionEmail({ to: r.email, subject: subject.trim(), heading: (heading || subject).trim(), intro: `Hi ${String(r.name || 'there').split(' ')[0]},`, blocks, signoff: 'Thanks,' });
+    }
+    res.json({ sent: recipients.length, audience: audience || 'all' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Broadcast failed' });
+  }
+});
+
 // --- In-app notifications --------------------------------------------------
 app.get('/api/notifications', requireAuth, wrap((req, res) => res.json(store.listNotifications(req.user.id))));
 app.post('/api/notifications/read', requireAuth, wrap((req, res) => {
