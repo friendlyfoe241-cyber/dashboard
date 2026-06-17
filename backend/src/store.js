@@ -42,6 +42,7 @@ function buildSeed() {
     competitions: clone(seed.competitions || []),
     posts: clone(seed.posts || []),
     activities: clone(seed.activities || []),
+    messages: clone(seed.messages || []),
   };
 }
 
@@ -58,6 +59,7 @@ function pushNotif(userId, { type, title, body, link }) {
     read: false,
     at: new Date().toISOString(),
   });
+  emit(userId, 'notification', { title, body, link });
 }
 
 // Notify every editor who reviewed a paper (per policy: reviewers are told when
@@ -217,6 +219,15 @@ function pickOne(role, category) {
 
 function log(sub, event) {
   sub.history.push({ at: now(), ...event });
+}
+
+// --- real-time event bus (SSE subscribers register here) -------------------
+// Each subscriber is called with (targetUserId, type, data); the SSE endpoint
+// filters to the connected user. No-op until anyone subscribes.
+const _rtListeners = new Set();
+export function subscribeRealtime(fn) { _rtListeners.add(fn); return () => _rtListeners.delete(fn); }
+function emit(userId, type, data) {
+  for (const fn of _rtListeners) { try { fn(userId, type, data); } catch { /* ignore */ } }
 }
 
 // --- activity stream (followers see what people they follow do) ------------
@@ -2099,6 +2110,74 @@ export function addProjectLink({ projectId, userId, label, url }) {
   p.links.push(link);
   schedulePersist();
   return link;
+}
+
+// --- direct messages + network ---------------------------------------------
+
+const dmCard = (id) => {
+  const u = getUserById(id);
+  return { id, name: u?.name || 'Member', slug: u?.slug || id, avatarUrl: u?.avatarUrl || '', role: u ? roleDisplay(u) : '' };
+};
+
+export function sendMessage({ from, to, text }) {
+  if (from === to) throw httpError(400, "You can't message yourself");
+  if (!getUserById(to)) throw httpError(404, 'Recipient not found');
+  if (!text?.trim()) throw httpError(400, 'Write a message');
+  if (!Array.isArray(db.messages)) db.messages = [];
+  const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
+  db.messages.push(msg);
+  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
+  emit(to, 'message', { from, text: msg.text, at: msg.at });
+  schedulePersist();
+  return { ...msg, mine: true };
+}
+
+// One row per person you've exchanged messages with: last message + unread count.
+export function listConversations(userId) {
+  const byOther = new Map();
+  for (const m of db.messages || []) {
+    if (m.from !== userId && m.to !== userId) continue;
+    const other = m.from === userId ? m.to : m.from;
+    const cur = byOther.get(other);
+    if (!cur || new Date(m.at) > new Date(cur.lastAt)) {
+      byOther.set(other, { other, lastMessage: m.text, lastAt: m.at, mine: m.from === userId });
+    }
+  }
+  const unread = {};
+  for (const m of db.messages || []) if (m.to === userId && !m.read) unread[m.from] = (unread[m.from] || 0) + 1;
+  return [...byOther.values()]
+    .map((c) => ({ user: dmCard(c.other), lastMessage: c.lastMessage, lastAt: c.lastAt, mine: c.mine, unread: unread[c.other] || 0 }))
+    .sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+}
+
+// The thread with one person; marks their messages to you as read.
+export function getThread(userId, otherId) {
+  if (!getUserById(otherId)) throw httpError(404, 'User not found');
+  let changed = false;
+  const messages = (db.messages || [])
+    .filter((m) => (m.from === userId && m.to === otherId) || (m.from === otherId && m.to === userId))
+    .sort((a, b) => new Date(a.at) - new Date(b.at))
+    .map((m) => {
+      if (m.to === userId && !m.read) { m.read = true; changed = true; }
+      return { id: m.id, text: m.text, at: m.at, mine: m.from === userId };
+    });
+  if (changed) schedulePersist();
+  return { user: dmCard(otherId), messages };
+}
+
+export const unreadMessageCount = (userId) => (db.messages || []).filter((m) => m.to === userId && !m.read).length;
+
+// Your network: people you follow + people who follow you (with mutual flag).
+export function networkFor(userId) {
+  const u = getUserById(userId);
+  const following = new Set((u && u.following) || []);
+  const followers = [...db.editors, ...db.researchers].filter((x) => (x.following || []).includes(userId)).map((x) => x.id);
+  const followerSet = new Set(followers);
+  const card = (id) => ({ ...dmCard(id), mutual: following.has(id) && followerSet.has(id) });
+  return {
+    following: [...following].filter((id) => getUserById(id)).map(card),
+    followers: followers.filter((id) => id !== userId).map(card),
+  };
 }
 
 // --- following + personalized feed -----------------------------------------

@@ -82,6 +82,9 @@ export const SCHEMAS = {
   Activities: [
     ['id'], ['actorId'], ['type'], ['text'], ['link'], ['at'],
   ],
+  Messages: [
+    ['id'], ['from'], ['to'], ['text'], ['at'], ['read', 'bool'],
+  ],
   Applications: [
     ['id'], ['kind'], ['userId'], ['userName'], ['listingId'], ['programId'], ['role'], ['message'], ['answers', 'json'],
     ['resumeUrl'], ['status'], ['assignedTag'], ['reviewedBy'], ['reviewedAt'], ['at'],
@@ -204,6 +207,7 @@ export async function createSheetsProvider() {
         competitions: await readTab(sheets, spreadsheetId, 'Competitions').catch(() => []),
         posts: await readTab(sheets, spreadsheetId, 'Posts').catch(() => []),
         activities: await readTab(sheets, spreadsheetId, 'Activities').catch(() => []),
+        messages: await readTab(sheets, spreadsheetId, 'Messages').catch(() => []),
       };
     },
 
@@ -226,6 +230,7 @@ export async function createSheetsProvider() {
       await writeTab(sheets, spreadsheetId, 'Competitions', db.competitions || []).catch(() => {});
       await writeTab(sheets, spreadsheetId, 'Posts', db.posts || []).catch(() => {});
       await writeTab(sheets, spreadsheetId, 'Activities', db.activities || []).catch(() => {});
+      await writeTab(sheets, spreadsheetId, 'Messages', db.messages || []).catch(() => {});
     },
   };
 }

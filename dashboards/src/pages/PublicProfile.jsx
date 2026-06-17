@@ -39,6 +39,7 @@ export default function PublicProfile() {
       <nav className="archive-topnav" style={{ padding: '1rem clamp(1rem,4vw,2.5rem)' }}>
         <Link to="/" className="topbar-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</Link>
         <span className="row" style={{ gap: '0.8rem' }}>
+          {user && user.id !== p.id && <Link className="btn btn-primary btn-sm" to={`/researcher/messages/${p.id}`}>💬 Message</Link>}
           <Link className="btn btn-ghost btn-sm" to="/archive">Archive</Link>
           {user ? <Link className="btn btn-ghost btn-sm" to="/">My dashboard</Link> : <Link className="btn btn-ghost btn-sm" to="/login">Sign in</Link>}
         </span>

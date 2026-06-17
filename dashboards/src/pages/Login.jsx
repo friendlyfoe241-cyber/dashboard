@@ -19,14 +19,11 @@ const DEMO_ACCOUNTS = [
 // What's inside the portal — shown on the login's left panel so first-time
 // visitors know what they're signing into.
 const PORTAL_FEATURES = [
-  ['💬', 'Live community feed & discussions'],
+  ['💬', 'Community feed & messages'],
   ['🔬', 'Research groups & projects'],
-  ['👥', 'Global member directory'],
-  ['🎓', 'Programs & cohorts'],
-  ['🏆', 'Competitions & opportunities'],
-  ['📅', 'Events, RSVPs & workshops'],
-  ['📜', 'Certificates & recognition'],
-  ['📣', 'Announcements & news'],
+  ['🎓', 'Programs & competitions'],
+  ['📅', 'Events & workshops'],
+  ['📜', 'Publish & earn certificates'],
 ];
 
 // Static layout wrapper. Must live at module scope: defining it inside Login

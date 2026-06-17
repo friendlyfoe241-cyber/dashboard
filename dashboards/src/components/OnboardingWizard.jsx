@@ -32,7 +32,9 @@ export default function OnboardingWizard() {
   const leadRecommended = Number(experience) >= 8;
 
   useEffect(() => {
-    if (user?.kind !== 'researcher') return;
+    // Onboarding is for new researchers only — staff / admins skip it entirely.
+    const staffRole = ['admin', 'director', 'auditor', 'chief', 'senior', 'reviews', 'associate'].includes(user?.role);
+    if (user?.kind !== 'researcher' || staffRole) return;
     try { if (localStorage.getItem(FLAG)) return; } catch { /* ignore */ }
     api.onboarding().then(setChapter).catch(() => setChapter(null));
     setShow(true);

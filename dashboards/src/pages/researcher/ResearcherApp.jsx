@@ -13,6 +13,7 @@ import MyProjects from './MyProjects.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
 import Community from './Community.jsx';
+import Messages from './Messages.jsx';
 import Programs from './Programs.jsx';
 import Groups from './Groups.jsx';
 import GroupDetail from './GroupDetail.jsx';
@@ -55,6 +56,7 @@ export default function ResearcherApp() {
   const nav = [
     { to: '/researcher', label: 'Home', end: true },
     { to: '/researcher/community', label: 'Community' },
+    { to: '/researcher/messages', label: 'Messages' },
     { to: '/researcher/projects', label: 'My Projects' },
     { to: '/researcher/groups', label: 'Groups' },
     { to: '/researcher/competitions', label: 'Competitions' },
@@ -75,6 +77,8 @@ export default function ResearcherApp() {
       <Routes>
         <Route index element={<Dashboard />} />
         <Route path="community" element={<Community />} />
+        <Route path="messages" element={<Messages />} />
+        <Route path="messages/:userId" element={<Messages />} />
         <Route path="projects" element={<MyProjects />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="drive" element={<Drive />} />

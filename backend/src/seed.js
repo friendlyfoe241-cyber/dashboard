@@ -736,4 +736,7 @@ export const posts = [
 // Activity stream (followers see what people they follow do). Populated at runtime.
 export const activities = [];
 
+// Direct messages between members. Populated at runtime.
+export const messages = [];
+
 export const allUsers = () => [...editors, ...researchers];

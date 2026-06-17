@@ -341,6 +341,30 @@ app.post('/api/posts/:id/like', requireAuth, wrap((req, res) => res.json(store.t
 app.post('/api/posts/:id/comments', requireAuth, wrap((req, res) => res.json(store.addPostComment({ postId: req.params.id, userId: req.user.id, text: (req.body || {}).text }))));
 app.delete('/api/posts/:id', requireAuth, wrap((req, res) => res.json(store.deletePost({ postId: req.params.id, userId: req.user.id }))));
 
+// --- Direct messages + network ----------------------------------------------
+app.get('/api/messages', requireAuth, wrap((req, res) => res.json(store.listConversations(req.user.id))));
+app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count: store.unreadMessageCount(req.user.id) })));
+app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
+app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
+app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+
+// --- Real-time stream (Server-Sent Events) ---------------------------------
+// The browser opens an EventSource with ?token=… (EventSource can't set headers).
+app.get('/api/stream', (req, res) => {
+  const user = userFromToken(req.query.token);
+  if (!user) return res.status(401).end();
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.flushHeaders?.();
+  res.write(`event: ready\ndata: {}\n\n`);
+  const unsub = store.subscribeRealtime((targetId, type, data) => {
+    if (targetId !== user.id) return;
+    try { res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  });
+  // Heartbeat keeps proxies from closing the idle connection.
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* ignore */ } }, 25000);
+  req.on('close', () => { clearInterval(ping); unsub(); });
+});
+
 // --- Referrals --------------------------------------------------------------
 app.get('/api/me/referrals', requireAuth, wrap((req, res) => res.json(store.myReferralStats(req.user.id))));
 app.get('/api/admin/referrals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.referralLeaderboard())));

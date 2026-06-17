@@ -7,6 +7,7 @@ const TOKEN_KEY = 'synthica.token';
 // Vite's proxy forwards them to localhost:4000. In production, set
 // VITE_API_BASE (e.g. https://synthica-backend.onrender.com) at build time.
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+export const apiBase = API_BASE;
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
@@ -185,6 +186,12 @@ export const api = {
   likePost: (id) => request(`/posts/${id}/like`, { method: 'POST' }),
   commentPost: (id, text) => request(`/posts/${id}/comments`, { method: 'POST', body: { text } }),
   deletePost: (id) => request(`/posts/${id}`, { method: 'DELETE' }),
+  // direct messages + network
+  conversations: () => request('/messages'),
+  unreadMessages: () => request('/messages/unread'),
+  thread: (userId) => request(`/messages/${userId}`),
+  sendMessage: (userId, text) => request(`/messages/${userId}`, { method: 'POST', body: { text } }),
+  network: () => request('/network'),
   // referrals
   myReferrals: () => request('/me/referrals'),
   referralLeaderboard: () => request('/admin/referrals'),
