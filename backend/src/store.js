@@ -1832,6 +1832,18 @@ export function verifyCertificate(code) {
   return { valid: true, name: c.name, type: c.type, issuedAt: c.issuedAt };
 }
 
+// Recent activity from the people a user follows (for their weekly digest).
+export function recentFollowedActivity(userId, days = 7) {
+  const u = getUserById(userId);
+  const following = new Set((u && u.following) || []);
+  const since = Date.now() - days * 24 * 3600 * 1000;
+  return (db.activities || [])
+    .filter((a) => following.has(a.actorId) && new Date(a.at).getTime() >= since)
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, 15)
+    .map((a) => ({ actorName: getUserById(a.actorId)?.name || 'A member', text: a.text, at: a.at }));
+}
+
 // --- weekly digest data ------------------------------------------------------
 
 // Everything the weekly email digest needs in one read: recipients plus the

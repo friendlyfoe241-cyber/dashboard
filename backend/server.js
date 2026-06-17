@@ -314,7 +314,7 @@ app.post('/api/researcher/certificates', requireAuth, wrap((req, res) => {
 // --- Weekly digest: manual trigger (also used by external cron) ---------------
 app.post('/api/admin/digest/send', requireAuth, requireDirector, async (req, res) => {
   try {
-    res.json(await sendWeeklyDigests(store.digestData()));
+    res.json(await sendWeeklyDigests(store.digestData(), store.recentFollowedActivity));
   } catch (err) {
     res.status(500).json({ error: err.message || 'Digest failed' });
   }
@@ -915,7 +915,7 @@ store
     // Weekly digest scheduler (opt-in; needs an always-on instance). Hosts
     // that sleep should hit POST /api/admin/digest/send from a cron instead.
     if (process.env.ENABLE_DIGESTS === 'true') {
-      setInterval(() => maybeSendWeekly(store.digestData).catch((e) => console.error('[digest]', e.message)), 60 * 60 * 1000);
+      setInterval(() => maybeSendWeekly(store.digestData, store.recentFollowedActivity).catch((e) => console.error('[digest]', e.message)), 60 * 60 * 1000);
       console.log('[digest] weekly digest scheduler enabled (Mondays 13:00 UTC)');
     }
   })
