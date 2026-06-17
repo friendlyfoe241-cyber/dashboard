@@ -62,6 +62,20 @@ async function request(path, { method = 'GET', body } = {}, attempt = 0) {
 }
 
 export const api = {
+  // file upload (multipart — can't go through request()'s JSON helper)
+  upload: async (file, kind = 'image') => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/uploads?kind=${encodeURIComponent(kind)}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data; // { url, name, size }
+  },
   // auth
   login: (identifier, password) => request('/login', { method: 'POST', body: { identifier, password } }),
   checkEmail: (email) => request('/auth/check-email', { method: 'POST', body: { email } }),

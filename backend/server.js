@@ -25,6 +25,7 @@ import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
 import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
 import { ogCardPng, sharePageHtml } from './src/og.js';
+import { uploadMiddleware, publicUrl, UPLOAD_DIR } from './src/uploads.js';
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
 // Marketing site base, used by per-paper share pages to forward to articles.
@@ -57,6 +58,9 @@ if (corsOrigins.length) {
   app.use(cors());
 }
 app.use(express.json({ limit: '1mb' }));
+
+// Serve uploaded files (avatars, résumés, PDFs) with a long cache + CORS.
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin') }));
 
 // Baseline security headers (helmet-lite, no dependency).
 app.use((_req, res, next) => {
@@ -164,6 +168,16 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
 });
 
 app.get('/api/me', requireAuth, (req, res) => res.json(req.user));
+
+// File uploads — POST multipart 'file' with ?kind=avatar|resume|pdf|image.
+app.post('/api/uploads', requireAuth, (req, res) => {
+  const kind = ['avatar', 'resume', 'pdf', 'image'].includes(req.query.kind) ? req.query.kind : 'image';
+  uploadMiddleware(kind)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    if (!req.file) return res.status(400).json({ error: 'No file received' });
+    res.json({ url: publicUrl(req, req.file.filename), name: req.file.originalname, size: req.file.size });
+  });
+});
 
 // Edit your own public profile.
 app.put('/api/me/profile', requireAuth, wrap((req, res) => {

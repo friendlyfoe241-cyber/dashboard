@@ -81,6 +81,7 @@ If the client id is unset, the button simply doesn't render — everything else 
 | **Author emails** | Set `RESEND_API_KEY` (https://resend.com) + `EMAIL_FROM`. Without it, decision emails are logged only. |
 | **Weekly digest** | Emails approved researchers the open programs, project spots, and next week's deadlines. On an always-on instance set `ENABLE_DIGESTS=true` (sends Mondays 13:00 UTC). On free tiers that sleep, point an external cron (e.g. cron-job.org) at `POST /api/admin/digest/send` with a director token — or use the button on the Admin page. |
 | **Per-paper share cards** | Built in: `GET /api/journal/publications/:id/share` serves per-paper OG tags + a 1200×630 card image for link unfurls. Share that URL (not the static article page) on socials. Set `SITE_URL` so it forwards readers to your marketing site's article page. |
+| **File uploads** | Avatars, résumés, and paper PDFs can be uploaded; files are stored on local disk under `UPLOAD_DIR` (default `backend/uploads`) and served at `/uploads`. On ephemeral hosts (Render free tier) uploads are **lost on restart** — mount a persistent disk and set `UPLOAD_DIR` to it, or swap `backend/src/uploads.js` for S3/R2. Set `UPLOAD_PUBLIC_URL` if the backend is fronted by a CDN/proxy. |
 | **Persistent data** | **Postgres (recommended)** — set `DATA_PROVIDER=postgres` + `DATABASE_URL`; the empty database is seeded automatically on first boot. Or Google Sheets — see [`docs/GOOGLE_SHEETS.md`](docs/GOOGLE_SHEETS.md): set `DATA_PROVIDER=sheets`, `SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, then `npm run seed:sheet`. |
 
 ---
@@ -95,6 +96,9 @@ If the client id is unset, the button simply doesn't render — everything else 
 | backend | `CORS_ORIGINS` | **yes (prod)** | comma-separated allowed origins, e.g. `https://app.synthica.org` |
 | backend | `FRONTEND_URL` | for emails | dashboards base URL (verify/reset links) |
 | backend | `SITE_URL` | optional | marketing site base URL for paper share pages (default `https://www.synthica.org`) |
+| backend | `UPLOAD_DIR` | optional | where uploaded files are stored (default `backend/uploads`); point at a persistent disk in prod |
+| backend | `UPLOAD_PUBLIC_URL` | optional | public base URL for served uploads if behind a CDN/proxy |
+| backend | `EMAIL_BRAND` | optional | name shown in transactional emails (default `Synthica`) |
 | backend | `ENABLE_DIGESTS` | optional | `true` to send the weekly researcher digest from this instance (needs always-on) |
 | backend | `GOOGLE_CLIENT_ID` | for Google login | `…apps.googleusercontent.com` |
 | backend | `RESEND_API_KEY` | optional | author decision emails |

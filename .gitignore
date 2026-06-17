@@ -5,3 +5,6 @@ dist/
 .env
 .env.local
 .vite/
+
+# Uploaded files (served at /uploads; use S3/persistent disk in prod)
+backend/uploads/

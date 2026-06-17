@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../../api.js';
 import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
+import UploadButton from '../../components/UploadButton.jsx';
 
 const CATEGORIES = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
@@ -154,7 +155,12 @@ function SubmitForm({ onSubmitted }) {
           </select>
         </Field>
         <Field label="Abstract"><textarea value={form.abstract} onChange={set('abstract')} required /></Field>
-        <Field label="Link to your paper (Google Drive, PDF…)"><input value={form.pdfUrl} onChange={set('pdfUrl')} placeholder="https://…" required /></Field>
+        <Field label="Your paper (upload a PDF or paste a link)">
+          <div className="row" style={{ gap: '0.4rem' }}>
+            <input value={form.pdfUrl} onChange={set('pdfUrl')} placeholder="https://… or upload" required />
+            <UploadButton kind="pdf" label="Upload PDF" onUploaded={(r) => setForm((x) => ({ ...x, pdfUrl: r.url }))} />
+          </div>
+        </Field>
         <Field label="Co-authors — tag members with @username (checked on submit)">
           <input value={form.coAuthors} onChange={set('coAuthors')} placeholder="Ada Lovelace, @benv" />
         </Field>
