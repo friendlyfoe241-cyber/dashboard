@@ -121,7 +121,14 @@ function bootstrapAdmin() {
   const password = process.env.ADMIN_PASSWORD || '';
   if (!email || !password) return;
   let u = [...db.editors, ...db.researchers].find((x) => x.email && x.email.toLowerCase() === email);
-  if (!u) {
+  if (u) {
+    // Promote an EXISTING account (even one that signed up as a researcher) to
+    // platform admin — move it into the editors list so it's a proper staff acct.
+    if (u.kind !== 'editor') {
+      db.researchers = db.researchers.filter((x) => x.id !== u.id);
+      if (!db.editors.some((x) => x.id === u.id)) db.editors.push(u);
+    }
+  } else {
     const base = email.split('@')[0] || 'admin';
     const taken = (uname) => [...db.editors, ...db.researchers].some((x) => x.username.toLowerCase() === uname);
     const username = taken(base) ? `${base}.admin` : base;
@@ -129,22 +136,25 @@ function bootstrapAdmin() {
       id: `usr_admin_${Date.now()}`,
       name: 'Platform Admin',
       username,
-      kind: 'editor',
-      role: EDITOR_ROLES.ADMIN,
-      category: '',
-      email,
-      discord: '',
       slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
       institution: '', bio: '', avatarUrl: '', interests: [], links: [], following: [],
-      public: false,
       twoFactorSecret: '',
       twoFactorEnabled: false,
     };
     db.editors.push(u);
   }
+  // Force the platform-admin identity and clear any researcher-only gates
+  // (approval / onboarding) so signing in goes straight to the admin dashboard.
+  u.kind = 'editor';
+  u.role = EDITOR_ROLES.ADMIN;
+  u.category = u.category || '';
   u.password = hashPassword(password);
   u.emailVerified = true;
-  console.log(`[store] admin bootstrap: ${email} signs in with ADMIN_PASSWORD (${u.kind}${u.role ? `/${u.role}` : ''})`);
+  u.approved = true;
+  u.onboarded = true;
+  u.suspended = false;
+  if (u.public === undefined) u.public = false;
+  console.log(`[store] admin bootstrap: ${email} signs in as platform admin (editor/admin)`);
 }
 
 // Load the active provider's data. Called once at server startup.

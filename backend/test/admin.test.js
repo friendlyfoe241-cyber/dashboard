@@ -39,3 +39,25 @@ describe('admin: broadcast recipients', () => {
     expect(store.broadcastRecipients('researchers').length).toBe(before - 1);
   });
 });
+
+describe('admin bootstrap promotion', () => {
+  it('promotes an existing researcher account to platform admin when ADMIN_EMAIL matches', async () => {
+    const prevE = process.env.ADMIN_EMAIL, prevP = process.env.ADMIN_PASSWORD;
+    process.env.ADMIN_EMAIL = 'jordan@example.com'; // a seed researcher
+    process.env.ADMIN_PASSWORD = 'OwnerPass123';
+    try {
+      await store.reset(); // runs bootstrapAdmin against the freshly-seeded data
+      const u = store.authenticate('jordan@example.com', 'OwnerPass123');
+      expect(u).toBeTruthy();
+      expect(u.kind).toBe('editor');
+      expect(u.role).toBe('admin');
+      expect(u.onboarded).toBe(true);
+      expect(u.approved).toBe(true);
+      expect(store.getResearcherById(u.id)).toBeNull(); // moved out of researchers
+    } finally {
+      if (prevE === undefined) delete process.env.ADMIN_EMAIL; else process.env.ADMIN_EMAIL = prevE;
+      if (prevP === undefined) delete process.env.ADMIN_PASSWORD; else process.env.ADMIN_PASSWORD = prevP;
+      await store.reset();
+    }
+  });
+});
