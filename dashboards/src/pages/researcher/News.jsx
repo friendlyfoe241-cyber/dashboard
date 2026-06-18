@@ -7,7 +7,7 @@ const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: '
 const AUDIENCE_LABEL = { all: 'Everyone', researchers: 'Researchers', editors: 'Staff' };
 
 // Announcements & news from the Synthica team — the richer, full-page view.
-export default function News() {
+export default function News({ embedded }) {
   const [news, setNews] = useState(null);
   useEffect(() => { api.news().then(setNews).catch(() => setNews([])); }, []);
   if (!news) return <div className="page-loading">Loading…</div>;
@@ -16,8 +16,8 @@ export default function News() {
 
   return (
     <div>
-      <h1 className="page-title">News &amp; announcements</h1>
-      <p className="page-sub">The latest from the Synthica team — partnerships, programs, and platform updates.</p>
+      {!embedded && <h1 className="page-title">News &amp; announcements</h1>}
+      {!embedded && <p className="page-sub">The latest from the Synthica team — partnerships, programs, and platform updates.</p>}
 
       {news.length === 0 ? (
         <EmptyState>No announcements yet — check back soon.</EmptyState>

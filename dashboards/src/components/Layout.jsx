@@ -97,15 +97,22 @@ export default function Layout({ children, nav = [] }) {
       </header>
       <div className="app-body">
         <aside className="sidebar">
-          {nav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            >
-              {item.label}
-            </NavLink>
+          {nav.map((item, i) => (
+            item.spacer ? (
+              <div key={`sp-${i}`} className="sidebar-spacer" />
+            ) : item.section ? (
+              <div key={`sec-${i}`} className="sidebar-section">{item.section}</div>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              >
+                {item.icon && <span className="sidebar-ico" aria-hidden="true">{item.icon}</span>}
+                <span className="sidebar-label">{item.label}</span>
+              </NavLink>
+            )
           ))}
         </aside>
         <main className="content" key={rev}>{children}</main>

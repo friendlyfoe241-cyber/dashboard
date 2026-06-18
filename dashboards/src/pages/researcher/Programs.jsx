@@ -7,7 +7,7 @@ const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month
 const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
 
 // Structured programs: apply → join the cohort → track milestones together.
-export default function Programs() {
+export default function Programs({ embedded }) {
   const [programs, setPrograms] = useState(null);
   const toast = useToast();
 
@@ -26,8 +26,8 @@ export default function Programs() {
 
   return (
     <div>
-      <h1 className="page-title">Programs</h1>
-      <p className="page-sub">Structured cohorts with mentors, deadlines, and milestones — apply with one click.</p>
+      {!embedded && <h1 className="page-title">Programs</h1>}
+      {!embedded && <p className="page-sub">Structured cohorts with mentors, deadlines, and milestones — apply with one click.</p>}
       {programs.length === 0 && <EmptyState>No programs are open right now — check back soon.</EmptyState>}
       <div className="grid grid-2">
         {programs.map((p) => {

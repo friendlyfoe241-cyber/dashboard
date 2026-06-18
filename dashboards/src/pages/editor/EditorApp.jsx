@@ -21,11 +21,11 @@ export default function EditorApp() {
   const hasQueue = !isAuditor && !isSuperAdmin;
 
   const nav = [];
-  if (hasQueue) nav.push({ to: '/editor', label: 'My Queue', end: true });
-  if (isDirector) nav.push({ to: '/editor/director', label: 'Director Desk' });
-  if (isAdmin) nav.push({ to: '/editor/admin', label: 'Admin' });
-  nav.push({ to: '/archive', label: 'Synthica Archive' });
-  nav.push({ to: '/editor/account', label: 'Account' });
+  if (hasQueue) nav.push({ to: '/editor', label: 'My Queue', icon: '📥', end: true });
+  if (isDirector) nav.push({ to: '/editor/director', label: 'Director Desk', icon: '🗂️' });
+  if (isAdmin) nav.push({ to: '/editor/admin', label: 'Admin', icon: '⚙️' });
+  nav.push({ to: '/archive', label: 'Archive', icon: '📚' });
+  nav.push({ to: '/editor/account', label: 'Account', icon: '👤' });
 
   return (
     <Layout nav={nav}>

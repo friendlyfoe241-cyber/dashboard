@@ -7,15 +7,15 @@ const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month
 const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
 
 // Competitions board — opportunities posted by staff. Read-only for members.
-export default function Competitions() {
+export default function Competitions({ embedded }) {
   const [comps, setComps] = useState(null);
   useEffect(() => { api.competitions().then(setComps).catch(() => setComps([])); }, []);
   if (!comps) return <div className="page-loading">Loading…</div>;
 
   return (
     <div>
-      <h1 className="page-title">Competitions</h1>
-      <p className="page-sub">Research competitions and opportunities worth your time.</p>
+      {!embedded && <h1 className="page-title">Competitions</h1>}
+      {!embedded && <p className="page-sub">Research competitions and opportunities worth your time.</p>}
       {comps.length === 0 ? (
         <EmptyState>No competitions posted right now — check back soon.</EmptyState>
       ) : (

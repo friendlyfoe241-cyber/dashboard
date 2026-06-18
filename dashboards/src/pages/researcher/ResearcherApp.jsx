@@ -9,6 +9,7 @@ import ProjectDetail from './ProjectDetail.jsx';
 import ResearchHub from './ResearchHub.jsx';
 import ApplicationHub from './ApplicationHub.jsx';
 import Opportunities from './Opportunities.jsx';
+import Explore from './Explore.jsx';
 import MyProjects from './MyProjects.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
@@ -53,22 +54,24 @@ export default function ResearcherApp() {
   // Newly-registered members can't use the app until an auditor assigns a role.
   if (user && user.approved === false) return <PendingApproval />;
 
+  // Grouped, icon-led nav — fewer destinations, related pages folded into hubs
+  // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
   const nav = [
-    { to: '/researcher', label: 'Home', end: true },
-    { to: '/researcher/community', label: 'Community' },
-    { to: '/researcher/messages', label: 'Messages' },
-    { to: '/researcher/projects', label: 'My Projects' },
-    { to: '/researcher/groups', label: 'Groups' },
-    { to: '/researcher/competitions', label: 'Competitions' },
-    { to: '/researcher/news', label: 'News' },
-    { to: '/researcher/calendar', label: 'Calendar' },
-    { to: '/researcher/drive', label: 'Drive' },
-    { to: '/researcher/journal', label: 'Synthica Journal' },
-    { to: '/archive', label: 'Synthica Archive' },
-    { to: '/researcher/opportunities', label: 'Opportunities' },
-    { to: '/researcher/programs', label: 'Programs' },
-    { to: '/researcher/people', label: 'People' },
-    { to: '/researcher/account', label: 'Account' },
+    { to: '/researcher', label: 'Home', icon: '🏠', end: true },
+    { section: 'Community' },
+    { to: '/researcher/community', label: 'Community', icon: '📣' },
+    { to: '/researcher/messages', label: 'Messages', icon: '💬' },
+    { to: '/researcher/people', label: 'People', icon: '👥' },
+    { section: 'Research' },
+    { to: '/researcher/projects', label: 'Projects', icon: '📂' },
+    { to: '/researcher/groups', label: 'Groups', icon: '🔬' },
+    { to: '/researcher/calendar', label: 'Calendar', icon: '📅' },
+    { to: '/researcher/drive', label: 'Drive', icon: '🗂️' },
+    { section: 'Explore' },
+    { to: '/researcher/explore', label: 'Explore', icon: '🚀' },
+    { to: '/researcher/journal', label: 'Journal', icon: '📖' },
+    { spacer: true },
+    { to: '/researcher/account', label: 'Account', icon: '⚙️' },
   ];
 
   return (
@@ -85,6 +88,8 @@ export default function ResearcherApp() {
         <Route path="people" element={<People />} />
         <Route path="project/:id" element={<ProjectDetail />} />
         <Route path="journal" element={<MyJournal />} />
+        <Route path="explore" element={<Explore />} />
+        {/* Folded into hubs but kept as deep links so old URLs still resolve. */}
         <Route path="opportunities" element={<Opportunities />} />
         <Route path="programs" element={<Programs />} />
         <Route path="groups" element={<Groups />} />

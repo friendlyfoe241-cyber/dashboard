@@ -6,6 +6,7 @@ import { Card, Button, Pfp, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { imageSrc } from '../../files.js';
 import { safeHref } from '../../url.js';
+import News from './News.jsx';
 
 const ago = (iso) => {
   const s = Math.floor((Date.now() - new Date(iso)) / 1000);
@@ -19,6 +20,7 @@ const ago = (iso) => {
 // The live community feed — members post questions, opportunities, and updates,
 // then like and comment. The social heart of the portal.
 export default function Community() {
+  const [tab, setTab] = useState('feed');
   const [posts, setPosts] = useState(null);
   const load = useCallback(() => api.posts().then(setPosts).catch(() => setPosts([])), []);
   useEffect(() => { load(); }, [load]);
@@ -26,13 +28,20 @@ export default function Community() {
   // Local optimistic refresh: the post APIs return the updated post.
   const patch = (updated) => setPosts((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
 
-  if (!posts) return <div className="page-loading">Loading…</div>;
-
   return (
     <div>
       <h1 className="page-title">Community</h1>
-      <p className="page-sub">Ask questions, share opportunities, and connect with researchers worldwide.</p>
+      <p className="page-sub">Connect with researchers worldwide — share, ask, and keep up with the latest.</p>
 
+      <div className="seg" style={{ marginBottom: '1.25rem' }}>
+        <button className={`seg-btn ${tab === 'feed' ? 'active' : ''}`} onClick={() => setTab('feed')}>Feed</button>
+        <button className={`seg-btn ${tab === 'news' ? 'active' : ''}`} onClick={() => setTab('news')}>News &amp; announcements</button>
+      </div>
+
+      {tab === 'news' ? <News embedded /> : !posts ? (
+        <div className="page-loading">Loading…</div>
+      ) : (
+        <>
       <Composer onPosted={(p) => setPosts((cur) => [p, ...cur])} />
 
       {posts.length === 0 ? (
@@ -41,6 +50,8 @@ export default function Community() {
         <div className="stack" style={{ gap: '1rem' }}>
           {posts.map((p) => <PostCard key={p.id} post={p} onChange={patch} onDeleted={(id) => setPosts((cur) => cur.filter((x) => x.id !== id))} />)}
         </div>
+      )}
+        </>
       )}
     </div>
   );

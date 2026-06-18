@@ -57,7 +57,7 @@ export default function CommandPalette({ nav = [] }) {
   }, [q, open, user?.kind]);
 
   const items = useMemo(() => {
-    const base = nav.map((n) => ({ label: n.label, to: n.to }));
+    const base = nav.filter((n) => n.to).map((n) => ({ label: n.label, to: n.to }));
     const needle = q.trim().toLowerCase();
     const local = [...base, ...extra];
     const filtered = needle ? local.filter((i) => i.label.toLowerCase().includes(needle)) : local;
