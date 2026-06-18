@@ -539,6 +539,8 @@ export function updateProfile(userId, patch) {
   if (Array.isArray(patch.interests)) u.interests = patch.interests.map((s) => String(s).trim().slice(0, 40)).filter(Boolean).slice(0, 12);
   if (Array.isArray(patch.links)) u.links = cleanLinks(patch.links);
   if (typeof patch.public === 'boolean') u.public = patch.public;
+  // Durable onboarding completion (so the wizard never re-shows on a new device).
+  if (patch.onboarded === true) u.onboarded = true;
   if (typeof patch.experienceSummary === 'string') u.experienceSummary = patch.experienceSummary.slice(0, 800);
   if (patch.gpa !== undefined) u.gpa = String(patch.gpa).trim().slice(0, 12);
   if (patch.researchExperience !== undefined && patch.researchExperience !== null && patch.researchExperience !== '') {

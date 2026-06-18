@@ -127,3 +127,12 @@ describe('public stats', () => {
     expect(typeof s.openPrograms).toBe('number');
   });
 });
+
+describe('onboarding completion is durable', () => {
+  it('updateProfile persists onboarded=true on the account', () => {
+    const u = store.authenticate('jordan@example.com', 'demo1234');
+    expect(store.getUserById(u.id).onboarded).toBeFalsy();
+    store.updateProfile(u.id, { onboarded: true });
+    expect(store.getUserById(u.id).onboarded).toBe(true);
+  });
+});
