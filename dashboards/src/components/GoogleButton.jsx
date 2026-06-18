@@ -1,7 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth.jsx';
+import { api } from '../api.js';
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const ENV_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+// Cache the resolved client id across mounts (login → signup steps remount this
+// component) so we don't re-hit /api/config every time.
+let resolvedClientId = ENV_CLIENT_ID || null; // null = unknown, '' = confirmed off
+let gisScriptPromise = null;
+
+function loadGisScript() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (gisScriptPromise) return gisScriptPromise;
+  gisScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load Google sign-in'));
+    document.head.appendChild(s);
+  });
+  return gisScriptPromise;
+}
 
 const GoogleG = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -12,56 +33,85 @@ const GoogleG = () => (
   </svg>
 );
 
-// "Continue with Google" — renders the official GIS button when
-// VITE_GOOGLE_CLIENT_ID is configured; otherwise a styled placeholder that
-// explains what's missing instead of silently hiding.
-export default function GoogleButton({ onSuccess, onError }) {
+// "Continue with Google" — renders the official Google Identity Services button.
+// The OAuth client id comes from the build (VITE_GOOGLE_CLIENT_ID) or, failing
+// that, from the backend /api/config (the id is public, so this is safe and
+// means Google login works as long as the *backend* is configured).
+//
+// `text` is the GIS label key: 'continue_with' (default) or 'signup_with'.
+export default function GoogleButton({ onSuccess, onError, text = 'continue_with' }) {
   const { loginWithGoogle } = useAuth();
   const ref = useRef(null);
-  const [ready, setReady] = useState(false);
+  const [clientId, setClientId] = useState(resolvedClientId); // null until resolved
+  const [width, setWidth] = useState(0);
 
-  // Load the GIS script once.
+  // Resolve the client id: env first, else ask the backend once.
   useEffect(() => {
-    if (!CLIENT_ID) return;
-    if (window.google?.accounts?.id) {
-      setReady(true);
-      return;
-    }
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true;
-    s.defer = true;
-    s.onload = () => setReady(true);
-    document.head.appendChild(s);
+    if (resolvedClientId !== null) { setClientId(resolvedClientId); return; }
+    let alive = true;
+    api.config()
+      .then((c) => { resolvedClientId = c.googleClientId || ''; if (alive) setClientId(resolvedClientId); })
+      .catch(() => { resolvedClientId = ''; if (alive) setClientId(''); });
+    return () => { alive = false; };
   }, []);
 
+  // Track the container width so the Google button always fills its column
+  // (GIS clamps to 200–400px) instead of sitting at a fixed size in a box.
   useEffect(() => {
-    if (!ready || !CLIENT_ID || !ref.current) return;
-    /* global google */
-    window.google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: async (resp) => {
-        try {
-          await loginWithGoogle(resp.credential);
-          onSuccess?.();
-        } catch (e) {
-          onError?.(e.message);
-        }
-      },
-    });
-    window.google.accounts.id.renderButton(ref.current, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' });
-  }, [ready]);
+    if (!ref.current) return undefined;
+    const measure = () => setWidth(Math.round(ref.current?.getBoundingClientRect().width || 0));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [clientId]);
 
-  if (!CLIENT_ID) {
+  // Initialise + render the real Google button once we have an id and a width.
+  useEffect(() => {
+    if (!clientId || !ref.current || !width) return;
+    let cancelled = false;
+    loadGisScript()
+      .then(() => {
+        if (cancelled || !ref.current) return;
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (resp) => {
+            try { await loginWithGoogle(resp.credential); onSuccess?.(); }
+            catch (e) { onError?.(e.message); }
+          },
+        });
+        ref.current.innerHTML = '';
+        window.google.accounts.id.renderButton(ref.current, {
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          text,
+          logo_alignment: 'center',
+          width: Math.max(200, Math.min(400, width)),
+        });
+      })
+      .catch((e) => onError?.(e.message));
+    return () => { cancelled = true; };
+  }, [clientId, width, text]);
+
+  // Still resolving — reserve the row so the layout doesn't jump.
+  if (clientId === null) return <div className="google-gsi" ref={ref} style={{ minHeight: 44 }} />;
+
+  // Backend has no client id configured: show a clean, on-brand fallback that
+  // explains what's missing rather than a dead button.
+  if (clientId === '') {
     return (
       <button
         type="button"
         className="google-btn"
-        onClick={() => onError?.('Google sign-in isn’t configured yet — set GOOGLE_CLIENT_ID (backend) and VITE_GOOGLE_CLIENT_ID (dashboards). See DEPLOY.md.')}
+        onClick={() => onError?.('Google sign-in isn’t configured yet — set GOOGLE_CLIENT_ID on the backend. See DEPLOY.md.')}
       >
         <GoogleG /> Continue with Google
       </button>
     );
   }
+
+  // The div IS the button — GIS renders into it; we keep it full-width and
+  // unboxed so it stands on its own.
   return <div className="google-gsi" ref={ref} />;
 }

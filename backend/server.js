@@ -21,7 +21,7 @@ const optionalUser = (req) => {
 import * as store from './src/store.js';
 import * as notify from './src/notify.js';
 import { sendEmail, emailEnabled, welcomeEmail, actionEmail } from './src/email.js';
-import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
+import { verifyGoogleIdToken, googleEnabled, googleClientId } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
 import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
 import { ogCardPng, sharePageHtml } from './src/og.js';
@@ -153,7 +153,7 @@ app.post('/api/2fa/enable', requireAuth, wrap((req, res) => res.json(store.enabl
 app.post('/api/2fa/disable', requireAuth, wrap((req, res) => res.json(store.disableTwoFactor(req.user.id, (req.body || {}).code))));
 
 // Tells the frontend which auth options are available.
-app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), demoLogins: store.demoLoginsEnabled(), emailConfigured: emailEnabled() }));
+app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), googleClientId: googleClientId(), demoLogins: store.demoLoginsEnabled(), emailConfigured: emailEnabled() }));
 
 // Google Sign-In: verify the ID token, find/create the user, issue our token.
 app.post('/api/auth/google', authLimiter, async (req, res) => {

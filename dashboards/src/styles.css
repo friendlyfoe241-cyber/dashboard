@@ -964,7 +964,9 @@ textarea {
   transition: box-shadow 0.15s, transform 0.15s;
 }
 .google-btn:hover { box-shadow: 0 4px 14px rgba(16, 24, 40, 0.12); transform: translateY(-1px); }
-.google-gsi { display: flex; justify-content: center; }
+/* The GIS-rendered button stands on its own: full-width row, centered, no box. */
+.google-gsi { display: flex; justify-content: center; width: 100%; }
+.google-gsi > div, .google-gsi iframe { margin: 0 auto !important; }
 
 .login-demo { margin-top: 1rem; }
 .login-demo summary {
