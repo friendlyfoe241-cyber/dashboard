@@ -11,7 +11,6 @@ import { Pfp } from '../../components/ui.jsx';
 export default function ResearchHub() {
   const { user } = useAuth();
   const isLead = (user?.tags || []).includes('lead_researcher');
-  const canPostFeed = (user?.tags || []).some((t) => ['lead_researcher', 'associate_researcher'].includes(t));
   const [listings, setListings] = useState([]);
   const [filter, setFilter] = useState('All');
   const [applied, setApplied] = useState({});
@@ -40,7 +39,7 @@ export default function ResearchHub() {
       </div>
       {error && <div className="login-error">{error}</div>}
 
-      {(isLead || canPostFeed) && <LeadTools onCreated={load} isLead={isLead} />}
+      {isLead && <LeadTools onCreated={load} />}
       {isLead && <MyListings onChanged={load} />}
 
       <div className="row" style={{ marginBottom: '1.25rem' }}>
@@ -217,22 +216,16 @@ function BannerPreview({ url }) {
   return <img src={imageSrc(url)} alt="Banner preview" onError={() => setBad(true)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 12, margin: '0 0 0.6rem', border: '1px solid var(--border)' }} />;
 }
 
-// Leads post recruiting listings; leads + associates can post feed banners.
-function LeadTools({ onCreated, isLead }) {
+// Leads post recruiting listings. Each listing carries its own banner.
+function LeadTools({ onCreated }) {
   const toast = useToast();
-  const [tab, setTab] = useState(null);
+  const [open, setOpen] = useState(false);
   const [listing, setListing] = useState({ title: '', category: CATS[0], spots: 2, description: '', bannerUrl: '', lookingFor: '' });
-  const [banner, setBanner] = useState({ title: '', body: '', bannerUrl: '' });
   const [busy, setBusy] = useState(false);
 
   const submitListing = async (e) => {
     e.preventDefault(); setBusy(true);
-    try { await api.createListing(listing); setListing({ title: '', category: CATS[0], spots: 2, description: '', bannerUrl: '', lookingFor: '' }); setTab(null); toast.success('Listing posted'); onCreated(); }
-    catch (err) { toast.error(err.message); } finally { setBusy(false); }
-  };
-  const submitBanner = async (e) => {
-    e.preventDefault(); setBusy(true);
-    try { await api.postBanner(banner); setBanner({ title: '', body: '', bannerUrl: '' }); setTab(null); toast.success('Posted to the feed'); }
+    try { await api.createListing(listing); setListing({ title: '', category: CATS[0], spots: 2, description: '', bannerUrl: '', lookingFor: '' }); setOpen(false); toast.success('Listing posted'); onCreated(); }
     catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
 
@@ -241,15 +234,14 @@ function LeadTools({ onCreated, isLead }) {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <div>
           <strong>Lead tools</strong>
-          <div className="muted" style={{ fontSize: '0.78rem' }}>Recruit for a project or post an update to everyone's feed.</div>
+          <div className="muted" style={{ fontSize: '0.78rem' }}>Recruit collaborators for one of your projects.</div>
         </div>
         <div className="seg">
-          {isLead && <button type="button" className={`seg-btn ${tab === 'listing' ? 'on' : ''}`} onClick={() => setTab(tab === 'listing' ? null : 'listing')}>📣 Post listing</button>}
-          <button type="button" className={`seg-btn ${tab === 'banner' ? 'on' : ''}`} onClick={() => setTab(tab === 'banner' ? null : 'banner')}>🖼 Post banner</button>
+          <button type="button" className={`seg-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}>📣 Post listing</button>
         </div>
       </div>
-      {tab === 'listing' && (
-        <form onSubmit={submitListing} style={{ marginTop: '0.75rem' }}>
+      {open && (
+        <form onSubmit={submitListing} className="pop-in" style={{ marginTop: '0.75rem' }}>
           <Field label="Title"><input value={listing.title} onChange={(e) => setListing({ ...listing, title: e.target.value })} required /></Field>
           <div className="grid grid-3">
             <Field label="Subject">
@@ -264,15 +256,6 @@ function LeadTools({ onCreated, isLead }) {
           <Field label="Banner image URL (optional — shows on the card)"><input value={listing.bannerUrl} onChange={(e) => setListing({ ...listing, bannerUrl: e.target.value })} placeholder="https://…" /></Field>
           <BannerPreview url={listing.bannerUrl} />
           <Button className="btn-sm" disabled={busy}>Post listing</Button>
-        </form>
-      )}
-      {tab === 'banner' && (
-        <form onSubmit={submitBanner} style={{ marginTop: '0.75rem' }}>
-          <Field label="Headline"><input value={banner.title} onChange={(e) => setBanner({ ...banner, title: e.target.value })} required /></Field>
-          <Field label="Message"><textarea value={banner.body} onChange={(e) => setBanner({ ...banner, body: e.target.value })} required /></Field>
-          <Field label="Banner image URL (optional)"><input value={banner.bannerUrl} onChange={(e) => setBanner({ ...banner, bannerUrl: e.target.value })} placeholder="https://…" /></Field>
-          <BannerPreview url={banner.bannerUrl} />
-          <Button className="btn-sm" disabled={busy}>Post to feed</Button>
         </form>
       )}
     </Card>

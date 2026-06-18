@@ -677,7 +677,8 @@ export const groups = [
     description: 'A hub for student projects on environmental sensing, climate data, and sustainability. We share tooling, datasets, and review each other’s work.',
     category: 'Chemistry',
     leaderId: leadId,
-    bannerUrl: '',
+    bannerUrl: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&q=60',
+    logoUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=200&q=60',
     members: [leadId, assocId, caseyId],
     projectIds: [projects[0].id, projects[1].id],
     positions: [

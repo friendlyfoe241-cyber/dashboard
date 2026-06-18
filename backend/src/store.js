@@ -157,6 +157,32 @@ function bootstrapAdmin() {
   console.log(`[store] admin bootstrap: ${email} signs in as platform admin (editor/admin)`);
 }
 
+// Safety net: collapse any accounts that share an email (case-insensitive) so a
+// single person can never end up with two logins. Registration already blocks
+// new duplicates; this heals data that predates that guard or arrived via an
+// external provider. We keep one account per email — preferring a staff/editor
+// account, then the oldest — and drop the rest.
+function dedupeAccounts() {
+  const seen = new Map(); // email -> kept account
+  const rank = (u) => (u.kind === 'editor' ? 0 : 1); // editors win
+  const age = (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0);
+  const all = [...db.editors, ...db.researchers].filter((u) => u && u.email);
+  let removed = 0;
+  for (const u of all) {
+    const key = u.email.toLowerCase();
+    const kept = seen.get(key);
+    if (!kept) { seen.set(key, u); continue; }
+    // Decide which of the two to keep; mark the loser for removal.
+    const keepNew = rank(u) < rank(kept) || (rank(u) === rank(kept) && age(u) && age(u) < age(kept));
+    const loser = keepNew ? kept : u;
+    if (keepNew) seen.set(key, u);
+    db.editors = db.editors.filter((x) => x !== loser);
+    db.researchers = db.researchers.filter((x) => x !== loser);
+    removed += 1;
+  }
+  if (removed) console.log(`[store] dedupe: removed ${removed} duplicate-email account(s)`);
+}
+
 // Load the active provider's data. Called once at server startup.
 export async function init() {
   const name = (process.env.DATA_PROVIDER || 'memory').toLowerCase();
@@ -172,6 +198,7 @@ export async function init() {
     provider = null;
     db = buildSeed();
   }
+  dedupeAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -183,6 +210,7 @@ export async function init() {
 // provider, or the seed when in memory.
 export async function reset() {
   db = provider ? await loadFromProvider() : buildSeed();
+  dedupeAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -2959,7 +2987,7 @@ const groupLeaderName = (g) => getUserById(g.leaderId)?.name || 'Lead';
 export function listGroups() {
   return (db.groups || []).map((g) => ({
     id: g.id, name: g.name, category: g.category || '', description: g.description || '',
-    bannerUrl: g.bannerUrl || '', leaderName: groupLeaderName(g),
+    bannerUrl: g.bannerUrl || '', logoUrl: g.logoUrl || '', leaderName: groupLeaderName(g),
     memberCount: (g.members || []).length, projectCount: (g.projectIds || []).length,
   }));
 }
@@ -2981,7 +3009,7 @@ export function groupDetail(groupId, viewerId) {
   }));
   return {
     id: g.id, name: g.name, description: g.description || '', category: g.category || '',
-    bannerUrl: g.bannerUrl || '', leaderId: g.leaderId, leaderName: groupLeaderName(g),
+    bannerUrl: g.bannerUrl || '', logoUrl: g.logoUrl || '', leaderId: g.leaderId, leaderName: groupLeaderName(g),
     members, projects, positions, links: g.links || [],
     isLeader: viewerId === g.leaderId, isMember: (g.members || []).includes(viewerId),
     // Projects the viewer leads that aren't yet in the group (for the "add project" picker).
@@ -2991,7 +3019,7 @@ export function groupDetail(groupId, viewerId) {
   };
 }
 
-export function createGroup({ userId, name, description, category, bannerUrl }) {
+export function createGroup({ userId, name, description, category, bannerUrl, logoUrl }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can create research groups');
   if (!name?.trim()) throw httpError(400, 'A group name is required');
@@ -3003,6 +3031,7 @@ export function createGroup({ userId, name, description, category, bannerUrl }) 
     category: CATEGORIES.includes(category) ? category : '',
     leaderId: userId,
     bannerUrl: safeUrl(bannerUrl, 400),
+    logoUrl: safeUrl(logoUrl, 400),
     members: [userId],
     projectIds: [],
     positions: [],
@@ -3014,6 +3043,23 @@ export function createGroup({ userId, name, description, category, bannerUrl }) 
   recordActivity(userId, 'group_founded', `founded the research group ${g.name}`, `/researcher/groups/${g.id}`);
   schedulePersist();
   return g;
+}
+
+// Group leader edits identity: name, description, category, banner, and logo.
+export function updateGroup({ groupId, leaderId, name, description, category, bannerUrl, logoUrl }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  if (name !== undefined) {
+    if (!String(name).trim()) throw httpError(400, 'A group name is required');
+    g.name = String(name).trim().slice(0, 100);
+  }
+  if (description !== undefined) g.description = String(description || '').trim().slice(0, 1200);
+  if (category !== undefined) g.category = CATEGORIES.includes(category) ? category : '';
+  if (bannerUrl !== undefined) g.bannerUrl = safeUrl(bannerUrl, 400);
+  if (logoUrl !== undefined) g.logoUrl = safeUrl(logoUrl, 400);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
 }
 
 export function joinGroup({ groupId, userId }) {

@@ -128,6 +128,24 @@ describe('public stats', () => {
   });
 });
 
+describe('no duplicate accounts per email', () => {
+  it('registration rejects an email that already exists (case-insensitive)', () => {
+    store.registerResearcher({ name: 'First', email: 'dup@example.com', discord: 'a', password: 'hunter22', username: 'firstuser' });
+    expect(() => store.registerResearcher({ name: 'Second', email: 'DUP@example.com', discord: 'b', password: 'hunter22', username: 'seconduser' }))
+      .toThrow(/already exists/i);
+  });
+
+  it('Google sign-in links an existing account instead of creating a second one', () => {
+    const created = store.registerResearcher({ name: 'Linkme', email: 'link@example.com', discord: 'l', password: 'hunter22' });
+    const before = store.adminListUsers('link@example.com').length;
+    const viaGoogle = store.findOrCreateGoogleUser({ email: 'LINK@example.com', name: 'Linkme', googleId: 'g-123' });
+    expect(viaGoogle.id).toBe(created.id); // same account, just linked
+    expect(store.adminListUsers('link@example.com').length).toBe(before); // no new row
+    // The original password still works after linking.
+    expect(store.authenticate('link@example.com', 'hunter22')).toBeTruthy();
+  });
+});
+
 describe('onboarding completion is durable', () => {
   it('updateProfile persists onboarded=true on the account', () => {
     const u = store.authenticate('jordan@example.com', 'demo1234');

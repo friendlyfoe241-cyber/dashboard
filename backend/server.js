@@ -330,6 +330,7 @@ app.get('/api/admin/export', requireAuth, requireDirector, wrap((_req, res) => {
 app.get('/api/groups', requireAuth, wrap((_req, res) => res.json(store.listGroups())));
 app.get('/api/groups/:id', requireAuth, wrap((req, res) => res.json(store.groupDetail(req.params.id, req.user.id))));
 app.post('/api/groups', requireAuth, wrap((req, res) => res.json(store.createGroup({ userId: req.user.id, ...(req.body || {}) }))));
+app.put('/api/groups/:id', requireAuth, wrap((req, res) => res.json(store.updateGroup({ groupId: req.params.id, leaderId: req.user.id, ...(req.body || {}) }))));
 app.post('/api/groups/:id/join', requireAuth, wrap((req, res) => res.json(store.joinGroup({ groupId: req.params.id, userId: req.user.id }))));
 app.post('/api/groups/:id/leave', requireAuth, wrap((req, res) => res.json(store.leaveGroup({ groupId: req.params.id, userId: req.user.id }))));
 app.post('/api/groups/:id/projects', requireAuth, wrap((req, res) => res.json(store.addGroupProject({ groupId: req.params.id, leaderId: req.user.id, projectId: (req.body || {}).projectId }))));
@@ -736,16 +737,6 @@ app.get('/api/researcher/listing-applications', requireAuth, researcherOnly, wra
 app.post('/api/researcher/listing-applications/:id', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.reviewListingApplication({ leadId: req.user.id, appId: req.params.id, status: (req.body || {}).status }));
 }));
-// Leads post a project banner/update to the feed.
-app.post('/api/researcher/banner', requireAuth, researcherOnly, wrap((req, res) => {
-  const u = req.user;
-  // Feed posting is for leads + associates; everyone else just reads.
-  const canPost = (u.tags || []).some((t) => ['lead_researcher', 'associate_researcher'].includes(t));
-  if (!canPost) return res.status(403).json({ error: 'Lead or associate researchers only' });
-  const { title, body, bannerUrl } = req.body || {};
-  res.json(store.addNews({ authorId: u.id, authorName: u.name, title, body, bannerUrl }));
-}));
-
 // Researcher submits a paper into the editor pipeline + manages revisions.
 app.post('/api/researcher/journal/submit', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, category, abstract, pdfUrl, coAuthors } = req.body || {};
