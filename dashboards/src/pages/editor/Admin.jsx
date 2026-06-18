@@ -996,6 +996,52 @@ function BroadcastEmail() {
 }
 
 // Community moderation: review and remove recent posts.
+// The reports queue: content members have flagged, with one-click resolution.
+function ReportsQueue() {
+  const toast = useToast();
+  const [reports, setReports] = useState(null);
+  useEffect(() => { api.adminReports('open').then(setReports).catch(() => setReports([])); }, []);
+
+  const resolve = (id, action) => {
+    const verb = action === 'dismiss' ? 'Dismiss this report' : action === 'remove' ? 'Remove the reported content' : 'Suspend the author (and remove the content)';
+    if (action !== 'dismiss' && !window.confirm(`${verb}?`)) return;
+    api.resolveReport(id, action).then(setReports).then(() => toast.success('Report resolved')).catch((e) => toast.error(e.message));
+  };
+
+  if (!reports) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Reports queue {reports.length > 0 && <Badge tone="gold">{reports.length} open</Badge>}
+      </h2>
+      {reports.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. 🎉</p></Card>
+      ) : (
+        <div className="stack">
+          {reports.map((r) => (
+            <Card key={r.id}>
+              <div className="card-row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <Badge tone="red">{r.kind}</Badge>{' '}
+                  <strong>{r.targetOwnerName}</strong>
+                  <span className="muted" style={{ fontSize: '0.78rem' }}> · reported by {r.reporterName} · {new Date(r.at).toLocaleDateString()}</span>
+                  {r.reason && <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>Reason: “{r.reason}”</div>}
+                  {r.snippet && <div className="info-block" style={{ fontSize: '0.82rem', marginTop: '0.35rem' }}>{r.snippet}</div>}
+                </div>
+                <div className="row" style={{ flexShrink: 0, gap: '0.3rem' }}>
+                  <Button className="btn-sm" variant="ghost" onClick={() => resolve(r.id, 'dismiss')}>Dismiss</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'remove')}>Remove</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'suspend')}>Suspend</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Moderation() {
   const toast = useToast();
   const [posts, setPosts] = useState([]);
@@ -1004,7 +1050,8 @@ function Moderation() {
   const remove = (id) => api.deletePost(id).then(() => { load(); toast.success('Post removed'); }).catch((e) => toast.error(e.message));
   return (
     <div style={{ marginBottom: '1.5rem' }}>
-      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Community moderation <Badge tone="gray">{posts.length}</Badge></h2>
+      <ReportsQueue />
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Recent posts <Badge tone="gray">{posts.length}</Badge></h2>
       {posts.length === 0 ? (
         <Card><p className="muted" style={{ margin: 0 }}>No community posts yet.</p></Card>
       ) : (

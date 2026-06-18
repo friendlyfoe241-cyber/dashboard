@@ -233,6 +233,10 @@ app.post('/api/admin/users/:id/tags', requireAuth, requireAuditor, wrap((req, re
 
 app.get('/api/admin/audit', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listAudit())));
 
+// Moderation queue — content reports filed by members.
+app.get('/api/admin/reports', requireAuth, requireAuditor, wrap((req, res) => res.json(store.listReports(req.query.status || 'open'))));
+app.post('/api/admin/reports/:id/resolve', requireAuth, requireAuditor, wrap((req, res) => res.json(store.resolveReport({ id: req.params.id, actor: req.user, action: (req.body || {}).action }))));
+
 // --- Paper archive: admin upload + self-archive verification (auditor) ------
 app.get('/api/admin/publications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.adminListPublications())));
 
@@ -362,6 +366,17 @@ app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count
 app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
 app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
 app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+
+// --- Trust & safety: report, block, account export/delete ------------------
+app.post('/api/report', requireAuth, wrap((req, res) => {
+  const { kind, targetId, reason } = req.body || {};
+  res.json(store.reportContent({ reporterId: req.user.id, kind, targetId, reason }));
+}));
+app.get('/api/me/blocks', requireAuth, wrap((req, res) => res.json(store.listBlocked(req.user.id))));
+app.post('/api/users/:id/block', requireAuth, wrap((req, res) => res.json(store.blockUser(req.user.id, req.params.id))));
+app.delete('/api/users/:id/block', requireAuth, wrap((req, res) => res.json(store.unblockUser(req.user.id, req.params.id))));
+app.get('/api/me/export', requireAuth, wrap((req, res) => res.json(store.exportMyData(req.user.id))));
+app.delete('/api/me', requireAuth, wrap((req, res) => res.json(store.deleteMyAccount(req.user.id))));
 
 // --- Real-time stream (Server-Sent Events) ---------------------------------
 // The browser opens an EventSource with ?token=… (EventSource can't set headers).

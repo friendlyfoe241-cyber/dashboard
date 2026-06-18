@@ -43,6 +43,7 @@ function buildSeed() {
     posts: clone(seed.posts || []),
     activities: clone(seed.activities || []),
     messages: clone(seed.messages || []),
+    reports: clone(seed.reports || []),
   };
 }
 
@@ -2174,6 +2175,7 @@ const dmCard = (id) => {
 export function sendMessage({ from, to, text }) {
   if (from === to) throw httpError(400, "You can't message yourself");
   if (!getUserById(to)) throw httpError(404, 'Recipient not found');
+  if (isBlockedBetween(from, to)) throw httpError(403, 'You can no longer message this person');
   if (!text?.trim()) throw httpError(400, 'Write a message');
   if (!Array.isArray(db.messages)) db.messages = [];
   const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
@@ -2198,6 +2200,7 @@ export function listConversations(userId) {
   const unread = {};
   for (const m of db.messages || []) if (m.to === userId && !m.read) unread[m.from] = (unread[m.from] || 0) + 1;
   return [...byOther.values()]
+    .filter((c) => !isBlockedBetween(userId, c.other))
     .map((c) => ({ user: dmCard(c.other), lastMessage: c.lastMessage, lastAt: c.lastAt, mine: c.mine, unread: unread[c.other] || 0 }))
     .sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
 }
@@ -2630,7 +2633,7 @@ function shapePost(p, viewerId) {
     imageUrl: p.imageUrl || '',
     likeCount: (p.likes || []).length,
     likedByMe: (p.likes || []).includes(viewerId),
-    comments: (p.comments || []).map((c) => ({ id: c.id, author: authorCard(c.authorId), text: c.text, at: c.at })),
+    comments: (p.comments || []).filter((c) => !isBlockedBetween(viewerId, c.authorId)).map((c) => ({ id: c.id, author: authorCard(c.authorId), text: c.text, at: c.at })),
     commentCount: (p.comments || []).length,
     at: p.at,
     canDelete: p.authorId === viewerId || isStaff(getUserById(viewerId)),
@@ -2639,6 +2642,7 @@ function shapePost(p, viewerId) {
 
 export function listPosts(viewerId) {
   return [...(db.posts || [])]
+    .filter((p) => !isBlockedBetween(viewerId, p.authorId))
     .sort((a, b) => new Date(b.at) - new Date(a.at))
     .map((p) => shapePost(p, viewerId));
 }
@@ -2701,6 +2705,212 @@ export function deletePost({ postId, userId }) {
 }
 
 export const postCountFor = (userId) => (db.posts || []).filter((p) => p.authorId === userId).length;
+
+// --- trust & safety: blocking, reporting, moderation -----------------------
+
+// True if either side has blocked the other — used to hide content + stop DMs.
+function isBlockedBetween(aId, bId) {
+  if (!aId || !bId || aId === bId) return false;
+  const a = getUserById(aId), b = getUserById(bId);
+  return !!((a?.blockedUsers || []).includes(bId) || (b?.blockedUsers || []).includes(aId));
+}
+
+export function blockUser(userId, targetId) {
+  if (userId === targetId) throw httpError(400, "You can't block yourself");
+  const u = getUserById(userId);
+  if (!u || !getUserById(targetId)) throw httpError(404, 'User not found');
+  if (!Array.isArray(u.blockedUsers)) u.blockedUsers = [];
+  if (!u.blockedUsers.includes(targetId)) u.blockedUsers.push(targetId);
+  // Blocking unfollows both ways so they drop out of each other's feed/network.
+  if (Array.isArray(u.following)) u.following = u.following.filter((id) => id !== targetId);
+  const t = getUserById(targetId);
+  if (t && Array.isArray(t.following)) t.following = t.following.filter((id) => id !== userId);
+  schedulePersist();
+  return { blocked: u.blockedUsers };
+}
+
+export function unblockUser(userId, targetId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  u.blockedUsers = (u.blockedUsers || []).filter((id) => id !== targetId);
+  schedulePersist();
+  return { blocked: u.blockedUsers };
+}
+
+export function listBlocked(userId) {
+  const u = getUserById(userId);
+  return ((u && u.blockedUsers) || []).map((id) => dmCard(id));
+}
+
+const REPORT_KINDS = ['post', 'comment', 'message', 'profile'];
+
+// Resolve what a report points at: its owner + a text snapshot for the queue.
+function reportTargetSnapshot(kind, targetId) {
+  if (kind === 'post') {
+    const p = (db.posts || []).find((x) => x.id === targetId);
+    return p ? { ownerId: p.authorId, text: p.text } : null;
+  }
+  if (kind === 'comment') {
+    for (const p of db.posts || []) {
+      const c = (p.comments || []).find((x) => x.id === targetId);
+      if (c) return { ownerId: c.authorId, text: c.text, postId: p.id };
+    }
+    return null;
+  }
+  if (kind === 'message') {
+    const m = (db.messages || []).find((x) => x.id === targetId);
+    return m ? { ownerId: m.from, text: m.text } : null;
+  }
+  if (kind === 'profile') {
+    const u = getUserById(targetId);
+    return u ? { ownerId: u.id, text: u.bio || u.blurb || '' } : null;
+  }
+  return null;
+}
+
+const isModerator = (u) => u?.kind === 'editor'
+  && [EDITOR_ROLES.AUDITOR, EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.ADMIN].includes(u.role);
+
+// A member flags a post/comment/message/profile for the moderation team.
+export function reportContent({ reporterId, kind, targetId, reason }) {
+  if (!REPORT_KINDS.includes(kind)) throw httpError(400, 'Unknown report type');
+  const snap = reportTargetSnapshot(kind, targetId);
+  if (!snap) throw httpError(404, 'That content no longer exists');
+  if (snap.ownerId === reporterId) throw httpError(400, "You can't report your own content");
+  if (!Array.isArray(db.reports)) db.reports = [];
+  // One open report per reporter per target — clicking twice is a no-op.
+  if (db.reports.some((r) => r.reporterId === reporterId && r.kind === kind && r.targetId === targetId && r.status === 'open'))
+    return { ok: true, duplicate: true };
+  const report = {
+    id: uid('rpt'),
+    kind, targetId,
+    targetOwnerId: snap.ownerId,
+    targetOwnerName: getUserById(snap.ownerId)?.name || 'Member',
+    snippet: String(snap.text || '').slice(0, 280),
+    postId: snap.postId || null,
+    reason: String(reason || '').trim().slice(0, 500),
+    reporterId, reporterName: getUserById(reporterId)?.name || 'Member',
+    status: 'open',
+    action: '', resolvedById: null, resolvedByName: '', resolvedAt: null,
+    at: now(),
+  };
+  db.reports.unshift(report);
+  // Ping the moderation team in-app.
+  for (const ed of db.editors || []) {
+    if (isModerator(ed)) pushNotif(ed.id, { type: 'report', title: '🚩 New content report', body: `${report.reporterName} reported a ${kind}`, link: '/editor' });
+  }
+  schedulePersist();
+  return { ok: true };
+}
+
+export function listReports(status = 'open') {
+  return (db.reports || [])
+    .filter((r) => (status === 'all' ? true : r.status === status))
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+export const openReportCount = () => (db.reports || []).filter((r) => r.status === 'open').length;
+
+// Moderator resolves a report: dismiss it, remove the content, or suspend the
+// offending member (which also removes the reported content).
+export function resolveReport({ id, actor, action }) {
+  if (!isModerator(actor)) throw httpError(403, 'Moderators only');
+  const r = (db.reports || []).find((x) => x.id === id);
+  if (!r) throw httpError(404, 'Report not found');
+  if (!['dismiss', 'remove', 'suspend'].includes(action)) throw httpError(400, 'Unknown action');
+
+  if (action === 'remove' || action === 'suspend') {
+    if (r.kind === 'post') {
+      const i = (db.posts || []).findIndex((p) => p.id === r.targetId);
+      if (i !== -1) db.posts.splice(i, 1);
+    } else if (r.kind === 'comment') {
+      for (const p of db.posts || []) {
+        const ci = (p.comments || []).findIndex((c) => c.id === r.targetId);
+        if (ci !== -1) { p.comments.splice(ci, 1); break; }
+      }
+    } else if (r.kind === 'message') {
+      const i = (db.messages || []).findIndex((m) => m.id === r.targetId);
+      if (i !== -1) db.messages.splice(i, 1);
+    }
+  }
+  if (action === 'suspend' && r.targetOwnerId) {
+    setUserSuspended({ userId: r.targetOwnerId, suspended: true, actor });
+  }
+  r.status = 'resolved';
+  r.action = action;
+  r.resolvedById = actor?.id || null;
+  r.resolvedByName = actor?.name || 'staff';
+  r.resolvedAt = now();
+  recordAudit(actor, `report_${action}`, `${r.kind} by ${r.targetOwnerName}`);
+  schedulePersist();
+  return listReports('open');
+}
+
+// --- account self-service: data export + deletion --------------------------
+
+// Everything a member can take with them (their own data only; no secrets).
+export function exportMyData(userId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  const { password, twoFactorSecret, ...profile } = u;
+  const posts = (db.posts || []).filter((p) => p.authorId === userId).map((p) => ({ id: p.id, text: p.text, at: p.at, likes: (p.likes || []).length }));
+  const comments = [];
+  for (const p of db.posts || []) for (const c of p.comments || []) if (c.authorId === userId) comments.push({ postId: p.id, text: c.text, at: c.at });
+  const messages = (db.messages || []).filter((m) => m.from === userId || m.to === userId)
+    .map((m) => ({ direction: m.from === userId ? 'sent' : 'received', with: m.from === userId ? m.to : m.from, text: m.text, at: m.at }));
+  const groups = (db.groups || []).filter((g) => (g.members || []).includes(userId)).map((g) => ({ id: g.id, name: g.name, leader: g.leaderId === userId }));
+  const applications = (db.applications || []).filter((a) => a.userId === userId);
+  const certificates = (db.certificates || []).filter((c) => c.userId === userId);
+  return { exportedAt: now(), profile, posts, comments, messages, groups, applications, certificates };
+}
+
+// Permanently delete the member's account + the content tied to it. Owned
+// structures (groups/projects) are handed to the next member or disbanded.
+export function deleteMyAccount(userId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.kind === 'editor') throw httpError(403, 'Staff accounts are managed by an administrator');
+
+  db.posts = (db.posts || []).filter((p) => p.authorId !== userId);
+  for (const p of db.posts) {
+    if (Array.isArray(p.comments)) p.comments = p.comments.filter((c) => c.authorId !== userId);
+    if (Array.isArray(p.likes)) p.likes = p.likes.filter((id) => id !== userId);
+  }
+  db.messages = (db.messages || []).filter((m) => m.from !== userId && m.to !== userId);
+  db.notifications = (db.notifications || []).filter((n) => n.userId !== userId);
+  db.applications = (db.applications || []).filter((a) => a.userId !== userId);
+  db.listings = (db.listings || []).filter((l) => l.leadId !== userId);
+  db.reports = (db.reports || []).filter((r) => r.reporterId !== userId && r.targetOwnerId !== userId);
+
+  // Drop membership from every group/project; transfer or disband owned ones.
+  for (const g of db.groups || []) {
+    g.members = (g.members || []).filter((m) => m !== userId);
+    (g.positions || []).forEach((pos) => { if (pos.filledBy === userId) pos.filledBy = null; });
+  }
+  db.groups = (db.groups || []).filter((g) => {
+    if (g.leaderId !== userId) return true;
+    if ((g.members || []).length === 0) return false;
+    g.leaderId = g.members[0];
+    return true;
+  });
+  for (const p of db.projects || []) p.members = (p.members || []).filter((m) => m !== userId);
+  db.projects = (db.projects || []).filter((p) => {
+    if (p.leadId !== userId) return true;
+    if ((p.members || []).length === 0) return false;
+    p.leadId = p.members[0];
+    return true;
+  });
+
+  // Following + block graph, both directions.
+  for (const x of [...db.editors, ...db.researchers]) {
+    if (Array.isArray(x.following)) x.following = x.following.filter((id) => id !== userId);
+    if (Array.isArray(x.blockedUsers)) x.blockedUsers = x.blockedUsers.filter((id) => id !== userId);
+  }
+  db.researchers = (db.researchers || []).filter((x) => x.id !== userId);
+  recordAudit({ id: userId, name: u.name }, 'account_deleted', u.email || '');
+  schedulePersist();
+  return { ok: true };
+}
 
 // --- in-app notifications --------------------------------------------------
 

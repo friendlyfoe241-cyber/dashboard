@@ -206,6 +206,15 @@ export const api = {
   thread: (userId) => request(`/messages/${userId}`),
   sendMessage: (userId, text) => request(`/messages/${userId}`, { method: 'POST', body: { text } }),
   network: () => request('/network'),
+  // trust & safety
+  report: (kind, targetId, reason) => request('/report', { method: 'POST', body: { kind, targetId, reason } }),
+  blockUser: (id) => request(`/users/${id}/block`, { method: 'POST' }),
+  unblockUser: (id) => request(`/users/${id}/block`, { method: 'DELETE' }),
+  myBlocks: () => request('/me/blocks'),
+  exportMyData: () => request('/me/export'),
+  deleteMyAccount: () => request('/me', { method: 'DELETE' }),
+  adminReports: (status = 'open') => request(`/admin/reports?status=${encodeURIComponent(status)}`),
+  resolveReport: (id, action) => request(`/admin/reports/${id}/resolve`, { method: 'POST', body: { action } }),
   // referrals
   myReferrals: () => request('/me/referrals'),
   referralLeaderboard: () => request('/admin/referrals'),

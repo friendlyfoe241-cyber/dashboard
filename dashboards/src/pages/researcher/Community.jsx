@@ -4,6 +4,7 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Button, Pfp, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
+import SafetyMenu from '../../components/SafetyMenu.jsx';
 import { imageSrc } from '../../files.js';
 import { safeHref } from '../../url.js';
 import News from './News.jsx';
@@ -99,9 +100,11 @@ function Composer({ onPosted }) {
 }
 
 function PostCard({ post, onChange, onDeleted }) {
+  const { user } = useAuth();
   const toast = useToast();
   const [showComments, setShowComments] = useState(false);
   const [comment, setComment] = useState('');
+  const isOwn = post.author.id === user?.id;
 
   const like = () => api.likePost(post.id).then(onChange).catch((e) => toast.error(e.message));
   const sendComment = () => {
@@ -122,7 +125,18 @@ function PostCard({ post, onChange, onDeleted }) {
             <div className="muted" style={{ fontSize: '0.76rem' }}>{post.author.role} · {ago(post.at)}</div>
           </div>
         </div>
-        {post.canDelete && <button className="btn btn-ghost btn-sm" onClick={del} title="Delete">✕</button>}
+        <div className="row" style={{ gap: '0.15rem' }}>
+          {!isOwn && (
+            <SafetyMenu
+              kind="post"
+              targetId={post.id}
+              authorId={post.author.id}
+              authorName={post.author.name}
+              onBlocked={() => onDeleted(post.id)}
+            />
+          )}
+          {post.canDelete && <button className="btn btn-ghost btn-sm" onClick={del} title="Delete">✕</button>}
+        </div>
       </div>
 
       {post.text && <p style={{ margin: '0.7rem 0', whiteSpace: 'pre-wrap' }}>{post.text}</p>}
@@ -139,7 +153,12 @@ function PostCard({ post, onChange, onDeleted }) {
           <div className="stack" style={{ marginBottom: '0.5rem' }}>
             {post.comments.map((c) => (
               <div key={c.id} className="info-block" style={{ fontSize: '0.88rem' }}>
-                <Link to={`/p/${c.author.slug}`} style={{ fontWeight: 700 }}>{c.author.name}</Link> <span className="muted" style={{ fontSize: '0.72rem' }}>{ago(c.at)}</span>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div><Link to={`/p/${c.author.slug}`} style={{ fontWeight: 700 }}>{c.author.name}</Link> <span className="muted" style={{ fontSize: '0.72rem' }}>{ago(c.at)}</span></div>
+                  {c.author.id !== user?.id && (
+                    <SafetyMenu kind="comment" targetId={c.id} authorId={c.author.id} authorName={c.author.name} onBlocked={() => onChange({ ...post, comments: post.comments.filter((x) => x.id !== c.id) })} />
+                  )}
+                </div>
                 <div>{c.text}</div>
               </div>
             ))}

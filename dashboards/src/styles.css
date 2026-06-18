@@ -1081,6 +1081,37 @@ body {
 .comp-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(4, 30, 66, 0.14); }
 @media (prefers-reduced-motion: reduce) { .comp-hero-glow, .comp-card { animation: none; transition: none; } }
 
+/* Safety overflow menu (report / block). */
+.safety-menu { position: relative; display: inline-block; }
+.safety-menu > summary { list-style: none; cursor: pointer; }
+.safety-menu > summary::-webkit-details-marker { display: none; }
+.safety-menu-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  color: var(--body-alt); font-size: 1.1rem; line-height: 1;
+  border: 1px solid transparent; background: transparent; transition: background 0.15s;
+}
+.safety-menu-trigger:hover { background: var(--surface-alt); color: var(--heading); }
+.safety-menu-pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+  min-width: 184px; padding: 0.3rem;
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.16);
+  animation: pop-in 0.16s ease;
+}
+.safety-menu-pop.left { right: auto; left: 0; }
+.safety-menu-pop button {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer; font: inherit;
+  padding: 0.5rem 0.6rem; border-radius: 8px; color: var(--heading); font-size: 0.86rem;
+}
+.safety-menu-pop button:hover { background: var(--surface-alt); }
+html[data-theme='dark'] .safety-menu-pop { background: #16202e; }
+
+/* Danger zone (account deletion). */
+.danger-zone { border-color: #fecaca; background: #fff7f7; }
+html[data-theme='dark'] .danger-zone { background: #2a1416; border-color: #7f1d1d; }
+
 .pfp-stack { display: inline-flex; align-items: center; }
 .pfp-xs { width: 28px; height: 28px; font-size: 0.62rem; border: 2px solid #fff; }
 .pfp-stack .pfp + .pfp { margin-left: -9px; }

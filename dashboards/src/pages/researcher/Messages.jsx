@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Card, Button, Pfp, EmptyState, Badge } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
+import SafetyMenu from '../../components/SafetyMenu.jsx';
 import { imageSrc } from '../../files.js';
 import { useRealtime } from '../../realtime.js';
 
@@ -68,6 +69,7 @@ function Thread({ userId, onSent }) {
   const toast = useToast();
   const endRef = useRef(null);
 
+  const navigate = useNavigate();
   const load = useCallback(() => api.thread(userId).then(setData).catch(() => setData(null)), [userId]);
   useEffect(() => { setData(null); load(); }, [load]);
 
@@ -95,6 +97,9 @@ function Thread({ userId, onSent }) {
         <Pfp name={data.user.name} url={imageSrc(data.user.avatarUrl)} size="xs" />
         <Link to={`/p/${data.user.slug}`} style={{ fontWeight: 700 }}>{data.user.name}</Link>
         <span className="muted" style={{ fontSize: '0.78rem' }}>{data.user.role}</span>
+        <span style={{ marginLeft: 'auto' }}>
+          <SafetyMenu kind="profile" targetId={data.user.id} authorId={data.user.id} authorName={data.user.name} onBlocked={() => navigate('/researcher/messages')} />
+        </span>
       </div>
       <div className="dm-messages">
         {data.messages.length === 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '1rem' }}>No messages yet — say hello 👋</p>}
