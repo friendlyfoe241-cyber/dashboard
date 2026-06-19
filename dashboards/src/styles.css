@@ -887,7 +887,7 @@ textarea {
 .login-aside-sub {
   font-size: 1rem; line-height: 1.6;
   color: rgba(255, 255, 255, 0.82);
-  max-width: 440px; margin: 0 0 1.9rem;
+  max-width: 440px; margin: 0 0 1.4rem;
 }
 .login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
 .login-aside-list li {
