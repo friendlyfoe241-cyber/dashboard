@@ -889,7 +889,7 @@ textarea {
   color: rgba(255, 255, 255, 0.82);
   max-width: 440px; margin: 0 0 1.9rem;
 }
-.login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.95rem; }
+.login-aside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
 .login-aside-list li {
   display: flex; align-items: center; gap: 0.85rem;
   font-size: 0.98rem; font-weight: 500;
