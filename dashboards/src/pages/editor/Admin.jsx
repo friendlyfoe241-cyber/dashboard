@@ -80,10 +80,10 @@ function People({ isDirector }) {
   const [q, setQ] = useState('');
   const [users, setUsers] = useState([]);
   const [bulk, setBulk] = useState({ emails: '', tag: 'lead_researcher' });
-  const [visibleCount, setVisibleCount] = useState(25);
+  const [visibleCount, setVisibleCount] = useState(3);
 
   const search = (query) => api.adminUsers(query).then(setUsers).catch(() => {});
-  useEffect(() => { search(''); setVisibleCount(25); }, []);
+  useEffect(() => { search(''); setVisibleCount(3); }, []);
 
   // Directors use the full role endpoint; auditors the tags-only one.
   const setTags = (u, body) => (isDirector ? api.adminSetRole(u.id, body) : api.adminSetTags(u.id, body));
@@ -118,7 +118,7 @@ function People({ isDirector }) {
       <Card>
         <div className="card-row">
           <h3>Lookup</h3>
-          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(25); }} style={{ maxWidth: 280 }} />
+          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(3); }} style={{ maxWidth: 280 }} />
         </div>
         <div className="stack" style={{ marginTop: '0.6rem' }}>
           {users.slice(0, visibleCount).map((u) => (
@@ -165,9 +165,23 @@ function People({ isDirector }) {
           ))}
           {users.length > visibleCount && (
             <button
-              className="btn-sm"
-              style={{ marginTop: '0.5rem', display: 'block', width: '100%' }}
-              onClick={() => setVisibleCount((c) => c + 25)}
+              onClick={() => setVisibleCount((c) => Math.min(c + 5, users.length))}
+              style={{
+                marginTop: '0.5rem',
+                display: 'block',
+                width: '100%',
+                padding: '0.5rem 1rem',
+                background: 'transparent',
+                border: '1.5px solid #2589ed',
+                borderRadius: '8px',
+                color: '#2589ed',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseOver={(e) => { e.target.style.background = '#f0f7ff'; }}
+              onMouseOut={(e) => { e.target.style.background = 'transparent'; }}
             >
               Show more ({users.length - visibleCount} remaining)
             </button>
