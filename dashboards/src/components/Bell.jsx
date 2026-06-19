@@ -1,20 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { useRealtime } from '../realtime.js';
 
-// Notification bell with unread count + dropdown. Polls every 30s.
+// Notification bell with unread count + dropdown. Live over SSE (+ a 60s poll
+// as a fallback).
 export default function Bell() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
 
-  const load = () => api.notifications().then(setItems).catch(() => {});
+  const load = useCallback(() => api.notifications().then(setItems).catch(() => {}), []);
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 60000);
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
+  useRealtime('notification', load); // new notification pushed → refresh instantly
 
   // Close on outside click.
   useEffect(() => {

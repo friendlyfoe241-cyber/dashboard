@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
+import UploadButton from '../components/UploadButton.jsx';
 
 // A shared "Tools" space — résumé editor + my stats for researchers, activity
 // stats for editors, plus scaffold cards for future additions.
@@ -156,15 +157,15 @@ function ResumeCard({ user }) {
         Link your résumé so you can auto-apply to project listings. Update it any time.
       </p>
       {error && <div className="login-error">{error}</div>}
-      <Field label="Résumé link (Google Drive, Dropbox, …)">
-        <input
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setSaved(false);
-          }}
-          placeholder="https://…"
-        />
+      <Field label="Résumé (upload a PDF or paste a link)">
+        <div className="row" style={{ gap: '0.4rem' }}>
+          <input
+            value={url}
+            onChange={(e) => { setUrl(e.target.value); setSaved(false); }}
+            placeholder="https://… or upload"
+          />
+          <UploadButton kind="resume" label="Upload PDF" onUploaded={(r) => { setUrl(r.url); setSaved(false); }} />
+        </div>
       </Field>
       <Button onClick={save} disabled={busy}>
         {busy ? 'Saving…' : 'Save résumé'}

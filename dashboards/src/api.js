@@ -7,6 +7,7 @@ const TOKEN_KEY = 'synthica.token';
 // Vite's proxy forwards them to localhost:4000. In production, set
 // VITE_API_BASE (e.g. https://synthica-backend.onrender.com) at build time.
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+export const apiBase = API_BASE;
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
@@ -61,6 +62,20 @@ async function request(path, { method = 'GET', body } = {}, attempt = 0) {
 }
 
 export const api = {
+  // file upload (multipart — can't go through request()'s JSON helper)
+  upload: async (file, kind = 'image') => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/uploads?kind=${encodeURIComponent(kind)}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data; // { url, name, size }
+  },
   // auth
   login: (identifier, password) => request('/login', { method: 'POST', body: { identifier, password } }),
   checkEmail: (email) => request('/auth/check-email', { method: 'POST', body: { email } }),
@@ -81,6 +96,9 @@ export const api = {
   adminSetTags: (id, body) => request(`/admin/users/${id}/tags`, { method: 'POST', body }),
   adminUsers: (q) => request(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   adminSetRole: (id, body) => request(`/admin/users/${id}/role`, { method: 'POST', body }),
+  adminSuspend: (id, suspended) => request(`/admin/users/${id}/suspend`, { method: 'POST', body: { suspended } }),
+  adminSendReset: (id) => request(`/admin/users/${id}/send-reset`, { method: 'POST' }),
+  adminBroadcast: (body) => request('/admin/broadcast', { method: 'POST', body }),
   adminBulkRole: (body) => request('/admin/bulk-role', { method: 'POST', body }),
   adminAudit: () => request('/admin/audit'),
   adminExport: () => request('/admin/export'),
@@ -136,7 +154,6 @@ export const api = {
   createProject: (body) => request('/researcher/projects', { method: 'POST', body }),
   listingApplications: () => request('/researcher/listing-applications'),
   reviewListingApplication: (id, status) => request(`/researcher/listing-applications/${id}`, { method: 'POST', body: { status } }),
-  postBanner: (body) => request('/researcher/banner', { method: 'POST', body }),
   addTask: (id, body) => request(`/researcher/projects/${id}/tasks`, { method: 'POST', body }),
   assignTask: (id, taskId, memberId) => request(`/researcher/projects/${id}/tasks/${taskId}/assign`, { method: 'POST', body: { memberId } }),
   startTask: (id, taskId) => request(`/researcher/projects/${id}/tasks/${taskId}/start`, { method: 'POST' }),
@@ -162,6 +179,7 @@ export const api = {
   groups: () => request('/groups'),
   group: (id) => request(`/groups/${id}`),
   createGroup: (body) => request('/groups', { method: 'POST', body }),
+  updateGroup: (id, body) => request(`/groups/${id}`, { method: 'PUT', body }),
   joinGroup: (id) => request(`/groups/${id}/join`, { method: 'POST' }),
   leaveGroup: (id) => request(`/groups/${id}/leave`, { method: 'POST' }),
   addGroupProject: (id, projectId) => request(`/groups/${id}/projects`, { method: 'POST', body: { projectId } }),
@@ -183,6 +201,21 @@ export const api = {
   likePost: (id) => request(`/posts/${id}/like`, { method: 'POST' }),
   commentPost: (id, text) => request(`/posts/${id}/comments`, { method: 'POST', body: { text } }),
   deletePost: (id) => request(`/posts/${id}`, { method: 'DELETE' }),
+  // direct messages + network
+  conversations: () => request('/messages'),
+  unreadMessages: () => request('/messages/unread'),
+  thread: (userId) => request(`/messages/${userId}`),
+  sendMessage: (userId, text) => request(`/messages/${userId}`, { method: 'POST', body: { text } }),
+  network: () => request('/network'),
+  // trust & safety
+  report: (kind, targetId, reason) => request('/report', { method: 'POST', body: { kind, targetId, reason } }),
+  blockUser: (id) => request(`/users/${id}/block`, { method: 'POST' }),
+  unblockUser: (id) => request(`/users/${id}/block`, { method: 'DELETE' }),
+  myBlocks: () => request('/me/blocks'),
+  exportMyData: () => request('/me/export'),
+  deleteMyAccount: () => request('/me', { method: 'DELETE' }),
+  adminReports: (status = 'open') => request(`/admin/reports?status=${encodeURIComponent(status)}`),
+  resolveReport: (id, action) => request(`/admin/reports/${id}/resolve`, { method: 'POST', body: { action } }),
   // referrals
   myReferrals: () => request('/me/referrals'),
   referralLeaderboard: () => request('/admin/referrals'),

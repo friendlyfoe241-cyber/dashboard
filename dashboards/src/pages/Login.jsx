@@ -19,14 +19,11 @@ const DEMO_ACCOUNTS = [
 // What's inside the portal — shown on the login's left panel so first-time
 // visitors know what they're signing into.
 const PORTAL_FEATURES = [
-  ['💬', 'Live community feed & discussions'],
+  ['💬', 'Community feed & messages'],
   ['🔬', 'Research groups & projects'],
-  ['👥', 'Global member directory'],
-  ['🎓', 'Programs & cohorts'],
-  ['🏆', 'Competitions & opportunities'],
-  ['📅', 'Events, RSVPs & workshops'],
-  ['📜', 'Certificates & recognition'],
-  ['📣', 'Announcements & news'],
+  ['🎓', 'Programs & competitions'],
+  ['📅', 'Events & workshops'],
+  ['📜', 'Publish & earn certificates'],
 ];
 
 // Static layout wrapper. Must live at module scope: defining it inside Login
@@ -188,6 +185,13 @@ export default function Login() {
         <h1>Create your account</h1>
         <p className="sub">{email} · <button className="link-btn" onClick={() => { setStep('email'); setError(''); }}>change</button></p>
         {error && <div className="login-error">{error}</div>}
+
+        <GoogleButton text="signup_with" onSuccess={() => navigate('/', { replace: true })} onError={setError} />
+        <p className="login-hint" style={{ margin: '0.5rem 0 0', textAlign: 'center' }}>
+          Use the same email with Google to keep one account — no accidental duplicates.
+        </p>
+        <div className="login-divider"><span>or with a password</span></div>
+
         <form onSubmit={doSignup}>
           <Field label="Full name"><input value={signup.name} onChange={(e) => setSignup({ ...signup, name: e.target.value })} autoFocus required /></Field>
           <Field label="Discord username (point of contact)"><input value={signup.discord} onChange={(e) => setSignup({ ...signup, discord: e.target.value })} required /></Field>

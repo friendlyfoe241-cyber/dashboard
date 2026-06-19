@@ -4,6 +4,10 @@ import { api } from '../../api.js';
 import { Card, Badge, Button, Field } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { safeHref } from '../../url.js';
+import { imageSrc } from '../../files.js';
+import { GroupArtFields } from './Groups.jsx';
+
+const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
 // Full research-group page: roster, the projects inside it, open positions, and
 // shared links. The group leader gets management controls inline.
@@ -11,6 +15,7 @@ export default function GroupDetail() {
   const { id } = useParams();
   const [g, setG] = useState(null);
   const [missing, setMissing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const toast = useToast();
 
   const load = useCallback(() => api.group(id).then(setG).catch(() => setMissing(true)), [id]);
@@ -24,19 +29,31 @@ export default function GroupDetail() {
   return (
     <div>
       <Link to="/researcher/groups" className="muted" style={{ fontSize: '0.85rem' }}>← All groups</Link>
-      <div className="card-row" style={{ margin: '0.4rem 0 0.2rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>{g.name}</h1>
-        {g.isLeader
-          ? <Badge tone="gold">you lead this</Badge>
-          : g.isMember
-            ? <Button variant="ghost" onClick={() => run(api.leaveGroup(id), 'Left the group')}>Leave group</Button>
-            : <Button onClick={() => run(api.joinGroup(id), 'Joined the group')}>Join group</Button>}
+
+      {g.bannerUrl && <img className="group-banner pop-in" src={imageSrc(g.bannerUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+
+      <div className="card-row" style={{ margin: '0.6rem 0 0.2rem', alignItems: 'center' }}>
+        <div className="row" style={{ gap: '0.7rem', alignItems: 'center', minWidth: 0 }}>
+          {g.logoUrl && <img className="group-logo group-logo-lg" src={imageSrc(g.logoUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+          <h1 className="page-title" style={{ margin: 0 }}>{g.name}</h1>
+        </div>
+        <div className="row" style={{ gap: '0.4rem', flexShrink: 0 }}>
+          {g.isLeader && <Button variant="ghost" className="btn-sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Cancel' : '✏️ Customize'}</Button>}
+          {g.isLeader
+            ? <Badge tone="gold">you lead this</Badge>
+            : g.isMember
+              ? <Button variant="ghost" onClick={() => run(api.leaveGroup(id), 'Left the group')}>Leave group</Button>
+              : <Button onClick={() => run(api.joinGroup(id), 'Joined the group')}>Join group</Button>}
+        </div>
       </div>
       <div className="row" style={{ gap: '0.3rem', marginBottom: '0.6rem' }}>
         {g.category && <Badge tone="gray">{g.category}</Badge>}
         <Badge tone="blue">{g.members.length} members</Badge>
         <span className="muted" style={{ fontSize: '0.82rem' }}>Led by {g.leaderName}</span>
       </div>
+
+      {g.isLeader && editing && <CustomizeGroup group={g} onSaved={(d) => { setG(d); setEditing(false); toast.success('Group updated'); }} toast={toast} />}
+
       {g.description && <p style={{ maxWidth: 720 }}>{g.description}</p>}
 
       <div className="grid grid-2" style={{ alignItems: 'start' }}>
@@ -115,6 +132,38 @@ export default function GroupDetail() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Leader-only panel to edit the group's identity + banner + logo.
+function CustomizeGroup({ group, onSaved, toast }) {
+  const [form, setForm] = useState({
+    name: group.name || '', category: group.category || '', description: group.description || '',
+    bannerUrl: group.bannerUrl || '', logoUrl: group.logoUrl || '',
+  });
+  const [busy, setBusy] = useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try { const d = await api.updateGroup(group.id, form); onSaved(d); }
+    catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <Card className="pop-in" style={{ marginBottom: '0.8rem' }}>
+      <h3 style={{ marginTop: 0 }}>Customize group</h3>
+      <form onSubmit={save}>
+        <Field label="Group name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
+        <Field label="Primary interest / category">
+          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <option value="">— pick one —</option>
+            {CATS.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Description"><textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+        <GroupArtFields form={form} setForm={setForm} />
+        <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
+      </form>
+    </Card>
   );
 }
 

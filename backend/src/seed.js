@@ -281,6 +281,11 @@ function publication(title, authors, category, doiSuffix, year, abstract, extra 
       { heading: 'Results', body: 'Key findings and figures.' },
       { heading: 'Discussion', body: 'Interpretation, limitations, and future work.' },
     ],
+    // Bibliography (reference list) for the hosted full-text article.
+    references: extra.references || [
+      'Smith, J. & Lee, K. (2023). Foundations of the field. Journal of Examples, 12(3), 45–67.',
+      'Patel, R. (2024). A related method. Proceedings of the Annual Conference, 110–118.',
+    ],
     metrics: {
       accesses: extra.accesses ?? 200 + Math.floor(Math.random() * 4000),
       citations: extra.citations ?? Math.floor(Math.random() * 8),
@@ -672,7 +677,8 @@ export const groups = [
     description: 'A hub for student projects on environmental sensing, climate data, and sustainability. We share tooling, datasets, and review each other’s work.',
     category: 'Chemistry',
     leaderId: leadId,
-    bannerUrl: '',
+    bannerUrl: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&q=60',
+    logoUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=200&q=60',
     members: [leadId, assocId, caseyId],
     projectIds: [projects[0].id, projects[1].id],
     positions: [
@@ -727,5 +733,11 @@ export const posts = [
     at: hoursAgo(20),
   },
 ];
+
+// Activity stream (followers see what people they follow do). Populated at runtime.
+export const activities = [];
+
+// Direct messages between members. Populated at runtime.
+export const messages = [];
 
 export const allUsers = () => [...editors, ...researchers];

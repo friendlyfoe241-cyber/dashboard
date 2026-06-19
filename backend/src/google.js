@@ -16,6 +16,10 @@ const GOOGLE_ISSUERS = [
 ];
 
 export const googleEnabled = () => !!CLIENT_ID;
+// The OAuth client id is public (it ships embedded in the page), so it's safe to
+// hand to the frontend — this lets the dashboards build pick it up even when
+// VITE_GOOGLE_CLIENT_ID wasn't baked in at build time.
+export const googleClientId = () => CLIENT_ID;
 
 export async function verifyGoogleIdToken(idToken) {
   if (!CLIENT_ID) throw httpError(501, 'Google login is not configured');

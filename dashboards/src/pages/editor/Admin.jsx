@@ -21,6 +21,8 @@ export default function Admin() {
       <People isDirector={isDirector} />
       <Applications />
       <ProgramsPanel isDirector={isDirector} />
+      {isDirector && <BroadcastEmail />}
+      <Moderation />
       <CompetitionsAdmin />
       <GlobalEvents />
       <ReferralLeaderboard />
@@ -50,6 +52,25 @@ const TAGS = ['lead_researcher', 'associate_researcher', 'chapter_leader', 'inde
 const EDITOR_ROLES = ['reviews', 'associate', 'senior', 'chief', 'director', 'auditor'];
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 const ARTICLE_TYPES = ['Article', 'Letter', 'Analysis', 'Review', 'Preprint', 'Dataset', 'Conference Paper'];
+
+// Parse hosted full text into sections; a line beginning "## " starts a section.
+function parseFullText(text) {
+  const t = String(text || '').trim();
+  if (!t) return [];
+  const out = [];
+  let cur = { heading: '', body: '' };
+  for (const line of t.split('\n')) {
+    const m = line.match(/^##\s+(.*)/);
+    if (m) {
+      if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+      cur = { heading: m[1].trim(), body: '' };
+    } else {
+      cur.body += line + '\n';
+    }
+  }
+  if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+  return out;
+}
 
 // People lookup + role management. Auditors review/re-assign researcher roles
 // (with the same signals + suggestion shown at onboarding); directors also get
@@ -105,6 +126,7 @@ function People({ isDirector }) {
                 <div>
                   <strong>{u.name}</strong> <Badge tone="gray">{u.kind}{u.role ? ` · ${u.role}` : ''}{u.category ? ` · ${u.category}` : ''}</Badge>
                   {!u.approved && <> <Badge tone="gold">pending approval</Badge></>}
+                  {u.suspended && <> <Badge tone="red">suspended</Badge></>}
                   <div className="muted" style={{ fontSize: '0.78rem' }}>{u.email}</div>
                   {u.kind === 'researcher' && (
                     <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.2rem' }}>
@@ -136,6 +158,7 @@ function People({ isDirector }) {
                   <Button className="btn-sm" variant="ghost" onClick={() => addTag(u, u.recommendation.tag)}>Apply suggestion</Button>
                 )}
                 {isDirector && <EditorRolePicker onPick={(role, cat) => makeEditor(u, role, cat)} />}
+                {isDirector && <MemberAdminActions u={u} onChanged={() => search(q)} />}
               </div>
             </div>
           ))}
@@ -528,7 +551,7 @@ function UploadForm({ onDone }) {
   useEffect(() => { api.profiles().then(setProfiles).catch(() => {}); }, []);
   const [f, setF] = useState({
     title: '', category: CATS[0], articleType: 'Article', abstract: '', doi: '',
-    pdfUrl: '', sourceUrl: '', publishedAt: '', keywords: '', volume: '', issue: '', pages: '',
+    pdfUrl: '', sourceUrl: '', publishedAt: '', keywords: '', volume: '', issue: '', pages: '', fullText: '', references: '',
   });
   const [authors, setAuthors] = useState([{ name: '', affiliation: '', userId: '' }]);
   const [busy, setBusy] = useState(false);
@@ -543,8 +566,12 @@ function UploadForm({ onDone }) {
     e.preventDefault();
     setBusy(true);
     try {
+      // Host full text: each "## Heading" line starts a new section.
+      const sections = parseFullText(f.fullText);
       await api.adminAddPublication({
         ...f,
+        sections,
+        references: f.references,
         authors: authors.filter((a) => a.name.trim()).map((a) => ({ name: a.name, affiliation: a.affiliation, userId: a.userId || null })),
       });
       toast.success('Paper added to the archive');
@@ -587,6 +614,12 @@ function UploadForm({ onDone }) {
           <Field label="Source / external URL"><input value={f.sourceUrl} onChange={(e) => set({ sourceUrl: e.target.value })} placeholder="https://arxiv.org/abs/…" /></Field>
         </div>
         <Field label="Keywords (comma-separated)"><input value={f.keywords} onChange={(e) => set({ keywords: e.target.value })} placeholder="ecology, microplastics" /></Field>
+        <Field label="Full text (optional — start a section with “## Heading”)">
+          <textarea value={f.fullText} onChange={(e) => set({ fullText: e.target.value })} rows={6} placeholder={'## Introduction\nText…\n\n## Methods\nText…'} />
+        </Field>
+        <Field label="References (one per line)">
+          <textarea value={f.references} onChange={(e) => set({ references: e.target.value })} rows={4} placeholder={'Smith, J. (2023). Title. Journal, 1(2), 3–4.'} />
+        </Field>
         <div className="grid grid-3">
           <Field label="Volume"><input value={f.volume} onChange={(e) => set({ volume: e.target.value })} /></Field>
           <Field label="Issue"><input value={f.issue} onChange={(e) => set({ issue: e.target.value })} /></Field>
@@ -898,6 +931,144 @@ function ReferralLeaderboard() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// Director-only: suspend/reactivate a member + send them a password-reset email.
+function MemberAdminActions({ u, onChanged }) {
+  const toast = useToast();
+  const suspend = () =>
+    api.adminSuspend(u.id, !u.suspended).then(() => { toast.success(u.suspended ? 'Reactivated' : 'Suspended'); onChanged(); }).catch((e) => toast.error(e.message));
+  const sendReset = () =>
+    api.adminSendReset(u.id).then(() => toast.success('Password-reset email sent')).catch((e) => toast.error(e.message));
+  return (
+    <>
+      <Button className="btn-sm" variant="ghost" onClick={suspend}>{u.suspended ? 'Reactivate' : 'Suspend'}</Button>
+      <Button className="btn-sm" variant="ghost" onClick={sendReset}>Send reset</Button>
+    </>
+  );
+}
+
+// Director-only: branded email broadcast to a member segment.
+function BroadcastEmail() {
+  const toast = useToast();
+  const [cfg, setCfg] = useState(null);
+  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
+  const send = async (e) => {
+    e.preventDefault();
+    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
+    setBusy(true);
+    try {
+      const r = await api.adminBroadcast(f);
+      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
+      setF({ subject: '', heading: '', body: '', audience: 'all' });
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
+      <Card>
+        {cfg && cfg.emailConfigured === false && (
+          <p className="muted" style={{ marginTop: 0, color: '#92400e' }}>⚠️ Email delivery isn’t configured — broadcasts will be logged only.</p>
+        )}
+        <form onSubmit={send}>
+          <div className="grid grid-2">
+            <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
+            <Field label="Audience">
+              <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
+                <option value="all">All members</option>
+                <option value="researchers">Researchers</option>
+                <option value="editors">Editors / staff</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
+          <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
+          <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
+          <span className="muted" style={{ marginLeft: '0.6rem', fontSize: '0.8rem' }}>Sent as a branded HTML email from your account.</span>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Community moderation: review and remove recent posts.
+// The reports queue: content members have flagged, with one-click resolution.
+function ReportsQueue() {
+  const toast = useToast();
+  const [reports, setReports] = useState(null);
+  useEffect(() => { api.adminReports('open').then(setReports).catch(() => setReports([])); }, []);
+
+  const resolve = (id, action) => {
+    const verb = action === 'dismiss' ? 'Dismiss this report' : action === 'remove' ? 'Remove the reported content' : 'Suspend the author (and remove the content)';
+    if (action !== 'dismiss' && !window.confirm(`${verb}?`)) return;
+    api.resolveReport(id, action).then(setReports).then(() => toast.success('Report resolved')).catch((e) => toast.error(e.message));
+  };
+
+  if (!reports) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Reports queue {reports.length > 0 && <Badge tone="gold">{reports.length} open</Badge>}
+      </h2>
+      {reports.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. 🎉</p></Card>
+      ) : (
+        <div className="stack">
+          {reports.map((r) => (
+            <Card key={r.id}>
+              <div className="card-row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <Badge tone="red">{r.kind}</Badge>{' '}
+                  <strong>{r.targetOwnerName}</strong>
+                  <span className="muted" style={{ fontSize: '0.78rem' }}> · reported by {r.reporterName} · {new Date(r.at).toLocaleDateString()}</span>
+                  {r.reason && <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>Reason: “{r.reason}”</div>}
+                  {r.snippet && <div className="info-block" style={{ fontSize: '0.82rem', marginTop: '0.35rem' }}>{r.snippet}</div>}
+                </div>
+                <div className="row" style={{ flexShrink: 0, gap: '0.3rem' }}>
+                  <Button className="btn-sm" variant="ghost" onClick={() => resolve(r.id, 'dismiss')}>Dismiss</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'remove')}>Remove</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'suspend')}>Suspend</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Moderation() {
+  const toast = useToast();
+  const [posts, setPosts] = useState([]);
+  const load = useCallback(() => { api.posts().then(setPosts).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  const remove = (id) => api.deletePost(id).then(() => { load(); toast.success('Post removed'); }).catch((e) => toast.error(e.message));
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <ReportsQueue />
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Recent posts <Badge tone="gray">{posts.length}</Badge></h2>
+      {posts.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No community posts yet.</p></Card>
+      ) : (
+        <div className="stack">
+          {posts.slice(0, 12).map((p) => (
+            <Card key={p.id}>
+              <div className="card-row">
+                <div>
+                  <strong>{p.author?.name}</strong> <span className="muted" style={{ fontSize: '0.78rem' }}>· {new Date(p.at).toLocaleDateString()} · {p.likeCount} likes · {p.commentCount} comments</span>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>{(p.text || '').slice(0, 160)}{(p.text || '').length > 160 ? '…' : ''}</div>
+                </div>
+                <Button className="btn-sm" variant="ghost" onClick={() => remove(p.id)}>Delete</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

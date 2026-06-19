@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "googleapis": "^144.0.0",
+    "multer": "^1.4.4",
     "pg": "^8.21.0"
   },
   "devDependencies": {

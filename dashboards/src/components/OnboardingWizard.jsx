@@ -14,7 +14,7 @@ const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Sc
 // shown once until completed. Collects interests + institution and walks any
 // chapter onboarding steps.
 export default function OnboardingWizard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [show, setShow] = useState(false);
   const [step, setStep] = useState(0);
   const [anim, setAnim] = useState('in');
@@ -32,7 +32,11 @@ export default function OnboardingWizard() {
   const leadRecommended = Number(experience) >= 8;
 
   useEffect(() => {
-    if (user?.kind !== 'researcher') return;
+    // Onboarding is for new researchers only — staff / admins skip it entirely.
+    const staffRole = ['admin', 'director', 'auditor', 'chief', 'senior', 'reviews', 'associate'].includes(user?.role);
+    if (user?.kind !== 'researcher' || staffRole) return;
+    // Durable: once completed/skipped on the account, never re-show (any device).
+    if (user?.onboarded) return;
     try { if (localStorage.getItem(FLAG)) return; } catch { /* ignore */ }
     api.onboarding().then(setChapter).catch(() => setChapter(null));
     setShow(true);
@@ -71,11 +75,13 @@ export default function OnboardingWizard() {
     setBusy(true);
     try {
       // researchExperience ≥ 8 flags the user as a Lead Researcher candidate (server-side).
-      await api.updateProfile({ interests, institution, gpa, researchExperience: Number(experience), leadershipExperience: Number(leadership), wantsChapterLead: wantsLead });
+      // onboarded:true persists completion on the account so it never re-shows.
+      await api.updateProfile({ interests, institution, gpa, researchExperience: Number(experience), leadershipExperience: Number(leadership), wantsChapterLead: wantsLead, onboarded: true });
       // Self-archive any past papers they listed (auditor verifies them later).
       for (const p of pastPapers) await api.addPastPaper(p).catch(() => {});
       // Mark "profile" onboarding step complete if this user is in a chapter.
       if (chapter) await api.onboardingStep('profile', true).catch(() => {});
+      await refreshUser?.().catch(() => {});
     } catch { /* ignore */ }
     try { localStorage.setItem(FLAG, '1'); } catch { /* ignore */ }
     setBusy(false);

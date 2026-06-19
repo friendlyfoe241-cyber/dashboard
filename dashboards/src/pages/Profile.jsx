@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import { imageSrc } from '../files.js';
+import UploadButton from '../components/UploadButton.jsx';
 
 // Common social platforms for the repeatable "More social links" adder. The
 // dedicated fields above cover the researcher essentials (LinkedIn, GitHub, X,
@@ -115,7 +116,12 @@ export default function Profile() {
             <Field label="Display name"><input value={form.name} onChange={set('name')} /></Field>
             <div className="row" style={{ gap: '0.6rem' }}>
               <Field label="Pronouns (optional)"><input value={form.pronouns} onChange={set('pronouns')} placeholder="she/her · he/him · they/them" /></Field>
-              <Field label="Profile picture URL"><input value={form.avatarUrl} onChange={set('avatarUrl')} placeholder="https://… (initials shown otherwise)" /></Field>
+              <Field label="Profile picture">
+                <div className="row" style={{ gap: '0.4rem' }}>
+                  <input value={form.avatarUrl} onChange={set('avatarUrl')} placeholder="Upload or paste an image URL" />
+                  <UploadButton kind="avatar" label="Upload" onUploaded={(r) => setForm((f) => ({ ...f, avatarUrl: r.url }))} />
+                </div>
+              </Field>
             </div>
             <Field label="One-line blurb (shown everywhere next to your name)">
               <input value={form.blurb} onChange={set('blurb')} maxLength={140} placeholder="e.g. High-schooler studying coral reef genetics 🌊" />

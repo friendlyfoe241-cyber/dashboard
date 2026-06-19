@@ -20,11 +20,12 @@ const optionalUser = (req) => {
 };
 import * as store from './src/store.js';
 import * as notify from './src/notify.js';
-import { sendEmail, emailEnabled } from './src/email.js';
-import { verifyGoogleIdToken, googleEnabled } from './src/google.js';
+import { sendEmail, emailEnabled, welcomeEmail, actionEmail } from './src/email.js';
+import { verifyGoogleIdToken, googleEnabled, googleClientId } from './src/google.js';
 import { CATEGORIES, EDITOR_ROLES } from './src/domain.js';
 import { sendWeeklyDigests, maybeSendWeekly } from './src/digest.js';
 import { ogCardPng, sharePageHtml } from './src/og.js';
+import { uploadMiddleware, publicUrl, UPLOAD_DIR } from './src/uploads.js';
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
 // Marketing site base, used by per-paper share pages to forward to articles.
@@ -57,6 +58,9 @@ if (corsOrigins.length) {
   app.use(cors());
 }
 app.use(express.json({ limit: '1mb' }));
+
+// Serve uploaded files (avatars, résumés, PDFs) with a long cache + CORS.
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin') }));
 
 // Baseline security headers (helmet-lite, no dependency).
 app.use((_req, res, next) => {
@@ -149,7 +153,7 @@ app.post('/api/2fa/enable', requireAuth, wrap((req, res) => res.json(store.enabl
 app.post('/api/2fa/disable', requireAuth, wrap((req, res) => res.json(store.disableTwoFactor(req.user.id, (req.body || {}).code))));
 
 // Tells the frontend which auth options are available.
-app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), demoLogins: store.demoLoginsEnabled(), emailConfigured: emailEnabled() }));
+app.get('/api/config', (_req, res) => res.json({ googleEnabled: googleEnabled(), googleClientId: googleClientId(), demoLogins: store.demoLoginsEnabled(), emailConfigured: emailEnabled() }));
 
 // Google Sign-In: verify the ID token, find/create the user, issue our token.
 app.post('/api/auth/google', authLimiter, async (req, res) => {
@@ -164,6 +168,16 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
 });
 
 app.get('/api/me', requireAuth, (req, res) => res.json(req.user));
+
+// File uploads — POST multipart 'file' with ?kind=avatar|resume|pdf|image.
+app.post('/api/uploads', requireAuth, (req, res) => {
+  const kind = ['avatar', 'resume', 'pdf', 'image'].includes(req.query.kind) ? req.query.kind : 'image';
+  uploadMiddleware(kind)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    if (!req.file) return res.status(400).json({ error: 'No file received' });
+    res.json({ url: publicUrl(req, req.file.filename), name: req.file.originalname, size: req.file.size });
+  });
+});
 
 // Edit your own public profile.
 app.put('/api/me/profile', requireAuth, wrap((req, res) => {
@@ -218,6 +232,10 @@ app.post('/api/admin/users/:id/tags', requireAuth, requireAuditor, wrap((req, re
 }));
 
 app.get('/api/admin/audit', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listAudit())));
+
+// Moderation queue — content reports filed by members.
+app.get('/api/admin/reports', requireAuth, requireAuditor, wrap((req, res) => res.json(store.listReports(req.query.status || 'open'))));
+app.post('/api/admin/reports/:id/resolve', requireAuth, requireAuditor, wrap((req, res) => res.json(store.resolveReport({ id: req.params.id, actor: req.user, action: (req.body || {}).action }))));
 
 // --- Paper archive: admin upload + self-archive verification (auditor) ------
 app.get('/api/admin/publications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.adminListPublications())));
@@ -300,7 +318,7 @@ app.post('/api/researcher/certificates', requireAuth, wrap((req, res) => {
 // --- Weekly digest: manual trigger (also used by external cron) ---------------
 app.post('/api/admin/digest/send', requireAuth, requireDirector, async (req, res) => {
   try {
-    res.json(await sendWeeklyDigests(store.digestData()));
+    res.json(await sendWeeklyDigests(store.digestData(), store.recentFollowedActivity));
   } catch (err) {
     res.status(500).json({ error: err.message || 'Digest failed' });
   }
@@ -316,6 +334,7 @@ app.get('/api/admin/export', requireAuth, requireDirector, wrap((_req, res) => {
 app.get('/api/groups', requireAuth, wrap((_req, res) => res.json(store.listGroups())));
 app.get('/api/groups/:id', requireAuth, wrap((req, res) => res.json(store.groupDetail(req.params.id, req.user.id))));
 app.post('/api/groups', requireAuth, wrap((req, res) => res.json(store.createGroup({ userId: req.user.id, ...(req.body || {}) }))));
+app.put('/api/groups/:id', requireAuth, wrap((req, res) => res.json(store.updateGroup({ groupId: req.params.id, leaderId: req.user.id, ...(req.body || {}) }))));
 app.post('/api/groups/:id/join', requireAuth, wrap((req, res) => res.json(store.joinGroup({ groupId: req.params.id, userId: req.user.id }))));
 app.post('/api/groups/:id/leave', requireAuth, wrap((req, res) => res.json(store.leaveGroup({ groupId: req.params.id, userId: req.user.id }))));
 app.post('/api/groups/:id/projects', requireAuth, wrap((req, res) => res.json(store.addGroupProject({ groupId: req.params.id, leaderId: req.user.id, projectId: (req.body || {}).projectId }))));
@@ -341,9 +360,80 @@ app.post('/api/posts/:id/like', requireAuth, wrap((req, res) => res.json(store.t
 app.post('/api/posts/:id/comments', requireAuth, wrap((req, res) => res.json(store.addPostComment({ postId: req.params.id, userId: req.user.id, text: (req.body || {}).text }))));
 app.delete('/api/posts/:id', requireAuth, wrap((req, res) => res.json(store.deletePost({ postId: req.params.id, userId: req.user.id }))));
 
+// --- Direct messages + network ----------------------------------------------
+app.get('/api/messages', requireAuth, wrap((req, res) => res.json(store.listConversations(req.user.id))));
+app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count: store.unreadMessageCount(req.user.id) })));
+app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
+app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
+app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+
+// --- Trust & safety: report, block, account export/delete ------------------
+app.post('/api/report', requireAuth, wrap((req, res) => {
+  const { kind, targetId, reason } = req.body || {};
+  res.json(store.reportContent({ reporterId: req.user.id, kind, targetId, reason }));
+}));
+app.get('/api/me/blocks', requireAuth, wrap((req, res) => res.json(store.listBlocked(req.user.id))));
+app.post('/api/users/:id/block', requireAuth, wrap((req, res) => res.json(store.blockUser(req.user.id, req.params.id))));
+app.delete('/api/users/:id/block', requireAuth, wrap((req, res) => res.json(store.unblockUser(req.user.id, req.params.id))));
+app.get('/api/me/export', requireAuth, wrap((req, res) => res.json(store.exportMyData(req.user.id))));
+app.delete('/api/me', requireAuth, wrap((req, res) => res.json(store.deleteMyAccount(req.user.id))));
+
+// --- Real-time stream (Server-Sent Events) ---------------------------------
+// The browser opens an EventSource with ?token=… (EventSource can't set headers).
+app.get('/api/stream', (req, res) => {
+  const user = userFromToken(req.query.token);
+  if (!user) return res.status(401).end();
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.flushHeaders?.();
+  res.write(`event: ready\ndata: {}\n\n`);
+  const unsub = store.subscribeRealtime((targetId, type, data) => {
+    if (targetId !== user.id) return;
+    try { res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  });
+  // Heartbeat keeps proxies from closing the idle connection.
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* ignore */ } }, 25000);
+  req.on('close', () => { clearInterval(ping); unsub(); });
+});
+
 // --- Referrals --------------------------------------------------------------
 app.get('/api/me/referrals', requireAuth, wrap((req, res) => res.json(store.myReferralStats(req.user.id))));
 app.get('/api/admin/referrals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.referralLeaderboard())));
+
+// --- Admin: member moderation, suspension, broadcast ------------------------
+const escHtml = (s) => String(s == null ? '' : s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
+app.post('/api/admin/users/:id/suspend', requireAuth, requireDirector, wrap((req, res) => {
+  res.json(store.setUserSuspended({ userId: req.params.id, suspended: !!(req.body || {}).suspended, actor: req.user }));
+}));
+
+app.post('/api/admin/users/:id/send-reset', requireAuth, requireDirector, wrap((req, res) => {
+  const u = store.getUserById(req.params.id);
+  if (!u || !u.email) return res.status(404).json({ error: 'That member has no email on file' });
+  const rt = issuePurposeToken(u.id, 'reset', 60 * 60);
+  actionEmail({
+    to: u.email, subject: 'Reset your Synthica password', heading: 'Password reset',
+    intro: `Hi ${String(u.name || 'there').split(' ')[0]},`,
+    blocks: ['An administrator started a password reset for your account. Click below to choose a new password (link expires in an hour).'],
+    button: { label: 'Reset password', url: `${FRONTEND_URL || ''}/reset?token=${rt}` }, signoff: 'Stay secure,',
+  });
+  res.json({ ok: true });
+}));
+
+// Branded email broadcast to a member segment (director only).
+app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) => {
+  try {
+    const { subject, heading, body, audience } = req.body || {};
+    if (!subject?.trim() || !body?.trim()) return res.status(400).json({ error: 'A subject and message are required' });
+    const recipients = store.broadcastRecipients(audience);
+    const blocks = String(body).split(/\n{2,}/).map((p) => escHtml(p).replace(/\n/g, '<br>'));
+    for (const r of recipients) {
+      actionEmail({ to: r.email, subject: subject.trim(), heading: (heading || subject).trim(), intro: `Hi ${String(r.name || 'there').split(' ')[0]},`, blocks, signoff: 'Thanks,' });
+    }
+    res.json({ sent: recipients.length, audience: audience || 'all' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Broadcast failed' });
+  }
+});
 
 // --- In-app notifications --------------------------------------------------
 app.get('/api/notifications', requireAuth, wrap((req, res) => res.json(store.listNotifications(req.user.id))));
@@ -362,13 +452,10 @@ app.post('/api/news', requireAuth, canPostNews, wrap((req, res) => {
 app.post('/api/register', authLimiter, wrap((req, res) => {
   const { name, email, discord, password, username, resumeUrl, ref } = req.body || {};
   const user = store.registerResearcher({ name, email, discord, password, username, resumeUrl, ref });
-  // Email a verification link (logged if no email provider configured).
+  // Branded welcome email with a verification link (logged if no provider).
   const vt = issuePurposeToken(user.id, 'verify', 60 * 60 * 24);
-  sendEmail({
-    to: user.email,
-    subject: 'Verify your Synthica email',
-    text: `Welcome to Synthica! Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}`,
-  });
+  const { subject, html, text } = welcomeEmail({ name: user.name, verifyUrl: `${FRONTEND_URL || ''}/verify?token=${vt}`, communityUrl: `${FRONTEND_URL || ''}/researcher/community` });
+  sendEmail({ to: user.email, subject, html, text });
   res.json({ token: issueToken(user), user });
 }));
 
@@ -381,7 +468,7 @@ app.post('/api/auth/verify-email', wrap((req, res) => {
 
 app.post('/api/auth/resend-verification', authLimiter, requireAuth, wrap((req, res) => {
   const vt = issuePurposeToken(req.user.id, 'verify', 60 * 60 * 24);
-  sendEmail({ to: req.user.email, subject: 'Verify your Synthica email', text: `Confirm your email:\n${FRONTEND_URL || ''}/verify?token=${vt}` });
+  actionEmail({ to: req.user.email, subject: 'Confirm your Synthica email', heading: 'Confirm your email', intro: `Hi ${req.user.name?.split(' ')[0] || 'there'},`, blocks: ['Click below to confirm your email address and secure your account.'], button: { label: 'Confirm email', url: `${FRONTEND_URL || ''}/verify?token=${vt}` } });
   res.json({ ok: true });
 }));
 
@@ -390,7 +477,7 @@ app.post('/api/auth/forgot-password', authLimiter, wrap((req, res) => {
   const user = store.getUserByEmail((req.body || {}).email || '');
   if (user && user.password) {
     const rt = issuePurposeToken(user.id, 'reset', 60 * 60);
-    sendEmail({ to: user.email, subject: 'Reset your Synthica password', text: `Reset your password:\n${FRONTEND_URL || ''}/reset?token=${rt}` });
+    actionEmail({ to: user.email, subject: 'Reset your Synthica password', heading: 'Reset your password', intro: `Hi ${user.name?.split(' ')[0] || 'there'},`, blocks: ['We received a request to reset your password. Click below to choose a new one — this link expires in an hour. If you didn’t ask for this, you can ignore this email.'], button: { label: 'Reset password', url: `${FRONTEND_URL || ''}/reset?token=${rt}` }, signoff: 'Stay secure,' });
   }
   res.json({ ok: true });
 }));
@@ -665,16 +752,6 @@ app.get('/api/researcher/listing-applications', requireAuth, researcherOnly, wra
 app.post('/api/researcher/listing-applications/:id', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.reviewListingApplication({ leadId: req.user.id, appId: req.params.id, status: (req.body || {}).status }));
 }));
-// Leads post a project banner/update to the feed.
-app.post('/api/researcher/banner', requireAuth, researcherOnly, wrap((req, res) => {
-  const u = req.user;
-  // Feed posting is for leads + associates; everyone else just reads.
-  const canPost = (u.tags || []).some((t) => ['lead_researcher', 'associate_researcher'].includes(t));
-  if (!canPost) return res.status(403).json({ error: 'Lead or associate researchers only' });
-  const { title, body, bannerUrl } = req.body || {};
-  res.json(store.addNews({ authorId: u.id, authorName: u.name, title, body, bannerUrl }));
-}));
-
 // Researcher submits a paper into the editor pipeline + manages revisions.
 app.post('/api/researcher/journal/submit', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, category, abstract, pdfUrl, coAuthors } = req.body || {};
@@ -848,7 +925,7 @@ store
     // Weekly digest scheduler (opt-in; needs an always-on instance). Hosts
     // that sleep should hit POST /api/admin/digest/send from a cron instead.
     if (process.env.ENABLE_DIGESTS === 'true') {
-      setInterval(() => maybeSendWeekly(store.digestData).catch((e) => console.error('[digest]', e.message)), 60 * 60 * 1000);
+      setInterval(() => maybeSendWeekly(store.digestData, store.recentFollowedActivity).catch((e) => console.error('[digest]', e.message)), 60 * 60 * 1000);
       console.log('[digest] weekly digest scheduler enabled (Mondays 13:00 UTC)');
     }
   })

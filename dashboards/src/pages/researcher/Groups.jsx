@@ -4,6 +4,8 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
+import UploadButton from '../../components/UploadButton.jsx';
+import { imageSrc } from '../../files.js';
 
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
@@ -36,8 +38,12 @@ export default function Groups() {
       ) : (
         <div className="grid grid-3">
           {groups.map((g) => (
-            <Link key={g.id} to={`/researcher/groups/${g.id}`} className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
-              <h3 style={{ margin: '0 0 0.3rem' }}>{g.name}</h3>
+            <Link key={g.id} to={`/researcher/groups/${g.id}`} className="card group-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+              {g.bannerUrl && <img className="group-card-banner" src={imageSrc(g.bannerUrl)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+              <div className="row" style={{ gap: '0.6rem', alignItems: 'center', marginBottom: '0.3rem' }}>
+                {g.logoUrl && <img className="group-logo" src={imageSrc(g.logoUrl)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                <h3 style={{ margin: 0 }}>{g.name}</h3>
+              </div>
               <div className="row" style={{ gap: '0.3rem', marginBottom: '0.4rem' }}>
                 {g.category && <Badge tone="gray">{g.category}</Badge>}
                 <Badge tone="blue">{g.memberCount} members</Badge>
@@ -54,7 +60,7 @@ export default function Groups() {
 }
 
 function CreateGroup({ onDone, toast }) {
-  const [form, setForm] = useState({ name: '', category: '', description: '' });
+  const [form, setForm] = useState({ name: '', category: '', description: '', bannerUrl: '', logoUrl: '' });
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault();
@@ -63,7 +69,7 @@ function CreateGroup({ onDone, toast }) {
     catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
   return (
-    <Card style={{ marginBottom: '1rem' }}>
+    <Card className="pop-in" style={{ marginBottom: '1rem' }}>
       <form onSubmit={submit}>
         <Field label="Group name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
         <Field label="Primary interest / category">
@@ -73,8 +79,31 @@ function CreateGroup({ onDone, toast }) {
           </select>
         </Field>
         <Field label="Description"><textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What does this group work on?" /></Field>
+        <GroupArtFields form={form} setForm={setForm} />
         <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create group'}</Button>
       </form>
     </Card>
+  );
+}
+
+// Shared banner + logo pickers (paste a URL or upload), with live previews.
+export function GroupArtFields({ form, setForm }) {
+  return (
+    <>
+      <Field label="Banner image (wide — shows across the top)">
+        <div className="row" style={{ gap: '0.4rem' }}>
+          <input value={form.bannerUrl} onChange={(e) => setForm({ ...form, bannerUrl: e.target.value })} placeholder="https://… or upload →" />
+          <UploadButton kind="image" label="Banner" onUploaded={({ url }) => setForm((f) => ({ ...f, bannerUrl: url }))} />
+        </div>
+      </Field>
+      {form.bannerUrl && <img src={imageSrc(form.bannerUrl)} alt="Banner preview" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 12, margin: '0 0 0.6rem', border: '1px solid var(--border)' }} />}
+      <Field label="Logo (square — shows beside the name)">
+        <div className="row" style={{ gap: '0.4rem' }}>
+          <input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} placeholder="https://… or upload →" />
+          <UploadButton kind="image" label="Logo" onUploaded={({ url }) => setForm((f) => ({ ...f, logoUrl: url }))} />
+        </div>
+      </Field>
+      {form.logoUrl && <img src={imageSrc(form.logoUrl)} alt="Logo preview" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 12, margin: '0 0 0.6rem', border: '1px solid var(--border)' }} />}
+    </>
   );
 }

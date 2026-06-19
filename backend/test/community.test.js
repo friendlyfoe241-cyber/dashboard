@@ -51,6 +51,29 @@ describe('research groups', () => {
     const g = store.createGroup({ userId: lead.id, name: 'G' });
     expect(() => store.addGroupLink({ groupId: g.id, leaderId: lead.id, label: 'x', url: 'javascript:alert(1)' })).toThrow();
   });
+
+  it('stores a banner + logo and lets the leader edit them (URLs sanitized)', () => {
+    const lead = sam();
+    const g = store.createGroup({ userId: lead.id, name: 'Branded', bannerUrl: 'cdn.example.com/b.png', logoUrl: 'javascript:alert(1)' });
+    expect(g.bannerUrl).toBe('https://cdn.example.com/b.png'); // normalized
+    expect(g.logoUrl).toBe('');                                // dangerous scheme dropped
+
+    const d = store.updateGroup({ groupId: g.id, leaderId: lead.id, name: 'Branded Lab', logoUrl: 'cdn.example.com/logo.png', bannerUrl: 'javascript:alert(2)' });
+    expect(d.name).toBe('Branded Lab');
+    expect(d.logoUrl).toBe('https://cdn.example.com/logo.png');
+    expect(d.bannerUrl).toBe(''); // bad banner dropped on update too
+
+    // list + detail surface both fields
+    const row = store.listGroups().find((x) => x.id === g.id);
+    expect(row.logoUrl).toBe('https://cdn.example.com/logo.png');
+    expect(store.groupDetail(g.id, lead.id).bannerUrl).toBe('');
+  });
+
+  it('only the group leader can customize the group', () => {
+    const g = store.createGroup({ userId: sam().id, name: 'G' });
+    store.joinGroup({ groupId: g.id, userId: robin().id });
+    expect(() => store.updateGroup({ groupId: g.id, leaderId: robin().id, name: 'Hijacked' })).toThrow();
+  });
 });
 
 describe('competitions', () => {

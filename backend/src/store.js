@@ -11,7 +11,7 @@ import * as seed from './seed.js';
 import { verifyPassword, hashPassword } from './passwords.js';
 import { safeUrl } from './url.js';
 import { notifyMove, notifyEvent } from './notify.js';
-import { emailDecision, sendEmail } from './email.js';
+import { emailDecision, sendEmail, actionEmail } from './email.js';
 import { registerDoi } from './doi.js';
 import { generateSecret as totpGenerateSecret, otpauthUrl as totpOtpauthUrl, verifyTotp } from './totp.js';
 
@@ -41,6 +41,9 @@ function buildSeed() {
     groups: clone(seed.groups || []),
     competitions: clone(seed.competitions || []),
     posts: clone(seed.posts || []),
+    activities: clone(seed.activities || []),
+    messages: clone(seed.messages || []),
+    reports: clone(seed.reports || []),
   };
 }
 
@@ -57,6 +60,7 @@ function pushNotif(userId, { type, title, body, link }) {
     read: false,
     at: new Date().toISOString(),
   });
+  emit(userId, 'notification', { title, body, link });
 }
 
 // Notify every editor who reviewed a paper (per policy: reviewers are told when
@@ -118,7 +122,14 @@ function bootstrapAdmin() {
   const password = process.env.ADMIN_PASSWORD || '';
   if (!email || !password) return;
   let u = [...db.editors, ...db.researchers].find((x) => x.email && x.email.toLowerCase() === email);
-  if (!u) {
+  if (u) {
+    // Promote an EXISTING account (even one that signed up as a researcher) to
+    // platform admin — move it into the editors list so it's a proper staff acct.
+    if (u.kind !== 'editor') {
+      db.researchers = db.researchers.filter((x) => x.id !== u.id);
+      if (!db.editors.some((x) => x.id === u.id)) db.editors.push(u);
+    }
+  } else {
     const base = email.split('@')[0] || 'admin';
     const taken = (uname) => [...db.editors, ...db.researchers].some((x) => x.username.toLowerCase() === uname);
     const username = taken(base) ? `${base}.admin` : base;
@@ -126,22 +137,51 @@ function bootstrapAdmin() {
       id: `usr_admin_${Date.now()}`,
       name: 'Platform Admin',
       username,
-      kind: 'editor',
-      role: EDITOR_ROLES.ADMIN,
-      category: '',
-      email,
-      discord: '',
       slug: username.replace(/[^a-z0-9]+/gi, '-').toLowerCase(),
       institution: '', bio: '', avatarUrl: '', interests: [], links: [], following: [],
-      public: false,
       twoFactorSecret: '',
       twoFactorEnabled: false,
     };
     db.editors.push(u);
   }
+  // Force the platform-admin identity and clear any researcher-only gates
+  // (approval / onboarding) so signing in goes straight to the admin dashboard.
+  u.kind = 'editor';
+  u.role = EDITOR_ROLES.ADMIN;
+  u.category = u.category || '';
   u.password = hashPassword(password);
   u.emailVerified = true;
-  console.log(`[store] admin bootstrap: ${email} signs in with ADMIN_PASSWORD (${u.kind}${u.role ? `/${u.role}` : ''})`);
+  u.approved = true;
+  u.onboarded = true;
+  u.suspended = false;
+  if (u.public === undefined) u.public = false;
+  console.log(`[store] admin bootstrap: ${email} signs in as platform admin (editor/admin)`);
+}
+
+// Safety net: collapse any accounts that share an email (case-insensitive) so a
+// single person can never end up with two logins. Registration already blocks
+// new duplicates; this heals data that predates that guard or arrived via an
+// external provider. We keep one account per email — preferring a staff/editor
+// account, then the oldest — and drop the rest.
+function dedupeAccounts() {
+  const seen = new Map(); // email -> kept account
+  const rank = (u) => (u.kind === 'editor' ? 0 : 1); // editors win
+  const age = (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0);
+  const all = [...db.editors, ...db.researchers].filter((u) => u && u.email);
+  let removed = 0;
+  for (const u of all) {
+    const key = u.email.toLowerCase();
+    const kept = seen.get(key);
+    if (!kept) { seen.set(key, u); continue; }
+    // Decide which of the two to keep; mark the loser for removal.
+    const keepNew = rank(u) < rank(kept) || (rank(u) === rank(kept) && age(u) && age(u) < age(kept));
+    const loser = keepNew ? kept : u;
+    if (keepNew) seen.set(key, u);
+    db.editors = db.editors.filter((x) => x !== loser);
+    db.researchers = db.researchers.filter((x) => x !== loser);
+    removed += 1;
+  }
+  if (removed) console.log(`[store] dedupe: removed ${removed} duplicate-email account(s)`);
 }
 
 // Load the active provider's data. Called once at server startup.
@@ -159,6 +199,7 @@ export async function init() {
     provider = null;
     db = buildSeed();
   }
+  dedupeAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -170,6 +211,7 @@ export async function init() {
 // provider, or the seed when in memory.
 export async function reset() {
   db = provider ? await loadFromProvider() : buildSeed();
+  dedupeAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -218,6 +260,33 @@ function log(sub, event) {
   sub.history.push({ at: now(), ...event });
 }
 
+// --- real-time event bus (SSE subscribers register here) -------------------
+// Each subscriber is called with (targetUserId, type, data); the SSE endpoint
+// filters to the connected user. No-op until anyone subscribes.
+const _rtListeners = new Set();
+export function subscribeRealtime(fn) { _rtListeners.add(fn); return () => _rtListeners.delete(fn); }
+function emit(userId, type, data) {
+  for (const fn of _rtListeners) { try { fn(userId, type, data); } catch { /* ignore */ } }
+}
+
+// --- activity stream (followers see what people they follow do) ------------
+// Records a public-ish action (joined a group, advanced a paper, became a lead)
+// so followers can see it in their feed. Capped to keep the snapshot bounded.
+function recordActivity(actorId, type, text, link) {
+  if (!actorId) return;
+  if (!Array.isArray(db.activities)) db.activities = [];
+  db.activities.push({ id: uid('act'), actorId, type, text, link: link || '', at: now() });
+  if (db.activities.length > 3000) db.activities = db.activities.slice(-3000);
+}
+
+// Announce a meaningful new role (Lead Researcher / Chapter Leader) to followers.
+function recordRoleActivity(userId, grantedTags) {
+  const ROLE_TAGS = { lead_researcher: 'Lead Researcher', chapter_leader: 'Chapter Leader', independent_researcher: 'Independent Researcher' };
+  for (const t of grantedTags || []) {
+    if (ROLE_TAGS[t]) recordActivity(userId, 'role', `became a ${ROLE_TAGS[t]}`, `/p/${getUserById(userId)?.slug || userId}`);
+  }
+}
+
 // --- read API --------------------------------------------------------------
 
 export const getEditorById = (id) => db.editors.find((e) => e.id === id) || null;
@@ -233,6 +302,7 @@ export function authenticate(identifier, password) {
     (u) => u.username.toLowerCase() === id || (u.email && u.email.toLowerCase() === id),
   );
   if (!user || !verifyPassword(password, user.password)) return null;
+  if (user.suspended) throw httpError(403, 'This account has been suspended. Contact an administrator.');
   const { password: _pw, twoFactorSecret: _s, ...safe } = user;
   return safe;
 }
@@ -508,6 +578,8 @@ export function updateProfile(userId, patch) {
   if (Array.isArray(patch.interests)) u.interests = patch.interests.map((s) => String(s).trim().slice(0, 40)).filter(Boolean).slice(0, 12);
   if (Array.isArray(patch.links)) u.links = cleanLinks(patch.links);
   if (typeof patch.public === 'boolean') u.public = patch.public;
+  // Durable onboarding completion (so the wizard never re-shows on a new device).
+  if (patch.onboarded === true) u.onboarded = true;
   if (typeof patch.experienceSummary === 'string') u.experienceSummary = patch.experienceSummary.slice(0, 800);
   if (patch.gpa !== undefined) u.gpa = String(patch.gpa).trim().slice(0, 12);
   if (patch.researchExperience !== undefined && patch.researchExperience !== null && patch.researchExperience !== '') {
@@ -537,6 +609,27 @@ export function updateProfile(userId, patch) {
 
 // --- admin: people lookup + role management (multi-role enabler) ------------
 
+// Suspend / reactivate a member (suspended accounts can't sign in).
+export function setUserSuspended({ userId, suspended, actor }) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.id === actor?.id) throw httpError(400, "You can't suspend yourself");
+  u.suspended = !!suspended;
+  recordAudit(actor, suspended ? 'suspend_user' : 'reactivate_user', u.name);
+  schedulePersist();
+  return { id: u.id, suspended: u.suspended };
+}
+
+// Recipients for an admin email broadcast.
+export function broadcastRecipients(audience) {
+  const pick = audience === 'researchers' ? db.researchers
+    : audience === 'editors' ? db.editors
+    : [...db.editors, ...db.researchers];
+  return pick
+    .filter((u) => u.email && !u.suspended && u.approved !== false)
+    .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+}
+
 export function adminListUsers(q) {
   const needle = (q || '').toLowerCase();
   return [...db.editors, ...db.researchers]
@@ -546,6 +639,7 @@ export function adminListUsers(q) {
       role: u.role || null, category: u.category || null, tags: u.tags || [],
       // Onboarding signals so auditors can re-evaluate roles later, not just at sign-up.
       approved: u.approved !== false,
+      suspended: !!u.suspended,
       researchExperience: u.researchExperience ?? null,
       leadershipExperience: u.leadershipExperience ?? null,
       wantsChapterLead: !!u.wantsChapterLead,
@@ -567,10 +661,12 @@ export function adminSetUserRole({ userId, kind, role, category, addTags, remove
   if (role !== undefined) u.role = role || null;
   if (category !== undefined) u.category = category || null;
   if (!Array.isArray(u.tags)) u.tags = [];
-  if (Array.isArray(addTags)) addTags.forEach((t) => { if (!u.tags.includes(t)) u.tags.push(t); });
+  const grantedAdmin = [];
+  if (Array.isArray(addTags)) addTags.forEach((t) => { if (!u.tags.includes(t)) { u.tags.push(t); grantedAdmin.push(t); } });
   if (Array.isArray(removeTags)) u.tags = u.tags.filter((t) => !removeTags.includes(t));
   u.approved = true; // an admin acting on the account activates it
   if ((addTags || []).includes('lead_researcher')) restoreLegacyProject(u, actor?.id);
+  recordRoleActivity(u.id, grantedAdmin);
   recordAudit(actor, 'set_role', `${u.name}: kind=${u.kind} role=${u.role || '-'} tags=[${u.tags.join(',')}]`);
   schedulePersist();
   const { password, twoFactorSecret, ...safe } = u;
@@ -1031,6 +1127,20 @@ function buildPublication(input, { source, verified, addedBy, authorUserId }) {
     : String(input.keywords || '').split(',').map((k) => k.trim()).filter(Boolean).slice(0, 12);
 
   const abstract = String(input.abstract || '').slice(0, 5000);
+  // Full-text hosting: structured sections (Introduction, Methods, …) and a
+  // reference list let the journal host the whole article, not just metadata.
+  const sections = Array.isArray(input.sections)
+    ? input.sections
+        .filter((s) => s && (s.heading || s.body))
+        .map((s) => ({ heading: String(s.heading || '').slice(0, 200), body: String(s.body || '').slice(0, 30000) }))
+        .slice(0, 40)
+    : [];
+  const references = (Array.isArray(input.references)
+    ? input.references
+    : String(input.references || '').split('\n'))
+    .map((r) => String(r).trim().slice(0, 600))
+    .filter(Boolean)
+    .slice(0, 300);
   return {
     id: uid('pub'),
     doi: String(input.doi || '').trim() || nextSynthicaDoi(),
@@ -1053,7 +1163,8 @@ function buildPublication(input, { source, verified, addedBy, authorUserId }) {
     sourceUrl: safeUrl(input.sourceUrl, 500),
     license: String(input.license || 'CC BY 4.0').slice(0, 40),
     openAccess: input.openAccess !== false,
-    sections: abstract ? [{ heading: 'Abstract', body: abstract }] : [],
+    sections, // full-text body (abstract is rendered separately)
+    references, // bibliography
     metrics: { accesses: 0, citations: Number(input.citationCount) || 0, altmetric: 0 },
     citationCount: Number(input.citationCount) || 0,
     source,
@@ -1141,6 +1252,16 @@ export function editPublication({ id, patch, actor }) {
   if (patch.keywords !== undefined) {
     pub.keywords = (Array.isArray(patch.keywords) ? patch.keywords : String(patch.keywords).split(','))
       .map((k) => String(k).trim()).filter(Boolean).slice(0, 12);
+  }
+  if (patch.references !== undefined) {
+    pub.references = (Array.isArray(patch.references) ? patch.references : String(patch.references).split('\n'))
+      .map((r) => String(r).trim().slice(0, 600)).filter(Boolean).slice(0, 300);
+  }
+  if (Array.isArray(patch.sections)) {
+    pub.sections = patch.sections
+      .filter((s) => s && (s.heading || s.body))
+      .map((s) => ({ heading: String(s.heading || '').slice(0, 200), body: String(s.body || '').slice(0, 30000) }))
+      .slice(0, 40);
   }
   recordAudit(actor, 'edit_paper', `${pub.title} (${pub.doi})`);
   schedulePersist();
@@ -1266,6 +1387,22 @@ function advance(sub, nextStage, note) {
     sub.assignee = null;
   }
   log(sub, { type: 'advance', to: nextStage, notifyDirector: true, label: note.label, decision: note.decision });
+  // Followers see the author's paper move to a later round of publishing.
+  const ROUND_NAME = {
+    [STAGE.SENIOR_SCREEN]: 'senior editor screening',
+    [STAGE.ASSOCIATE]: 'associate editor revisions',
+    [STAGE.SENIOR_FINAL]: 'senior editor final review',
+    [STAGE.CHIEF]: 'editor-in-chief review',
+    [STAGE.PUBLISHED]: 'publication 🎉',
+  };
+  if (sub.submittedBy) {
+    recordActivity(
+      sub.submittedBy,
+      nextStage === STAGE.PUBLISHED ? 'published' : 'paper_advance',
+      `advanced their paper “${sub.title}” to ${ROUND_NAME[nextStage] || 'the next round'}`,
+      nextStage === STAGE.PUBLISHED ? '/archive' : `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
+    );
+  }
   notifyMove({
     title: sub.title,
     paperId: sub.id,
@@ -1439,17 +1576,24 @@ export function setApplicationStatus({ id, status, reviewerId, assignTag }) {
       u.onboardingRejected = false;
       if (tag) {
         if (!Array.isArray(u.tags)) u.tags = [];
-        if (!u.tags.includes(tag)) u.tags.push(tag);
+        if (!u.tags.includes(tag)) { u.tags.push(tag); recordRoleActivity(u.id, [tag]); }
         a.assignedTag = tag;
         // Approving a returning lead restores the project they claimed.
         if (tag === 'lead_researcher') restoreLegacyProject(u, reviewerId);
         // One-time in-app congrats + a welcome email with the assigned role.
         u.newRoleCongrats = TAG_LABEL[tag] || tag;
         if (u.email) {
-          sendEmail({
+          const site = (process.env.FRONTEND_URL || 'https://app.synthica.org').replace(/\/$/, '');
+          actionEmail({
             to: u.email,
-            subject: `Welcome to Synthica — you're a ${TAG_LABEL[tag] || tag}!`,
-            text: `Hi ${u.name},\n\nCongrats! Your Synthica membership was approved and you've been assigned the role of ${TAG_LABEL[tag] || tag}.\n\nSign in to get started: ${process.env.FRONTEND_URL || 'https://app.synthica.org'}\n\n— The Synthica Team`,
+            subject: `You're approved — welcome as a ${TAG_LABEL[tag] || tag}! 🎉`,
+            heading: `You're in — welcome aboard! 🎉`,
+            intro: `Hi ${String(u.name || 'there').split(/\s+/)[0]},`,
+            blocks: [
+              `Congrats! Your membership was approved and you've been assigned the role of <strong>${TAG_LABEL[tag] || tag}</strong>.`,
+              `Sign in to set up your profile, join a research group, and start exploring competitions and programs.`,
+            ],
+            button: { label: 'Open your dashboard', url: `${site}/researcher` },
           });
         }
       }
@@ -1472,6 +1616,7 @@ export function auditorSetTags({ userId, addTags, removeTags, actor }) {
   if (!Array.isArray(u.tags)) u.tags = [];
   const granted = (Array.isArray(addTags) ? addTags : []).filter((t) => RESEARCHER_TAGS.has(t) && !u.tags.includes(t));
   granted.forEach((t) => u.tags.push(t));
+  recordRoleActivity(u.id, granted);
   (Array.isArray(removeTags) ? removeTags : []).forEach((t) => { u.tags = u.tags.filter((x) => x !== t); });
   if ((addTags || []).length) u.approved = true; // granting a role activates the member
   if (granted.includes('lead_researcher')) {
@@ -1726,6 +1871,18 @@ export function verifyCertificate(code) {
   const c = db.certificates.find((x) => x.code === String(code || '').trim().toUpperCase());
   if (!c) return { valid: false };
   return { valid: true, name: c.name, type: c.type, issuedAt: c.issuedAt };
+}
+
+// Recent activity from the people a user follows (for their weekly digest).
+export function recentFollowedActivity(userId, days = 7) {
+  const u = getUserById(userId);
+  const following = new Set((u && u.following) || []);
+  const since = Date.now() - days * 24 * 3600 * 1000;
+  return (db.activities || [])
+    .filter((a) => following.has(a.actorId) && new Date(a.at).getTime() >= since)
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, 15)
+    .map((a) => ({ actorName: getUserById(a.actorId)?.name || 'A member', text: a.text, at: a.at }));
 }
 
 // --- weekly digest data ------------------------------------------------------
@@ -2017,6 +2174,74 @@ export function deleteProjectLink({ projectId, linkId, userId }) {
   p.links.splice(idx, 1);
   schedulePersist();
   return { success: true };
+// --- direct messages + network ---------------------------------------------
+
+const dmCard = (id) => {
+  const u = getUserById(id);
+  return { id, name: u?.name || 'Member', slug: u?.slug || id, avatarUrl: u?.avatarUrl || '', role: u ? roleDisplay(u) : '' };
+};
+
+export function sendMessage({ from, to, text }) {
+  if (from === to) throw httpError(400, "You can't message yourself");
+  if (!getUserById(to)) throw httpError(404, 'Recipient not found');
+  if (isBlockedBetween(from, to)) throw httpError(403, 'You can no longer message this person');
+  if (!text?.trim()) throw httpError(400, 'Write a message');
+  if (!Array.isArray(db.messages)) db.messages = [];
+  const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
+  db.messages.push(msg);
+  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
+  emit(to, 'message', { from, text: msg.text, at: msg.at });
+  schedulePersist();
+  return { ...msg, mine: true };
+}
+
+// One row per person you've exchanged messages with: last message + unread count.
+export function listConversations(userId) {
+  const byOther = new Map();
+  for (const m of db.messages || []) {
+    if (m.from !== userId && m.to !== userId) continue;
+    const other = m.from === userId ? m.to : m.from;
+    const cur = byOther.get(other);
+    if (!cur || new Date(m.at) > new Date(cur.lastAt)) {
+      byOther.set(other, { other, lastMessage: m.text, lastAt: m.at, mine: m.from === userId });
+    }
+  }
+  const unread = {};
+  for (const m of db.messages || []) if (m.to === userId && !m.read) unread[m.from] = (unread[m.from] || 0) + 1;
+  return [...byOther.values()]
+    .filter((c) => !isBlockedBetween(userId, c.other))
+    .map((c) => ({ user: dmCard(c.other), lastMessage: c.lastMessage, lastAt: c.lastAt, mine: c.mine, unread: unread[c.other] || 0 }))
+    .sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+}
+
+// The thread with one person; marks their messages to you as read.
+export function getThread(userId, otherId) {
+  if (!getUserById(otherId)) throw httpError(404, 'User not found');
+  let changed = false;
+  const messages = (db.messages || [])
+    .filter((m) => (m.from === userId && m.to === otherId) || (m.from === otherId && m.to === userId))
+    .sort((a, b) => new Date(a.at) - new Date(b.at))
+    .map((m) => {
+      if (m.to === userId && !m.read) { m.read = true; changed = true; }
+      return { id: m.id, text: m.text, at: m.at, mine: m.from === userId };
+    });
+  if (changed) schedulePersist();
+  return { user: dmCard(otherId), messages };
+}
+
+export const unreadMessageCount = (userId) => (db.messages || []).filter((m) => m.to === userId && !m.read).length;
+
+// Your network: people you follow + people who follow you (with mutual flag).
+export function networkFor(userId) {
+  const u = getUserById(userId);
+  const following = new Set((u && u.following) || []);
+  const followers = [...db.editors, ...db.researchers].filter((x) => (x.following || []).includes(userId)).map((x) => x.id);
+  const followerSet = new Set(followers);
+  const card = (id) => ({ ...dmCard(id), mutual: following.has(id) && followerSet.has(id) });
+  return {
+    following: [...following].filter((id) => getUserById(id)).map(card),
+    followers: followers.filter((id) => id !== userId).map(card),
+  };
 }
 
 // --- following + personalized feed -----------------------------------------
@@ -2062,6 +2287,18 @@ export function feedFor(userId) {
   for (const c of chaptersOf(userId))
     for (const ann of c.announcements || [])
       items.push({ type: 'chapter', title: `${c.name}: ${ann.title}`, body: ann.body, by: ann.byName, at: ann.at });
+  // Activity from people you follow (and yourself): joined a group, became a
+  // lead, advanced a paper to a later round, etc.
+  for (const a of db.activities || []) {
+    if (a.actorId !== userId && !following.has(a.actorId)) continue;
+    const actor = getUserById(a.actorId);
+    items.push({
+      type: 'activity',
+      actor: { name: actor?.name || 'Member', slug: actor?.slug || a.actorId, avatarUrl: actor?.avatarUrl || '' },
+      title: `${actor?.name || 'A member'} ${a.text}`,
+      link: a.link || '', at: a.at,
+    });
+  }
   for (const p of db.publications) {
     if (p.authorUserId && following.has(p.authorUserId)) {
       items.push({ type: 'following', title: `New paper from ${getUserById(p.authorUserId)?.name || 'someone you follow'}`, body: p.title, doi: p.doi, at: p.publishedAt });
@@ -2405,7 +2642,7 @@ function shapePost(p, viewerId) {
     imageUrl: p.imageUrl || '',
     likeCount: (p.likes || []).length,
     likedByMe: (p.likes || []).includes(viewerId),
-    comments: (p.comments || []).map((c) => ({ id: c.id, author: authorCard(c.authorId), text: c.text, at: c.at })),
+    comments: (p.comments || []).filter((c) => !isBlockedBetween(viewerId, c.authorId)).map((c) => ({ id: c.id, author: authorCard(c.authorId), text: c.text, at: c.at })),
     commentCount: (p.comments || []).length,
     at: p.at,
     canDelete: p.authorId === viewerId || isStaff(getUserById(viewerId)),
@@ -2414,6 +2651,7 @@ function shapePost(p, viewerId) {
 
 export function listPosts(viewerId) {
   return [...(db.posts || [])]
+    .filter((p) => !isBlockedBetween(viewerId, p.authorId))
     .sort((a, b) => new Date(b.at) - new Date(a.at))
     .map((p) => shapePost(p, viewerId));
 }
@@ -2476,6 +2714,212 @@ export function deletePost({ postId, userId }) {
 }
 
 export const postCountFor = (userId) => (db.posts || []).filter((p) => p.authorId === userId).length;
+
+// --- trust & safety: blocking, reporting, moderation -----------------------
+
+// True if either side has blocked the other — used to hide content + stop DMs.
+function isBlockedBetween(aId, bId) {
+  if (!aId || !bId || aId === bId) return false;
+  const a = getUserById(aId), b = getUserById(bId);
+  return !!((a?.blockedUsers || []).includes(bId) || (b?.blockedUsers || []).includes(aId));
+}
+
+export function blockUser(userId, targetId) {
+  if (userId === targetId) throw httpError(400, "You can't block yourself");
+  const u = getUserById(userId);
+  if (!u || !getUserById(targetId)) throw httpError(404, 'User not found');
+  if (!Array.isArray(u.blockedUsers)) u.blockedUsers = [];
+  if (!u.blockedUsers.includes(targetId)) u.blockedUsers.push(targetId);
+  // Blocking unfollows both ways so they drop out of each other's feed/network.
+  if (Array.isArray(u.following)) u.following = u.following.filter((id) => id !== targetId);
+  const t = getUserById(targetId);
+  if (t && Array.isArray(t.following)) t.following = t.following.filter((id) => id !== userId);
+  schedulePersist();
+  return { blocked: u.blockedUsers };
+}
+
+export function unblockUser(userId, targetId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  u.blockedUsers = (u.blockedUsers || []).filter((id) => id !== targetId);
+  schedulePersist();
+  return { blocked: u.blockedUsers };
+}
+
+export function listBlocked(userId) {
+  const u = getUserById(userId);
+  return ((u && u.blockedUsers) || []).map((id) => dmCard(id));
+}
+
+const REPORT_KINDS = ['post', 'comment', 'message', 'profile'];
+
+// Resolve what a report points at: its owner + a text snapshot for the queue.
+function reportTargetSnapshot(kind, targetId) {
+  if (kind === 'post') {
+    const p = (db.posts || []).find((x) => x.id === targetId);
+    return p ? { ownerId: p.authorId, text: p.text } : null;
+  }
+  if (kind === 'comment') {
+    for (const p of db.posts || []) {
+      const c = (p.comments || []).find((x) => x.id === targetId);
+      if (c) return { ownerId: c.authorId, text: c.text, postId: p.id };
+    }
+    return null;
+  }
+  if (kind === 'message') {
+    const m = (db.messages || []).find((x) => x.id === targetId);
+    return m ? { ownerId: m.from, text: m.text } : null;
+  }
+  if (kind === 'profile') {
+    const u = getUserById(targetId);
+    return u ? { ownerId: u.id, text: u.bio || u.blurb || '' } : null;
+  }
+  return null;
+}
+
+const isModerator = (u) => u?.kind === 'editor'
+  && [EDITOR_ROLES.AUDITOR, EDITOR_ROLES.DIRECTOR, EDITOR_ROLES.ADMIN].includes(u.role);
+
+// A member flags a post/comment/message/profile for the moderation team.
+export function reportContent({ reporterId, kind, targetId, reason }) {
+  if (!REPORT_KINDS.includes(kind)) throw httpError(400, 'Unknown report type');
+  const snap = reportTargetSnapshot(kind, targetId);
+  if (!snap) throw httpError(404, 'That content no longer exists');
+  if (snap.ownerId === reporterId) throw httpError(400, "You can't report your own content");
+  if (!Array.isArray(db.reports)) db.reports = [];
+  // One open report per reporter per target — clicking twice is a no-op.
+  if (db.reports.some((r) => r.reporterId === reporterId && r.kind === kind && r.targetId === targetId && r.status === 'open'))
+    return { ok: true, duplicate: true };
+  const report = {
+    id: uid('rpt'),
+    kind, targetId,
+    targetOwnerId: snap.ownerId,
+    targetOwnerName: getUserById(snap.ownerId)?.name || 'Member',
+    snippet: String(snap.text || '').slice(0, 280),
+    postId: snap.postId || null,
+    reason: String(reason || '').trim().slice(0, 500),
+    reporterId, reporterName: getUserById(reporterId)?.name || 'Member',
+    status: 'open',
+    action: '', resolvedById: null, resolvedByName: '', resolvedAt: null,
+    at: now(),
+  };
+  db.reports.unshift(report);
+  // Ping the moderation team in-app.
+  for (const ed of db.editors || []) {
+    if (isModerator(ed)) pushNotif(ed.id, { type: 'report', title: '🚩 New content report', body: `${report.reporterName} reported a ${kind}`, link: '/editor' });
+  }
+  schedulePersist();
+  return { ok: true };
+}
+
+export function listReports(status = 'open') {
+  return (db.reports || [])
+    .filter((r) => (status === 'all' ? true : r.status === status))
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+export const openReportCount = () => (db.reports || []).filter((r) => r.status === 'open').length;
+
+// Moderator resolves a report: dismiss it, remove the content, or suspend the
+// offending member (which also removes the reported content).
+export function resolveReport({ id, actor, action }) {
+  if (!isModerator(actor)) throw httpError(403, 'Moderators only');
+  const r = (db.reports || []).find((x) => x.id === id);
+  if (!r) throw httpError(404, 'Report not found');
+  if (!['dismiss', 'remove', 'suspend'].includes(action)) throw httpError(400, 'Unknown action');
+
+  if (action === 'remove' || action === 'suspend') {
+    if (r.kind === 'post') {
+      const i = (db.posts || []).findIndex((p) => p.id === r.targetId);
+      if (i !== -1) db.posts.splice(i, 1);
+    } else if (r.kind === 'comment') {
+      for (const p of db.posts || []) {
+        const ci = (p.comments || []).findIndex((c) => c.id === r.targetId);
+        if (ci !== -1) { p.comments.splice(ci, 1); break; }
+      }
+    } else if (r.kind === 'message') {
+      const i = (db.messages || []).findIndex((m) => m.id === r.targetId);
+      if (i !== -1) db.messages.splice(i, 1);
+    }
+  }
+  if (action === 'suspend' && r.targetOwnerId) {
+    setUserSuspended({ userId: r.targetOwnerId, suspended: true, actor });
+  }
+  r.status = 'resolved';
+  r.action = action;
+  r.resolvedById = actor?.id || null;
+  r.resolvedByName = actor?.name || 'staff';
+  r.resolvedAt = now();
+  recordAudit(actor, `report_${action}`, `${r.kind} by ${r.targetOwnerName}`);
+  schedulePersist();
+  return listReports('open');
+}
+
+// --- account self-service: data export + deletion --------------------------
+
+// Everything a member can take with them (their own data only; no secrets).
+export function exportMyData(userId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  const { password, twoFactorSecret, ...profile } = u;
+  const posts = (db.posts || []).filter((p) => p.authorId === userId).map((p) => ({ id: p.id, text: p.text, at: p.at, likes: (p.likes || []).length }));
+  const comments = [];
+  for (const p of db.posts || []) for (const c of p.comments || []) if (c.authorId === userId) comments.push({ postId: p.id, text: c.text, at: c.at });
+  const messages = (db.messages || []).filter((m) => m.from === userId || m.to === userId)
+    .map((m) => ({ direction: m.from === userId ? 'sent' : 'received', with: m.from === userId ? m.to : m.from, text: m.text, at: m.at }));
+  const groups = (db.groups || []).filter((g) => (g.members || []).includes(userId)).map((g) => ({ id: g.id, name: g.name, leader: g.leaderId === userId }));
+  const applications = (db.applications || []).filter((a) => a.userId === userId);
+  const certificates = (db.certificates || []).filter((c) => c.userId === userId);
+  return { exportedAt: now(), profile, posts, comments, messages, groups, applications, certificates };
+}
+
+// Permanently delete the member's account + the content tied to it. Owned
+// structures (groups/projects) are handed to the next member or disbanded.
+export function deleteMyAccount(userId) {
+  const u = getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.kind === 'editor') throw httpError(403, 'Staff accounts are managed by an administrator');
+
+  db.posts = (db.posts || []).filter((p) => p.authorId !== userId);
+  for (const p of db.posts) {
+    if (Array.isArray(p.comments)) p.comments = p.comments.filter((c) => c.authorId !== userId);
+    if (Array.isArray(p.likes)) p.likes = p.likes.filter((id) => id !== userId);
+  }
+  db.messages = (db.messages || []).filter((m) => m.from !== userId && m.to !== userId);
+  db.notifications = (db.notifications || []).filter((n) => n.userId !== userId);
+  db.applications = (db.applications || []).filter((a) => a.userId !== userId);
+  db.listings = (db.listings || []).filter((l) => l.leadId !== userId);
+  db.reports = (db.reports || []).filter((r) => r.reporterId !== userId && r.targetOwnerId !== userId);
+
+  // Drop membership from every group/project; transfer or disband owned ones.
+  for (const g of db.groups || []) {
+    g.members = (g.members || []).filter((m) => m !== userId);
+    (g.positions || []).forEach((pos) => { if (pos.filledBy === userId) pos.filledBy = null; });
+  }
+  db.groups = (db.groups || []).filter((g) => {
+    if (g.leaderId !== userId) return true;
+    if ((g.members || []).length === 0) return false;
+    g.leaderId = g.members[0];
+    return true;
+  });
+  for (const p of db.projects || []) p.members = (p.members || []).filter((m) => m !== userId);
+  db.projects = (db.projects || []).filter((p) => {
+    if (p.leadId !== userId) return true;
+    if ((p.members || []).length === 0) return false;
+    p.leadId = p.members[0];
+    return true;
+  });
+
+  // Following + block graph, both directions.
+  for (const x of [...db.editors, ...db.researchers]) {
+    if (Array.isArray(x.following)) x.following = x.following.filter((id) => id !== userId);
+    if (Array.isArray(x.blockedUsers)) x.blockedUsers = x.blockedUsers.filter((id) => id !== userId);
+  }
+  db.researchers = (db.researchers || []).filter((x) => x.id !== userId);
+  recordAudit({ id: userId, name: u.name }, 'account_deleted', u.email || '');
+  schedulePersist();
+  return { ok: true };
+}
 
 // --- in-app notifications --------------------------------------------------
 
@@ -2762,7 +3206,7 @@ const groupLeaderName = (g) => getUserById(g.leaderId)?.name || 'Lead';
 export function listGroups() {
   return (db.groups || []).map((g) => ({
     id: g.id, name: g.name, category: g.category || '', description: g.description || '',
-    bannerUrl: g.bannerUrl || '', leaderName: groupLeaderName(g),
+    bannerUrl: g.bannerUrl || '', logoUrl: g.logoUrl || '', leaderName: groupLeaderName(g),
     memberCount: (g.members || []).length, projectCount: (g.projectIds || []).length,
   }));
 }
@@ -2784,7 +3228,7 @@ export function groupDetail(groupId, viewerId) {
   }));
   return {
     id: g.id, name: g.name, description: g.description || '', category: g.category || '',
-    bannerUrl: g.bannerUrl || '', leaderId: g.leaderId, leaderName: groupLeaderName(g),
+    bannerUrl: g.bannerUrl || '', logoUrl: g.logoUrl || '', leaderId: g.leaderId, leaderName: groupLeaderName(g),
     members, projects, positions, links: g.links || [],
     isLeader: viewerId === g.leaderId, isMember: (g.members || []).includes(viewerId),
     // Projects the viewer leads that aren't yet in the group (for the "add project" picker).
@@ -2794,7 +3238,7 @@ export function groupDetail(groupId, viewerId) {
   };
 }
 
-export function createGroup({ userId, name, description, category, bannerUrl }) {
+export function createGroup({ userId, name, description, category, bannerUrl, logoUrl }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can create research groups');
   if (!name?.trim()) throw httpError(400, 'A group name is required');
@@ -2806,6 +3250,7 @@ export function createGroup({ userId, name, description, category, bannerUrl }) 
     category: CATEGORIES.includes(category) ? category : '',
     leaderId: userId,
     bannerUrl: safeUrl(bannerUrl, 400),
+    logoUrl: safeUrl(logoUrl, 400),
     members: [userId],
     projectIds: [],
     positions: [],
@@ -2814,8 +3259,26 @@ export function createGroup({ userId, name, description, category, bannerUrl }) 
   };
   db.groups.push(g);
   recordAudit(u, 'create_group', g.name);
+  recordActivity(userId, 'group_founded', `founded the research group ${g.name}`, `/researcher/groups/${g.id}`);
   schedulePersist();
   return g;
+}
+
+// Group leader edits identity: name, description, category, banner, and logo.
+export function updateGroup({ groupId, leaderId, name, description, category, bannerUrl, logoUrl }) {
+  const g = getGroup(groupId);
+  if (!g) throw httpError(404, 'Group not found');
+  requireGroupLeader(g, leaderId);
+  if (name !== undefined) {
+    if (!String(name).trim()) throw httpError(400, 'A group name is required');
+    g.name = String(name).trim().slice(0, 100);
+  }
+  if (description !== undefined) g.description = String(description || '').trim().slice(0, 1200);
+  if (category !== undefined) g.category = CATEGORIES.includes(category) ? category : '';
+  if (bannerUrl !== undefined) g.bannerUrl = safeUrl(bannerUrl, 400);
+  if (logoUrl !== undefined) g.logoUrl = safeUrl(logoUrl, 400);
+  schedulePersist();
+  return groupDetail(groupId, leaderId);
 }
 
 export function joinGroup({ groupId, userId }) {
@@ -2824,6 +3287,7 @@ export function joinGroup({ groupId, userId }) {
   if (!g.members.includes(userId)) {
     g.members.push(userId);
     if (userId !== g.leaderId) pushNotif(g.leaderId, { type: 'group', title: `${getUserById(userId)?.name || 'Someone'} joined ${g.name}`, body: '', link: `/researcher/groups/${g.id}` });
+    if (userId !== g.leaderId) recordActivity(userId, 'group_joined', `joined the research group ${g.name}`, `/researcher/groups/${g.id}`);
   }
   schedulePersist();
   return groupDetail(groupId, userId);
@@ -2945,9 +3409,10 @@ export function createProject({ userId, title, category, description }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can create projects');
   if (!title?.trim()) throw httpError(400, 'A title is required');
-  const p = { id: `proj_${Date.now()}`, title: title.trim(), category: category || '', description: (description || '').trim(), leadId: userId, members: [userId], announcements: [], tasks: [], links: [], ideas: [] };
+  const p = { id: `proj_${Date.now()}`, title: title.trim(), category: category || '', description: (description || '').trim(), leadId: userId, members: [userId], announcements: [], tasks: [], links: [], ideas: [], roles: [] };
   db.projects.push(p);
   recordAudit({ id: userId, name: u.name }, 'create_project', p.title);
+  recordActivity(userId, 'project_started', `started the project ${p.title}`, `/researcher/project/${p.id}`);
   schedulePersist();
   return p;
 }

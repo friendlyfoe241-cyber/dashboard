@@ -317,8 +317,19 @@ async function renderArticle() {
         ${embedBlock}
 
         ${(p.sections || [])
-          .map((s) => `<section class="article-section"><h2>${esc(s.heading)}</h2><p>${esc(s.body)}</p></section>`)
+          .map((s) => `<section class="article-section"><h2>${esc(s.heading)}</h2>${String(s.body || '')
+            .split(/\n{2,}/)
+            .map((para) => `<p>${esc(para)}</p>`)
+            .join('')}</section>`)
           .join('')}
+
+        ${
+          (p.references || []).length
+            ? `<section class="article-section article-references"><h2>References</h2><ol>${p.references
+                .map((r) => `<li>${esc(r)}</li>`)
+                .join('')}</ol></section>`
+            : ''
+        }
 
         ${
           p.keywords?.length
@@ -351,10 +362,40 @@ async function renderArticle() {
         </div>
         <div class="side-card">
           <h3>Cite this article</h3>
-          <p class="cite-text">${esc(authorLine(p.authors))} (${new Date(p.publishedAt).getFullYear()}). ${esc(p.title)}. <em>Synthica Journal</em>, ${esc(p.volume)}(${esc(p.issue)}), ${esc(p.pages)}. https://doi.org/${esc(p.doi)}</p>
+          <div class="cite-tabs">
+            <button class="cite-tab active" data-fmt="apa" type="button">APA</button>
+            <button class="cite-tab" data-fmt="bibtex" type="button">BibTeX</button>
+          </div>
+          <pre id="cite-box" class="cite-box"></pre>
+          <button id="cite-copy" class="btn btn-ghost btn-sm" type="button">Copy citation</button>
         </div>
       </aside>
     </div>`;
+
+  // Wire the citation widget (APA ⇄ BibTeX, with copy).
+  const year = new Date(p.publishedAt).getFullYear();
+  const apa = `${authorLine(p.authors)} (${year}). ${p.title}. Synthica Journal, ${p.volume || ''}(${p.issue || ''}), ${p.pages || ''}. https://doi.org/${p.doi}`;
+  const key = `synthica${year}${(p.authors[0]?.name || 'anon').split(/\s+/).pop().toLowerCase().replace(/[^a-z]/g, '')}`;
+  const bibtex = `@article{${key},
+  title   = {${p.title}},
+  author  = {${p.authors.map((a) => a.name).join(' and ')}},
+  journal = {Synthica Journal},
+  year    = {${year}},
+  volume  = {${p.volume || ''}},
+  number  = {${p.issue || ''}},
+  pages   = {${p.pages || ''}},
+  doi     = {${p.doi}}
+}`;
+  const box = root.querySelector('#cite-box');
+  const tabs = root.querySelectorAll('.cite-tab');
+  const copyBtn = root.querySelector('#cite-copy');
+  let fmt = 'apa';
+  const draw = () => { box.textContent = fmt === 'apa' ? apa : bibtex; tabs.forEach((t) => t.classList.toggle('active', t.dataset.fmt === fmt)); };
+  tabs.forEach((t) => t.addEventListener('click', () => { fmt = t.dataset.fmt; draw(); }));
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(box.textContent).then(() => { copyBtn.textContent = 'Copied!'; setTimeout(() => { copyBtn.textContent = 'Copy citation'; }, 1500); }).catch(() => {});
+  });
+  draw();
 }
 
 // ---- Public profile render ------------------------------------------------
