@@ -666,33 +666,30 @@ function Applications() {
     api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
 
   const onboarding = apps.filter((a) => a.kind === 'onboarding' && a.status === 'pending');
+  const pendingOnboardingCount = onboarding.length;
   // Program applications have their own panel below (cohort admission).
   const others = apps.filter((a) => a.kind !== 'onboarding' && a.kind !== 'program' && a.status === 'pending');
-  const pendCount = (xs) => xs.filter((a) => a.status === 'pending').length;
-
-  if (onboarding.length === 0 && others.length === 0) {
-    return null; // Hide entire section if no pending applications
-  }
+  const pendingOthersCount = others.length;
 
   return (
     <div style={{ marginBottom: '1.5rem' }}>
-      {onboarding.length > 0 && (
-        <>
-          <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
-            Onboarding <Badge tone="gray">{pendCount(onboarding)} pending</Badge>
-          </h2>
-          <p className="muted" style={{ margin: '0 0 0.6rem' }}>New members — approve and assign a starting role.</p>
-          <div className="stack">{onboarding.map((a) => <AppRow key={a.id} a={a} review={review} assignable />)}</div>
-        </>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Onboarding <Badge tone="gray">{pendingOnboardingCount} pending</Badge>
+      </h2>
+      <p className="muted" style={{ margin: '0 0 0.6rem' }}>New members — approve and assign a starting role.</p>
+      {pendingOnboardingCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
+      ) : (
+        <div className="stack">{onboarding.map((a) => <AppRow key={a.id} a={a} review={review} assignable />)}</div>
       )}
 
-      {others.length > 0 && (
-        <>
-          <h2 className="section-title" style={{ margin: '1.5rem 0 0.6rem' }}>
-            Role &amp; project applications <Badge tone="gray">{pendCount(others)} pending</Badge>
-          </h2>
-          <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
-        </>
+      <h2 className="section-title" style={{ margin: '1.5rem 0 0.6rem' }}>
+        Role &amp; project applications <Badge tone="gray">{pendingOthersCount} pending</Badge>
+      </h2>
+      {pendingOthersCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
+      ) : (
+        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
       )}
     </div>
   );
