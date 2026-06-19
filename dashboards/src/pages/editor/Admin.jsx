@@ -80,9 +80,10 @@ function People({ isDirector }) {
   const [q, setQ] = useState('');
   const [users, setUsers] = useState([]);
   const [bulk, setBulk] = useState({ emails: '', tag: 'lead_researcher' });
+  const [visibleCount, setVisibleCount] = useState(3);
 
   const search = (query) => api.adminUsers(query).then(setUsers).catch(() => {});
-  useEffect(() => { search(''); }, []);
+  useEffect(() => { search(''); setVisibleCount(3); }, []);
 
   // Directors use the full role endpoint; auditors the tags-only one.
   const setTags = (u, body) => (isDirector ? api.adminSetRole(u.id, body) : api.adminSetTags(u.id, body));
@@ -117,10 +118,10 @@ function People({ isDirector }) {
       <Card>
         <div className="card-row">
           <h3>Lookup</h3>
-          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); }} style={{ maxWidth: 280 }} />
+          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(3); }} style={{ maxWidth: 280 }} />
         </div>
         <div className="stack" style={{ marginTop: '0.6rem' }}>
-          {users.slice(0, 25).map((u) => (
+          {users.slice(0, visibleCount).map((u) => (
             <div key={u.id} className="info-block">
               <div className="card-row">
                 <div>
@@ -162,6 +163,29 @@ function People({ isDirector }) {
               </div>
             </div>
           ))}
+          {users.length > visibleCount && (
+            <button
+              onClick={() => setVisibleCount((c) => Math.min(c + 5, users.length))}
+              style={{
+                marginTop: '0.5rem',
+                display: 'block',
+                width: '100%',
+                padding: '0.5rem 1rem',
+                background: 'transparent',
+                border: '1.5px solid #2589ed',
+                borderRadius: '8px',
+                color: '#2589ed',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseOver={(e) => { e.target.style.background = '#f0f7ff'; }}
+              onMouseOut={(e) => { e.target.style.background = 'transparent'; }}
+            >
+              Show more ({users.length - visibleCount} remaining)
+            </button>
+          )}
         </div>
       </Card>
     </div>
@@ -641,28 +665,29 @@ function Applications() {
   const review = (id, status, assignTag) =>
     api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
 
-  const onboarding = apps.filter((a) => a.kind === 'onboarding');
+  const onboarding = apps.filter((a) => a.kind === 'onboarding' && a.status === 'pending');
+  const pendingOnboardingCount = onboarding.length;
   // Program applications have their own panel below (cohort admission).
-  const others = apps.filter((a) => a.kind !== 'onboarding' && a.kind !== 'program');
-  const pendCount = (xs) => xs.filter((a) => a.status === 'pending').length;
+  const others = apps.filter((a) => a.kind !== 'onboarding' && a.kind !== 'program' && a.status === 'pending');
+  const pendingOthersCount = others.length;
 
   return (
     <div style={{ marginBottom: '1.5rem' }}>
       <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
-        Onboarding <Badge tone="gray">{pendCount(onboarding)} pending</Badge>
+        Onboarding <Badge tone="gray">{pendingOnboardingCount} pending</Badge>
       </h2>
       <p className="muted" style={{ margin: '0 0 0.6rem' }}>New members — approve and assign a starting role.</p>
-      {onboarding.length === 0 ? (
-        <Card><p className="muted">No new members waiting.</p></Card>
+      {pendingOnboardingCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
       ) : (
         <div className="stack">{onboarding.map((a) => <AppRow key={a.id} a={a} review={review} assignable />)}</div>
       )}
 
       <h2 className="section-title" style={{ margin: '1.5rem 0 0.6rem' }}>
-        Role &amp; project applications <Badge tone="gray">{pendCount(others)} pending</Badge>
+        Role &amp; project applications <Badge tone="gray">{pendingOthersCount} pending</Badge>
       </h2>
-      {others.length === 0 ? (
-        <Card><p className="muted">No applications yet.</p></Card>
+      {pendingOthersCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
       ) : (
         <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
       )}

@@ -2165,6 +2165,16 @@ export function addProjectLink({ projectId, userId, label, url }) {
   return link;
 }
 
+export function deleteProjectLink({ projectId, linkId, userId }) {
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (!memberOf(p, userId)) throw httpError(403, 'Only team members can delete links');
+  const idx = p.links.findIndex((l) => l.id === linkId);
+  if (idx === -1) throw httpError(404, 'Link not found');
+  p.links.splice(idx, 1);
+  schedulePersist();
+  return { success: true };
+}
 // --- direct messages + network ---------------------------------------------
 
 const dmCard = (id) => {

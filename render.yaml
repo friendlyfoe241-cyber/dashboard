@@ -13,6 +13,7 @@ services:
   - type: web
     name: synthica-backend
     runtime: node
+    nodeVersion: "22"
     rootDir: backend
     plan: free
     buildCommand: npm install
@@ -35,6 +36,9 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: FRONTEND_URL
+        sync: false
+      # Resend API key for transactional emails (verification, password reset, etc.)
+      - key: RESEND_API_KEY
         sync: false
       # Guaranteed owner login. Production refuses the shared demo password, so
       # without this a fresh deploy has NO usable accounts. Set both in the

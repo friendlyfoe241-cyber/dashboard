@@ -37,7 +37,7 @@ function Shell({ children }) {
       <div className="login-split">
         <aside className="login-aside">
           <span className="login-aside-badge">✦ Open to all students — free</span>
-          <h2 className="login-aside-title">Everything Synthica,<br /><span className="login-aside-em">in one place</span></h2>
+          <h2 className="login-aside-title">Synthica,<br /><span className="login-aside-em">all in one place <br/>connecting researchers world-wide</span></h2>
           <p className="login-aside-sub">
             Your unified home for community, programs, research, and opportunities.
             Connect with members worldwide, join events, and never miss an update.
