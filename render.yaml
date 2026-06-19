@@ -13,6 +13,7 @@ services:
   - type: web
     name: synthica-backend
     runtime: node
+    nodeVersion: "22"
     rootDir: backend
     plan: free
     buildCommand: npm install
