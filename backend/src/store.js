@@ -2174,6 +2174,7 @@ export function deleteProjectLink({ projectId, linkId, userId }) {
   p.links.splice(idx, 1);
   schedulePersist();
   return { success: true };
+}
 // --- direct messages + network ---------------------------------------------
 
 const dmCard = (id) => {
