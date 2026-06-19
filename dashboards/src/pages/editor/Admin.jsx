@@ -80,9 +80,10 @@ function People({ isDirector }) {
   const [q, setQ] = useState('');
   const [users, setUsers] = useState([]);
   const [bulk, setBulk] = useState({ emails: '', tag: 'lead_researcher' });
+  const [visibleCount, setVisibleCount] = useState(25);
 
   const search = (query) => api.adminUsers(query).then(setUsers).catch(() => {});
-  useEffect(() => { search(''); }, []);
+  useEffect(() => { search(''); setVisibleCount(25); }, []);
 
   // Directors use the full role endpoint; auditors the tags-only one.
   const setTags = (u, body) => (isDirector ? api.adminSetRole(u.id, body) : api.adminSetTags(u.id, body));
@@ -117,10 +118,10 @@ function People({ isDirector }) {
       <Card>
         <div className="card-row">
           <h3>Lookup</h3>
-          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); }} style={{ maxWidth: 280 }} />
+          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(25); }} style={{ maxWidth: 280 }} />
         </div>
         <div className="stack" style={{ marginTop: '0.6rem' }}>
-          {users.slice(0, 25).map((u) => (
+          {users.slice(0, visibleCount).map((u) => (
             <div key={u.id} className="info-block">
               <div className="card-row">
                 <div>
@@ -162,6 +163,15 @@ function People({ isDirector }) {
               </div>
             </div>
           ))}
+          {users.length > visibleCount && (
+            <button
+              className="btn-sm"
+              style={{ marginTop: '0.5rem', display: 'block', width: '100%' }}
+              onClick={() => setVisibleCount((c) => c + 25)}
+            >
+              Show more ({users.length - visibleCount} remaining)
+            </button>
+          )}
         </div>
       </Card>
     </div>
