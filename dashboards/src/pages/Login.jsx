@@ -37,10 +37,10 @@ function Shell({ children }) {
       <div className="login-split">
         <aside className="login-aside">
           <span className="login-aside-badge">✦ Open to all students — free</span>
-          <h2 className="login-aside-title">Synthica,<br /><span className="login-aside-em">all in one place <br/>connecting researchers world-wide</span></h2>
+          <h3 className="login-aside-title">Synthica,<br /><span className="login-aside-em">all in one place</span></h3>
+          <h3 className="login-aside-em">Connecting researchers world-wide</h3>
           <p className="login-aside-sub">
-            Your unified home for community, programs, research, and opportunities.
-            Connect with members worldwide, join events, and never miss an update.
+            Connect, learn, and grow. Access global programs, join events, and stay connected with a worldwide community.
           </p>
           <ul className="login-aside-list">
             {PORTAL_FEATURES.map(([icon, label]) => (
