@@ -427,8 +427,10 @@ app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) 
     
     let recipients;
     if (to && to.trim()) {
-      // Custom email recipient
-      recipients = [{ email: to.trim() }];
+      // Custom email recipient(s) - supports comma-separated emails
+      const emails = to.split(',').map(e => e.trim()).filter(e => e && e.includes('@'));
+      if (emails.length === 0) return res.status(400).json({ error: 'At least one valid email is required' });
+      recipients = emails.map(email => ({ email }));
     } else {
       recipients = store.broadcastRecipients(audience);
     }
