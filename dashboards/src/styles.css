@@ -1492,7 +1492,15 @@ html[data-theme='dark'] .fm-row:hover { background: rgba(37, 137, 237, 0.14); }
 .dm-modal-close { padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: transparent; cursor: pointer; color: var(--body-alt); font-size: 0.9rem; }
 .dm-modal-close:hover { background: var(--surface-alt); }
 
+/* Sandbox (Independent Researcher) */
+.sandbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.sandbox-card { transition: transform 0.15s, box-shadow 0.15s; }
+.sandbox-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+
 @media (max-width: 760px) {
   .dm-layout { grid-template-columns: 1fr; }
   .dm-list { max-height: 40vh; }
+  .sandbox-grid { grid-template-columns: 1fr; }
+  .notes-grid { grid-template-columns: 1fr; }
 }

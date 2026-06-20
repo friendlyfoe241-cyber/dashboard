@@ -3704,6 +3704,197 @@ export function editorStats(editorId) {
   return { reviewed, approved, declined, active };
 }
 
+// ============================================================
+// SANDBOX PROJECTS (for Independent Researchers)
+// ============================================================
+
+// Get all sandbox projects for a user
+export function listSandboxProjects(userId) {
+  const projects = (db.sandboxProjects || []).filter(p => p.userId === userId);
+  return projects.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+
+// Get a single sandbox project
+export function getSandboxProject(userId, projectId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  return p;
+}
+
+// Create a sandbox project
+export function createSandboxProject({ userId, title, category, description }) {
+  if (!title?.trim()) throw httpError(400, 'Title is required');
+  const p = {
+    id: `sandbox_${uid('')}`,
+    userId,
+    title: title.trim(),
+    category: category || 'General',
+    description: (description || '').trim(),
+    tasks: [],
+    notes: [],
+    documents: [],
+    createdAt: now(),
+    updatedAt: now(),
+    driveFolderId: null,
+    lastSynced: null
+  };
+  if (!Array.isArray(db.sandboxProjects)) db.sandboxProjects = [];
+  db.sandboxProjects.push(p);
+  schedulePersist();
+  return p;
+}
+
+// Update a sandbox project
+export function updateSandboxProject(userId, projectId, updates) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (updates.title !== undefined) p.title = updates.title.trim();
+  if (updates.category !== undefined) p.category = updates.category;
+  if (updates.description !== undefined) p.description = updates.description.trim();
+  p.updatedAt = now();
+  schedulePersist();
+  return p;
+}
+
+// Delete a sandbox project
+export function deleteSandboxProject(userId, projectId) {
+  const idx = (db.sandboxProjects || []).findIndex(p => p.id === projectId && p.userId === userId);
+  if (idx < 0) throw httpError(404, 'Project not found');
+  db.sandboxProjects.splice(idx, 1);
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a task to sandbox project
+export function addSandboxTask(userId, projectId, { title, description, priority, dueDate }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const task = {
+    id: `task_${uid('')}`,
+    title: title.trim(),
+    description: (description || '').trim(),
+    priority: priority || 'medium',
+    dueDate: dueDate || null,
+    status: 'todo',
+    createdAt: now()
+  };
+  p.tasks.push(task);
+  p.updatedAt = now();
+  schedulePersist();
+  return task;
+}
+
+// Update a task
+export function updateSandboxTask(userId, projectId, taskId, updates) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const task = p.tasks.find(t => t.id === taskId);
+  if (!task) throw httpError(404, 'Task not found');
+  if (updates.title !== undefined) task.title = updates.title.trim();
+  if (updates.description !== undefined) task.description = updates.description.trim();
+  if (updates.priority !== undefined) task.priority = updates.priority;
+  if (updates.dueDate !== undefined) task.dueDate = updates.dueDate;
+  if (updates.status !== undefined) task.status = updates.status;
+  p.updatedAt = now();
+  schedulePersist();
+  return task;
+}
+
+// Delete a task
+export function deleteSandboxTask(userId, projectId, taskId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.tasks.findIndex(t => t.id === taskId);
+  if (idx < 0) throw httpError(404, 'Task not found');
+  p.tasks.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a note to sandbox project
+export function addSandboxNote(userId, projectId, { title, content }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const note = {
+    id: `note_${uid('')}`,
+    title: title.trim() || 'Untitled Note',
+    content: content || '',
+    createdAt: now(),
+    updatedAt: now()
+  };
+  p.notes.push(note);
+  p.updatedAt = now();
+  schedulePersist();
+  return note;
+}
+
+// Update a note
+export function updateSandboxNote(userId, projectId, noteId, { title, content }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const note = p.notes.find(n => n.id === noteId);
+  if (!note) throw httpError(404, 'Note not found');
+  if (title !== undefined) note.title = title.trim() || 'Untitled Note';
+  if (content !== undefined) note.content = content;
+  note.updatedAt = now();
+  p.updatedAt = now();
+  schedulePersist();
+  return note;
+}
+
+// Delete a note
+export function deleteSandboxNote(userId, projectId, noteId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.notes.findIndex(n => n.id === noteId);
+  if (idx < 0) throw httpError(404, 'Note not found');
+  p.notes.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a document reference
+export function addSandboxDocument(userId, projectId, { name, type, url, size }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const doc = {
+    id: `doc_${uid('')}`,
+    name,
+    type,
+    url,
+    size: size || 0,
+    addedAt: now()
+  };
+  p.documents.push(doc);
+  p.updatedAt = now();
+  schedulePersist();
+  return doc;
+}
+
+// Delete a document
+export function deleteSandboxDocument(userId, projectId, docId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.documents.findIndex(d => d.id === docId);
+  if (idx < 0) throw httpError(404, 'Document not found');
+  p.documents.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Update Drive folder ID after sync
+export function setSandboxDriveFolder(userId, projectId, folderId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  p.driveFolderId = folderId;
+  p.lastSynced = now();
+  schedulePersist();
+  return p;
+}
+
 // Synchronous in-memory default so the module is usable on import (e.g. tests)
 // before init() runs. Placed last so all helper consts above are initialized.
 // init() replaces this with the active provider's data at server startup.
