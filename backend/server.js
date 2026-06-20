@@ -422,14 +422,22 @@ app.post('/api/admin/users/:id/send-reset', requireAuth, requireDirector, wrap((
 // Branded email broadcast to a member segment (director only).
 app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) => {
   try {
-    const { subject, heading, body, audience } = req.body || {};
+    const { subject, heading, body, audience, to } = req.body || {};
     if (!subject?.trim() || !body?.trim()) return res.status(400).json({ error: 'A subject and message are required' });
-    const recipients = store.broadcastRecipients(audience);
+    
+    let recipients;
+    if (to && to.trim()) {
+      // Custom email recipient
+      recipients = [{ email: to.trim() }];
+    } else {
+      recipients = store.broadcastRecipients(audience);
+    }
+    
     const blocks = String(body).split(/\n{2,}/).map((p) => escHtml(p).replace(/\n/g, '<br>'));
     for (const r of recipients) {
       actionEmail({ to: r.email, subject: subject.trim(), heading: (heading || subject).trim(), intro: `Hi ${String(r.name || 'there').split(' ')[0]},`, blocks, signoff: 'Thanks,' });
     }
-    res.json({ sent: recipients.length, audience: audience || 'all' });
+    res.json({ sent: recipients.length, audience: to ? 'custom' : (audience || 'all') });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Broadcast failed' });
   }
