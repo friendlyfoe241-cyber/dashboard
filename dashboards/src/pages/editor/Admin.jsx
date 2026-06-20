@@ -973,8 +973,6 @@ function MemberAdminActions({ u, onChanged }) {
     </>
   );
 }
-  );
-}
 
 // Community moderation: review and remove recent posts.
 // The reports queue: content members have flagged, with one-click resolution.
