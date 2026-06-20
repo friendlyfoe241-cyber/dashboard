@@ -205,7 +205,12 @@ export const api = {
   conversations: () => request('/messages'),
   unreadMessages: () => request('/messages/unread'),
   thread: (userId) => request(`/messages/${userId}`),
-  sendMessage: (userId, text) => request(`/messages/${userId}`, { method: 'POST', body: { text } }),
+  sendMessage: (userId, text, opts = {}) => request(`/messages/${userId}`, { method: 'POST', body: { text, ...opts } }),
+  editMessage: (messageId, text) => request(`/messages/${messageId}`, { method: 'PUT', body: { text } }),
+  deleteMessage: (messageId) => request(`/messages/${messageId}`, { method: 'DELETE' }),
+  toggleReaction: (messageId, emoji) => request(`/messages/${messageId}/react`, { method: 'POST', body: { emoji } }),
+  forwardMessage: (messageId, toUserId) => request(`/messages/${messageId}/forward`, { method: 'POST', body: { toUserId } }),
+  forwardTargets: () => request('/messages/forward-targets'),
   network: () => request('/network'),
   // trust & safety
   report: (kind, targetId, reason) => request('/report', { method: 'POST', body: { kind, targetId, reason } }),

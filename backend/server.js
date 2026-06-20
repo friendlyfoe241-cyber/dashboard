@@ -365,7 +365,35 @@ app.get('/api/messages', requireAuth, wrap((req, res) => res.json(store.listConv
 app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count: store.unreadMessageCount(req.user.id) })));
 app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
 app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
-app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+app.post('/api/messages/:userId', requireAuth, wrap((req, res) => {
+  const { text, replyTo, mediaUrl, mediaType } = req.body || {};
+  res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text, replyTo, mediaUrl, mediaType }));
+}));
+// Edit a message
+app.put('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  const { text } = req.body || {};
+  res.json(store.editMessage(req.user.id, req.params.messageId, text));
+}));
+// Delete a message
+app.delete('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  res.json(store.deleteMessage(req.user.id, req.params.messageId));
+}));
+// Toggle reaction on a message
+app.post('/api/messages/:messageId/react', requireAuth, wrap((req, res) => {
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: 'Emoji is required' });
+  res.json(store.toggleReaction(req.user.id, req.params.messageId, emoji));
+}));
+// Forward a message
+app.post('/api/messages/:messageId/forward', requireAuth, wrap((req, res) => {
+  const { toUserId } = req.body || {};
+  if (!toUserId) return res.status(400).json({ error: 'Recipient is required' });
+  res.json(store.forwardMessage(req.user.id, req.params.messageId, toUserId));
+}));
+// Get users for forwarding
+app.get('/api/messages/forward-targets', requireAuth, wrap((req, res) => {
+  res.json(store.getForwardTargets(req.user.id));
+}));
 
 // --- Trust & safety: report, block, account export/delete ------------------
 app.post('/api/report', requireAuth, wrap((req, res) => {
