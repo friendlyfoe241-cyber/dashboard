@@ -9,6 +9,7 @@ export default function Email() {
   const [cfg, setCfg] = useState(null);
   const [f, setF] = useState({ to: '', subject: '', heading: '', body: '', audience: 'researchers' });
   const [busy, setBusy] = useState(false);
+  const [customEmail, setCustomEmail] = useState('');
 
   useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
 
@@ -18,18 +19,27 @@ export default function Email() {
       toast.error('Subject and body are required');
       return;
     }
+    if (f.audience === 'custom' && !customEmail) {
+      toast.error('Please enter a custom email address');
+      return;
+    }
     setBusy(true);
     try {
-      const r = await api.adminBroadcast({ ...f });
-      toast.success(`Email sent to ${r.sent} recipients`);
+      const payload = { ...f };
+      if (f.audience === 'custom') {
+        payload.to = customEmail;
+      }
+      const r = await api.adminBroadcast(payload);
+      toast.success(`Email sent to ${r.sent} recipient${r.sent !== 1 ? 's' : ''}`);
       setF({ ...f, subject: '', heading: '', body: '' });
+      setCustomEmail('');
     } catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
 
   return (
     <div>
       <h1 className="page-title">Send Email</h1>
-      <p className="page-sub">Send direct emails to researchers or all members.</p>
+      <p className="page-sub">Send direct emails to researchers, all members, or a specific email address.</p>
 
       <Card>
         {cfg && cfg.emailConfigured === false && (
@@ -42,8 +52,20 @@ export default function Email() {
             <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
               <option value="researchers">Researchers only</option>
               <option value="all">All members</option>
+              <option value="custom">Specific email address</option>
             </select>
           </Field>
+          {f.audience === 'custom' && (
+            <Field label="Email address">
+              <input
+                type="email"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                required
+                placeholder="recipient@example.com"
+              />
+            </Field>
+          )}
           <Field label="Subject">
             <input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required placeholder="Email subject line" />
           </Field>
