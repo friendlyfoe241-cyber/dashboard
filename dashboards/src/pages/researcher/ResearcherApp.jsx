@@ -60,6 +60,7 @@ export default function ResearcherApp() {
   // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
   const nav = [
     { to: '/researcher', label: 'Home', icon: '🏠', end: true },
+    { to: '/researcher/chapter', label: 'Chapter', icon: '🌍' },
     { section: 'Community' },
     { to: '/researcher/community', label: 'Community', icon: '📣' },
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
@@ -73,7 +74,6 @@ export default function ResearcherApp() {
     { section: 'Explore' },
     { to: '/researcher/explore', label: 'Explore', icon: '🚀' },
     { to: '/researcher/journal', label: 'Journal', icon: '📖' },
-    { to: '/researcher/chapter', label: 'Chapter', icon: '🌍' },
     { spacer: true },
     { to: '/researcher/account', label: 'Account', icon: '⚙️' },
   ];
