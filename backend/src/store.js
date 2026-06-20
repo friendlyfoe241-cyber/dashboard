@@ -2182,18 +2182,161 @@ const dmCard = (id) => {
   return { id, name: u?.name || 'Member', slug: u?.slug || id, avatarUrl: u?.avatarUrl || '', role: u ? roleDisplay(u) : '' };
 };
 
-export function sendMessage({ from, to, text }) {
+export function sendMessage({ from, to, text, replyTo, mediaUrl, mediaType }) {
   if (from === to) throw httpError(400, "You can't message yourself");
   if (!getUserById(to)) throw httpError(404, 'Recipient not found');
   if (isBlockedBetween(from, to)) throw httpError(403, 'You can no longer message this person');
-  if (!text?.trim()) throw httpError(400, 'Write a message');
+  if (!text?.trim() && !mediaUrl) throw httpError(400, 'Write a message or attach media');
   if (!Array.isArray(db.messages)) db.messages = [];
-  const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
+  
+  // Get reply info if replying to a message
+  let replyInfo = null;
+  if (replyTo) {
+    const parentMsg = (db.messages || []).find(m => m.id === replyTo);
+    if (parentMsg) {
+      const sender = getUserById(parentMsg.from);
+      replyInfo = {
+        replyToId: parentMsg.id,
+        replyToContent: parentMsg.text,
+        replyToSender: sender?.name || 'Unknown',
+        replyToType: parentMsg.mediaUrl ? 'media' : 'text'
+      };
+    }
+  }
+  
+  const msg = {
+    id: uid('msg'),
+    from,
+    to,
+    text: String(text || '').trim().slice(0, 4000),
+    at: now(),
+    read: false,
+    delivered: false,
+    mediaUrl: mediaUrl || null,
+    mediaType: mediaType || null,
+    reactions: {},
+    isEdited: false,
+    isPinned: false,
+    ...replyInfo
+  };
+  
   db.messages.push(msg);
-  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
-  emit(to, 'message', { from, text: msg.text, at: msg.at });
+  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100) || '📎 Media', link: `/researcher/messages/${from}` });
+  emit(to, 'message', { from, text: msg.text, at: msg.at, mediaUrl: msg.mediaUrl });
   schedulePersist();
   return { ...msg, mine: true };
+}
+
+// Edit a message
+export function editMessage(userId, messageId, newText) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.from === userId);
+  if (!msg) throw httpError(404, 'Message not found');
+  msg.text = String(newText).trim().slice(0, 4000);
+  msg.isEdited = true;
+  msg.editedAt = now();
+  schedulePersist();
+  // Notify the other user
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_edited', { messageId, text: msg.text });
+  return msg;
+}
+
+// Delete a message (soft delete - just clear content)
+export function deleteMessage(userId, messageId) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.from === userId);
+  if (!msg) throw httpError(404, 'Message not found');
+  msg.text = '[deleted]';
+  msg.isDeleted = true;
+  msg.mediaUrl = null;
+  msg.mediaType = null;
+  schedulePersist();
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_deleted', { messageId });
+  return { success: true };
+}
+
+// Add/remove reaction to a message
+export function toggleReaction(userId, messageId, emoji) {
+  const msg = (db.messages || []).find(m => m.id === messageId);
+  if (!msg) throw httpError(404, 'Message not found');
+  if (!msg.reactions) msg.reactions = {};
+  if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+  
+  const idx = msg.reactions[emoji].indexOf(userId);
+  if (idx >= 0) {
+    msg.reactions[emoji].splice(idx, 1);
+    if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+  } else {
+    msg.reactions[emoji].push(userId);
+  }
+  schedulePersist();
+  
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_reaction', { messageId, reactions: msg.reactions });
+  return msg.reactions;
+}
+
+// Mark message as delivered
+export function markDelivered(userId, messageId) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.to === userId);
+  if (msg && !msg.delivered) {
+    msg.delivered = true;
+    schedulePersist();
+    emit(msg.from, 'message_delivered', { messageId });
+  }
+  return { success: true };
+}
+
+// Mark all messages in thread as read
+export function markThreadRead(userId, otherId) {
+  let count = 0;
+  for (const msg of db.messages || []) {
+    if (msg.to === userId && msg.from === otherId && !msg.read) {
+      msg.read = true;
+      count++;
+    }
+  }
+  if (count > 0) schedulePersist();
+  return { count };
+}
+
+// Forward a message to another user
+export function forwardMessage(userId, messageId, toUserId) {
+  const originalMsg = (db.messages || []).find(m => m.id === messageId);
+  if (!originalMsg) throw httpError(404, 'Original message not found');
+  if (!getUserById(toUserId)) throw httpError(404, 'Recipient not found');
+  if (isBlockedBetween(userId, toUserId)) throw httpError(403, 'You can no longer message this person');
+  
+  // Create forwarded message with reference to original
+  const forwardedMsg = {
+    id: uid('msg'),
+    from: userId,
+    to: toUserId,
+    text: originalMsg.text,
+    at: now(),
+    read: false,
+    delivered: false,
+    mediaUrl: originalMsg.mediaUrl,
+    mediaType: originalMsg.mediaType,
+    reactions: {},
+    isEdited: false,
+    isPinned: false,
+    isForwarded: true,
+    originalFrom: originalMsg.from
+  };
+  
+  db.messages.push(forwardedMsg);
+  pushNotif(toUserId, { type: 'message', title: `💬 New message from ${getUserById(userId)?.name || 'a member'}`, body: forwardedMsg.text.slice(0, 100) || '📎 Media', link: `/researcher/messages/${userId}` });
+  emit(toUserId, 'message', { from: userId, text: forwardedMsg.text, at: forwardedMsg.at });
+  schedulePersist();
+  return { ...forwardedMsg, mine: true };
+}
+
+// Get list of users for forwarding
+export function getForwardTargets(userId) {
+  return [...db.editors, ...db.researchers]
+    .filter(u => u.id !== userId && !isBlockedBetween(userId, u.id))
+    .map(u => ({ id: u.id, name: u.name, username: u.username }));
 }
 
 // One row per person you've exchanged messages with: last message + unread count.
@@ -2224,7 +2367,29 @@ export function getThread(userId, otherId) {
     .sort((a, b) => new Date(a.at) - new Date(b.at))
     .map((m) => {
       if (m.to === userId && !m.read) { m.read = true; changed = true; }
-      return { id: m.id, text: m.text, at: m.at, mine: m.from === userId };
+      // Mark as delivered when recipient sees the thread
+      if (m.to === userId && !m.delivered) { m.delivered = true; }
+      return {
+        id: m.id,
+        text: m.text,
+        at: m.at,
+        mine: m.from === userId,
+        delivered: m.delivered,
+        read: m.read,
+        reactions: m.reactions || {},
+        isEdited: m.isEdited || false,
+        isPinned: m.isPinned || false,
+        isDeleted: m.isDeleted || false,
+        isForwarded: m.isForwarded || false,
+        originalFrom: m.originalFrom,
+        mediaUrl: m.mediaUrl,
+        mediaType: m.mediaType,
+        replyToId: m.replyToId,
+        replyToContent: m.replyToContent,
+        replyToSender: m.replyToSender,
+        replyToType: m.replyToType,
+        editedAt: m.editedAt
+      };
     });
   if (changed) schedulePersist();
   return { user: dmCard(otherId), messages };
