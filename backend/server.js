@@ -1003,8 +1003,12 @@ app.post('/api/researcher/onboarding/step', requireAuth, researcherOnly, wrap((r
 // Chapter leader: roster + stats, and onboarding new members.
 app.get('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
   const view = store.chapterView(req.user.id);
-  if (!view) return res.status(404).json({ error: 'You do not lead a chapter' });
-  res.json(view);
+  res.json(view || { hasChapter: false, isLeader: false });
+}));
+
+app.post('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, location, handbookUrl } = req.body || {};
+  res.json(store.createChapter({ leaderId: req.user.id, name, location, handbookUrl }));
 }));
 
 app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((req, res) => {
@@ -1015,6 +1019,16 @@ app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((r
 app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, body } = req.body || {};
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
+}));
+
+app.post('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, type } = req.body || {};
+  res.json(store.addChapterProgress({ leaderId: req.user.id, title, description, type }));
+}));
+
+app.get('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  const progress = store.getChapterProgress(req.user.id);
+  res.json(progress);
 }));
 
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive
