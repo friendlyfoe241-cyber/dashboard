@@ -56,14 +56,15 @@ export default function Email() {
             </select>
           </Field>
           {f.audience === 'custom' && (
-            <Field label="Email address">
+            <Field label="Email address(es)">
               <input
-                type="email"
+                type="text"
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 required
-                placeholder="recipient@example.com"
+                placeholder="email1@example.com, email2@example.com, ..."
               />
+              <span className="muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>Separate multiple emails with commas</span>
             </Field>
           )}
           <Field label="Subject">
