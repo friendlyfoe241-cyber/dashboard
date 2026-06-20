@@ -26,6 +26,7 @@ import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
 import Sandbox, { SandboxProject } from './Sandbox.jsx';
+import Chapter from './Chapter.jsx';
 
 // One-time celebration the first time a member opens the app after an auditor
 // assigns (or upgrades) their role.
@@ -72,6 +73,7 @@ export default function ResearcherApp() {
     { section: 'Explore' },
     { to: '/researcher/explore', label: 'Explore', icon: '🚀' },
     { to: '/researcher/journal', label: 'Journal', icon: '📖' },
+    { to: '/researcher/chapter', label: 'Chapter', icon: '🌍' },
     { spacer: true },
     { to: '/researcher/account', label: 'Account', icon: '⚙️' },
   ];
@@ -100,6 +102,7 @@ export default function ResearcherApp() {
         <Route path="sandbox/:projectId" element={<SandboxProject />} />
         <Route path="competitions" element={<Competitions />} />
         <Route path="news" element={<News />} />
+        <Route path="chapter" element={<Chapter />} />
         <Route path="account" element={<Account />} />
         {/* Deep-link routes kept so existing links still resolve. */}
         <Route path="hub" element={<ResearchHub />} />

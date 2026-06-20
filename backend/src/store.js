@@ -44,6 +44,7 @@ function buildSeed() {
     activities: clone(seed.activities || []),
     messages: clone(seed.messages || []),
     reports: clone(seed.reports || []),
+    chapterProgress: [],
   };
 }
 
@@ -3357,6 +3358,72 @@ export function addChapterMember({ leaderId, name, email, discord }) {
   notifyEvent({ title: '👋 Chapter member added', body: `${user.name} joined ${chapter.name}.` });
   schedulePersist();
   return { id: user.id, name: user.name, email: user.email, discord: user.discord, existing };
+}
+
+// Chapter Leaders can create their chapter
+export function createChapter({ leaderId, name, location, handbookUrl }) {
+  const existing = db.chapters.find((c) => c.leaderId === leaderId);
+  if (existing) throw httpError(409, 'You already lead a chapter');
+  if (!name?.trim()) throw httpError(400, 'Chapter name is required');
+  
+  const user = getResearcherById(leaderId);
+  if (!user) throw httpError(404, 'User not found');
+  
+  const chapter = {
+    id: `chap_${uid('')}`,
+    name: name.trim(),
+    location: (location || '').trim(),
+    handbookUrl: (handbookUrl || '').trim(),
+    leaderId,
+    members: [],
+    announcements: [],
+    createdAt: now(),
+  };
+  
+  // If leader is not already a chapter_leader tag, add it
+  if (!user.tags.includes('chapter_leader')) {
+    user.tags.push('chapter_leader');
+  }
+  
+  db.chapters.push(chapter);
+  pushNotif(leaderId, { type: 'chapter', title: 'Chapter created!', body: `Your chapter "${name}" is ready. Start by onboarding members.`, link: '/researcher/chapter' });
+  schedulePersist();
+  return chapter;
+}
+
+// Progress logging for Chapter Leaders
+export function addChapterProgress({ leaderId, title, description, type }) {
+  const chapter = getChapterLedBy(leaderId);
+  if (!chapter) throw httpError(403, 'You must lead a chapter to log progress');
+  if (!title?.trim()) throw httpError(400, 'Title is required');
+  
+  if (!Array.isArray(db.chapterProgress)) db.chapterProgress = [];
+  
+  const progress = {
+    id: `prog_${uid('')}`,
+    chapterId: chapter.id,
+    leaderId,
+    title: title.trim(),
+    description: (description || '').trim(),
+    type: type || 'general', // general, member, event, recruitment, outreach
+    createdAt: now(),
+  };
+  
+  db.chapterProgress.push(progress);
+  schedulePersist();
+  return progress;
+}
+
+// Get progress entries for a chapter leader's chapter
+export function getChapterProgress(leaderId) {
+  const chapter = getChapterLedBy(leaderId);
+  if (!chapter) return [];
+  
+  if (!Array.isArray(db.chapterProgress)) db.chapterProgress = [];
+  
+  return db.chapterProgress
+    .filter((p) => p.chapterId === chapter.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
 // --- leads: create listings/projects + review their own applicants ---------

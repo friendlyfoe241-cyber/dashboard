@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../components/ui.jsx';
@@ -557,6 +557,9 @@ function ChapterPanel() {
       <div className="section-head">
         <div className="section-badge">Chapter Leader</div>
         <h2 className="section-title">{chapter.name}</h2>
+        <Link to="/researcher/chapter" className="btn btn-outline btn-sm" style={{ marginLeft: 'auto' }}>
+          View Chapter →
+        </Link>
       </div>
 
       {/* Generated chapter stats */}

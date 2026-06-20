@@ -261,8 +261,11 @@ export const api = {
   onboarding: () => request('/researcher/onboarding'),
   onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
   chapter: () => request('/researcher/chapter'),
+  createChapter: (body) => request('/researcher/chapter', { method: 'POST', body }),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  chapterProgress: () => request('/researcher/chapter/progress'),
+  addChapterProgress: (body) => request('/researcher/chapter/progress', { method: 'POST', body }),
   // programs (apply → cohort → milestones)
   programs: () => request('/researcher/programs'),
   applyProgram: (id, message) => request(`/researcher/programs/${id}/apply`, { method: 'POST', body: { message } }),
