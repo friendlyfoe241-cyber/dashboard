@@ -21,7 +21,6 @@ export default function Admin() {
       <People isDirector={isDirector} />
       <Applications />
       <ProgramsPanel isDirector={isDirector} />
-      {isDirector && <BroadcastEmail />}
       <Moderation />
       <CompetitionsAdmin />
       <GlobalEvents />
@@ -974,49 +973,6 @@ function MemberAdminActions({ u, onChanged }) {
     </>
   );
 }
-
-// Director-only: branded email broadcast to a member segment.
-function BroadcastEmail() {
-  const toast = useToast();
-  const [cfg, setCfg] = useState(null);
-  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
-  const send = async (e) => {
-    e.preventDefault();
-    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
-    setBusy(true);
-    try {
-      const r = await api.adminBroadcast(f);
-      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
-      setF({ subject: '', heading: '', body: '', audience: 'all' });
-    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
-  };
-  return (
-    <div style={{ marginBottom: '1.5rem' }}>
-      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
-      <Card>
-        {cfg && cfg.emailConfigured === false && (
-          <p className="muted" style={{ marginTop: 0, color: '#92400e' }}>⚠️ Email delivery isn’t configured — broadcasts will be logged only.</p>
-        )}
-        <form onSubmit={send}>
-          <div className="grid grid-2">
-            <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
-            <Field label="Audience">
-              <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
-                <option value="all">All members</option>
-                <option value="researchers">Researchers</option>
-                <option value="editors">Editors / staff</option>
-              </select>
-            </Field>
-          </div>
-          <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
-          <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
-          <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
-          <span className="muted" style={{ marginLeft: '0.6rem', fontSize: '0.8rem' }}>Sent as a branded HTML email from your account.</span>
-        </form>
-      </Card>
-    </div>
   );
 }
 
