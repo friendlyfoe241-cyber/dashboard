@@ -365,7 +365,35 @@ app.get('/api/messages', requireAuth, wrap((req, res) => res.json(store.listConv
 app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count: store.unreadMessageCount(req.user.id) })));
 app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
 app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
-app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+app.post('/api/messages/:userId', requireAuth, wrap((req, res) => {
+  const { text, replyTo, mediaUrl, mediaType } = req.body || {};
+  res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text, replyTo, mediaUrl, mediaType }));
+}));
+// Edit a message
+app.put('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  const { text } = req.body || {};
+  res.json(store.editMessage(req.user.id, req.params.messageId, text));
+}));
+// Delete a message
+app.delete('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  res.json(store.deleteMessage(req.user.id, req.params.messageId));
+}));
+// Toggle reaction on a message
+app.post('/api/messages/:messageId/react', requireAuth, wrap((req, res) => {
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: 'Emoji is required' });
+  res.json(store.toggleReaction(req.user.id, req.params.messageId, emoji));
+}));
+// Forward a message
+app.post('/api/messages/:messageId/forward', requireAuth, wrap((req, res) => {
+  const { toUserId } = req.body || {};
+  if (!toUserId) return res.status(400).json({ error: 'Recipient is required' });
+  res.json(store.forwardMessage(req.user.id, req.params.messageId, toUserId));
+}));
+// Get users for forwarding
+app.get('/api/messages/forward-targets', requireAuth, wrap((req, res) => {
+  res.json(store.getForwardTargets(req.user.id));
+}));
 
 // --- Trust & safety: report, block, account export/delete ------------------
 app.post('/api/report', requireAuth, wrap((req, res) => {
@@ -422,14 +450,24 @@ app.post('/api/admin/users/:id/send-reset', requireAuth, requireDirector, wrap((
 // Branded email broadcast to a member segment (director only).
 app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) => {
   try {
-    const { subject, heading, body, audience } = req.body || {};
+    const { subject, heading, body, audience, to } = req.body || {};
     if (!subject?.trim() || !body?.trim()) return res.status(400).json({ error: 'A subject and message are required' });
-    const recipients = store.broadcastRecipients(audience);
+    
+    let recipients;
+    if (to && to.trim()) {
+      // Custom email recipient(s) - supports comma-separated emails
+      const emails = to.split(',').map(e => e.trim()).filter(e => e && e.includes('@'));
+      if (emails.length === 0) return res.status(400).json({ error: 'At least one valid email is required' });
+      recipients = emails.map(email => ({ email }));
+    } else {
+      recipients = store.broadcastRecipients(audience);
+    }
+    
     const blocks = String(body).split(/\n{2,}/).map((p) => escHtml(p).replace(/\n/g, '<br>'));
     for (const r of recipients) {
       actionEmail({ to: r.email, subject: subject.trim(), heading: (heading || subject).trim(), intro: `Hi ${String(r.name || 'there').split(' ')[0]},`, blocks, signoff: 'Thanks,' });
     }
-    res.json({ sent: recipients.length, audience: audience || 'all' });
+    res.json({ sent: recipients.length, audience: to ? 'custom' : (audience || 'all') });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Broadcast failed' });
   }
@@ -842,6 +880,83 @@ app.get('/api/researcher/projects/:id/stats', requireAuth, researcherOnly, wrap(
   res.json(store.projectStats(req.params.id));
 }));
 
+// ============================================================
+// SANDBOX PROJECTS (Independent Researcher personal projects)
+// ============================================================
+app.get('/api/researcher/sandbox', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.listSandboxProjects(req.user.id));
+}));
+
+app.get('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.getSandboxProject(req.user.id, req.params.projectId));
+}));
+
+app.post('/api/researcher/sandbox', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description } = req.body || {};
+  res.json(store.createSandboxProject({ userId: req.user.id, title, category, description }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description } = req.body || {};
+  res.json(store.updateSandboxProject(req.user.id, req.params.projectId, { title, category, description }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxProject(req.user.id, req.params.projectId));
+}));
+
+// Sandbox tasks
+app.post('/api/researcher/sandbox/:projectId/tasks', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, priority, dueDate } = req.body || {};
+  res.json(store.addSandboxTask(req.user.id, req.params.projectId, { title, description, priority, dueDate }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId/tasks/:taskId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, priority, dueDate, status } = req.body || {};
+  res.json(store.updateSandboxTask(req.user.id, req.params.projectId, req.params.taskId, { title, description, priority, dueDate, status }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/tasks/:taskId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxTask(req.user.id, req.params.projectId, req.params.taskId));
+}));
+
+// Sandbox notes
+app.post('/api/researcher/sandbox/:projectId/notes', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, content } = req.body || {};
+  res.json(store.addSandboxNote(req.user.id, req.params.projectId, { title, content }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId/notes/:noteId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, content } = req.body || {};
+  res.json(store.updateSandboxNote(req.user.id, req.params.projectId, req.params.noteId, { title, content }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/notes/:noteId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxNote(req.user.id, req.params.projectId, req.params.noteId));
+}));
+
+// Sandbox documents
+app.post('/api/researcher/sandbox/:projectId/documents', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, type, url, size } = req.body || {};
+  res.json(store.addSandboxDocument(req.user.id, req.params.projectId, { name, type, url, size }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/documents/:docId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxDocument(req.user.id, req.params.projectId, req.params.docId));
+}));
+
+// Sandbox Google Drive sync
+app.post('/api/researcher/sandbox/:projectId/sync-drive', requireAuth, researcherOnly, wrap((req, res) => {
+  const project = store.getSandboxProject(req.user.id, req.params.projectId);
+  // Return project data for client to sync with Drive
+  res.json({ project, needsSync: true });
+}));
+
+app.put('/api/researcher/sandbox/:projectId/drive-folder', requireAuth, researcherOnly, wrap((req, res) => {
+  const { folderId } = req.body || {};
+  res.json(store.setSandboxDriveFolder(req.user.id, req.params.projectId, folderId));
+}));
+
 // Project idea board (brainstorm + vote; lead chooses).
 app.post('/api/researcher/projects/:id/ideas', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.addIdea({ projectId: req.params.id, userId: req.user.id, text: (req.body || {}).text }));
@@ -888,8 +1003,12 @@ app.post('/api/researcher/onboarding/step', requireAuth, researcherOnly, wrap((r
 // Chapter leader: roster + stats, and onboarding new members.
 app.get('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
   const view = store.chapterView(req.user.id);
-  if (!view) return res.status(404).json({ error: 'You do not lead a chapter' });
-  res.json(view);
+  res.json(view || { hasChapter: false, isLeader: false });
+}));
+
+app.post('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, location, handbookUrl } = req.body || {};
+  res.json(store.createChapter({ leaderId: req.user.id, name, location, handbookUrl }));
 }));
 
 app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((req, res) => {
@@ -900,6 +1019,16 @@ app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((r
 app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, body } = req.body || {};
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
+}));
+
+app.post('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, type } = req.body || {};
+  res.json(store.addChapterProgress({ leaderId: req.user.id, title, description, type }));
+}));
+
+app.get('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  const progress = store.getChapterProgress(req.user.id);
+  res.json(progress);
 }));
 
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive
