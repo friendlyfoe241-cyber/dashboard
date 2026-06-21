@@ -1156,9 +1156,30 @@ html[data-theme='dark'] .danger-zone { background: #2a1416; border-color: #7f1d1
 .dot-paper { background: #f59e0b; }
 .dot-event { background: #8b5cf6; }
 .dot-pathway { background: var(--success); }
+.dot-mentor { background: #14b8a6; }
 .cal-dots em { font-style: normal; font-size: 0.6rem; color: var(--body-alt); }
 .cal-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
 .cal-item-icon { font-size: 1.05rem; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid var(--border); }
+.cal-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--body-alt); }
+
+/* ---------- Journal pipeline stepper ---------- */
+.pipeline { list-style: none; display: flex; gap: 0; margin: 0.2rem 0 0; padding: 0; }
+.pipeline-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; position: relative; text-align: center; min-width: 0; }
+/* connector line between dots */
+.pipeline-step::before {
+  content: ''; position: absolute; top: 9px; left: -50%; width: 100%; height: 2px; background: var(--border); z-index: 0;
+}
+.pipeline-step:first-child::before { display: none; }
+.pipeline-step.done::before, .pipeline-step.current::before { background: var(--brand-dark); }
+.pipeline-dot {
+  position: relative; z-index: 1; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 0.62rem; font-weight: 700; background: var(--surface); color: var(--body-alt); border: 2px solid var(--border);
+}
+.pipeline-step.done .pipeline-dot { background: var(--brand-dark); color: #fff; border-color: var(--brand-dark); }
+.pipeline-step.current .pipeline-dot { background: #fff; color: var(--brand-deep); border-color: var(--brand-dark); box-shadow: 0 0 0 3px rgba(120, 180, 251, 0.25); }
+.pipeline-label { font-size: 0.62rem; color: var(--body-alt); line-height: 1.15; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pipeline-step.current .pipeline-label { color: var(--heading); font-weight: 600; }
 
 /* ============================================================
    Dark mode — token swap + surface overrides
@@ -1212,6 +1233,8 @@ html[data-theme='dark'] .paper-card h3, html[data-theme='dark'] .section-title {
 html[data-theme='dark'] .section-badge { background: #16202e; color: var(--slate); border-color: var(--border); }
 html[data-theme='dark'] .page-title { color: var(--ink); }
 html[data-theme='dark'] .cal-item { background: #16202e; }
+html[data-theme='dark'] .pipeline-dot { background: #16202e; }
+html[data-theme='dark'] .pipeline-step.current .pipeline-dot { background: #0e1622; }
 html[data-theme='dark'] .seg-btn.on { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); }
 
 /* Dark mode: remaining chrome (menus, modals, palette, chips, empty states). */
