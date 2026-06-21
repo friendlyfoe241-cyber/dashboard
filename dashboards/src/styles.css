@@ -1423,3 +1423,22 @@ html[data-theme='dark'] .fm-row:hover { background: rgba(37, 137, 237, 0.14); }
   .dm-layout { grid-template-columns: 1fr; }
   .dm-list { max-height: 40vh; }
 }
+
+/* --- Expertise mentors (ROLE_WORKFLOWS §7) --------------------------------- */
+/* Calendly-style slot picker in the booking modal. */
+.slot-pick {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease;
+}
+.slot-pick:hover { border-color: var(--brand); }
+.slot-pick.sel { border-color: var(--brand); background: rgba(37, 137, 237, 0.08); }
+.slot-pick input { accent-color: var(--brand); }
+/* Numbered "how it works" guide on the mentor dashboard. */
+.role-guide { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--body-alt); }
+.role-guide li { line-height: 1.45; }
+.role-guide strong { color: var(--heading); }
+/* Google Calendar stub button sits inside the dark hero. */
+.cal-stub-btn { margin-top: 0.4rem; background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
+.cal-stub-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); }
+html[data-theme='dark'] .slot-pick.sel { background: rgba(37, 137, 237, 0.16); }

@@ -902,6 +902,37 @@ app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, w
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
 }));
 
+// --- Expertise mentors (ROLE_WORKFLOWS §7) ---------------------------------
+// Directory + booking (any researcher) and mentor self-service (mentor tag).
+app.get('/api/mentors', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listMentors({ specialty: req.query.specialty }))));
+app.get('/api/mentors/specialties', requireAuth, researcherOnly, wrap((_req, res) => res.json(store.mentorSpecialties())));
+app.get('/api/mentors/:id', requireAuth, researcherOnly, wrap((req, res) => res.json(store.getMentor(req.params.id))));
+app.post('/api/mentors/:id/book', requireAuth, researcherOnly, wrap((req, res) => {
+  const { slot, note } = req.body || {};
+  res.json(store.bookMentor({ researcherId: req.user.id, mentorId: req.params.id, slot, note }));
+}));
+app.get('/api/me/mentor-bookings', requireAuth, researcherOnly, wrap((req, res) => res.json(store.myMentorBookings(req.user.id))));
+
+// Mentor's own dashboard: profile, availability, bookings.
+app.get('/api/mentor/dashboard', requireAuth, researcherOnly, wrap((req, res) => res.json(store.mentorDashboard(req.user.id))));
+app.put('/api/mentor/profile', requireAuth, researcherOnly, wrap((req, res) => {
+  const { specialties, mentorBio } = req.body || {};
+  res.json(store.setMentorProfile({ userId: req.user.id, specialties, mentorBio }));
+}));
+app.post('/api/mentor/availability', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.addMentorSlot({ userId: req.user.id, slot: (req.body || {}).slot }));
+}));
+app.delete('/api/mentor/availability/:slotId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.removeMentorSlot({ userId: req.user.id, slotId: req.params.slotId }));
+}));
+app.post('/api/mentor/calendar-connect', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.setMentorCalendarConnected({ userId: req.user.id, connected: (req.body || {}).connected }));
+}));
+// Either party cancels a booking.
+app.post('/api/mentor-bookings/:id/cancel', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.cancelMentorBooking({ userId: req.user.id, bookingId: req.params.id }));
+}));
+
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive
 // on the memory provider — Director/Admin only, never anonymous.
 app.post('/api/dev/reset', requireAuth, requireDirector, async (_req, res) => {

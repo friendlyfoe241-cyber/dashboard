@@ -11,6 +11,7 @@ const KIND_META = {
   workshop: { icon: '🎓', tone: 'blue', label: 'Workshop' },
   meetup: { icon: '🤝', tone: 'blue', label: 'Meetup' },
   pathway: { icon: '🧭', tone: 'gray', label: 'Pathway' },
+  mentor: { icon: '🧑‍🏫', tone: 'gold', label: 'Mentor call' },
 };
 const iso = (d) => d.toISOString().slice(0, 10);
 

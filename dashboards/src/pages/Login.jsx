@@ -14,6 +14,7 @@ const DEMO_ACCOUNTS = [
   { label: 'Lead researcher', email: 'sam@example.com' },
   { label: 'Associate researcher', email: 'jordan@example.com' },
   { label: 'Independent researcher', email: 'testindependent@synthica.org' },
+  { label: 'Expertise mentor', email: 'testmentor@synthica.org' },
 ];
 
 // What's inside the portal — shown on the login's left panel so first-time

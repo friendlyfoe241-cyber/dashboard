@@ -22,6 +22,8 @@ import Competitions from './Competitions.jsx';
 import News from './News.jsx';
 import Calendar from './Calendar.jsx';
 import Drive from './Drive.jsx';
+import Mentors from './Mentors.jsx';
+import MentorHome from './dashboards/MentorHome.jsx';
 import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
@@ -54,6 +56,9 @@ export default function ResearcherApp() {
   // Newly-registered members can't use the app until an auditor assigns a role.
   if (user && user.approved === false) return <PendingApproval />;
 
+  // Mentor dashboard link only surfaces for accounts holding the mentor tag.
+  const isMentor = (user?.tags || []).includes('expertise_mentor');
+
   // Grouped, icon-led nav — fewer destinations, related pages folded into hubs
   // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
   const nav = [
@@ -62,11 +67,14 @@ export default function ResearcherApp() {
     { to: '/researcher/community', label: 'Community', icon: '📣' },
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
     { to: '/researcher/people', label: 'People', icon: '👥' },
+    { to: '/researcher/mentors', label: 'Mentors', icon: '🧑‍🏫' },
     { section: 'Research' },
     { to: '/researcher/projects', label: 'Projects', icon: '📂' },
     { to: '/researcher/groups', label: 'Groups', icon: '🔬' },
     { to: '/researcher/calendar', label: 'Calendar', icon: '📅' },
     { to: '/researcher/drive', label: 'Drive', icon: '🗂️' },
+    // Mentors get a dedicated workspace to manage availability + bookings.
+    ...(isMentor ? [{ section: 'Mentoring' }, { to: '/researcher/mentor', label: 'Mentor dashboard', icon: '🎓' }] : []),
     { section: 'Explore' },
     { to: '/researcher/explore', label: 'Explore', icon: '🚀' },
     { to: '/researcher/journal', label: 'Journal', icon: '📖' },
@@ -86,6 +94,9 @@ export default function ResearcherApp() {
         <Route path="calendar" element={<Calendar />} />
         <Route path="drive" element={<Drive />} />
         <Route path="people" element={<People />} />
+        {/* Expertise mentors — directory + booking (everyone), mentor dashboard (mentors). */}
+        <Route path="mentors" element={<Mentors />} />
+        <Route path="mentor" element={<MentorHome />} />
         <Route path="project/:id" element={<ProjectDetail />} />
         <Route path="journal" element={<MyJournal />} />
         <Route path="explore" element={<Explore />} />
