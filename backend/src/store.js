@@ -1824,12 +1824,13 @@ export function reviewProgramApplication({ id, status, reviewerId }) {
 
 // Certificate type → the researcher tag that earns it (see RESEARCHER_TAGS in
 // domain.js). Mirrors the official Synthica generator repos
-// (AssociateResearcherGen / IndependentResearcherGen / LeadResearchGen):
-// same templates, same eligibility.
+// (AssociateResearcherGen / IndependentResearcherGen / LeadResearchGen /
+// ChapterLeaderCertGen): same templates, same eligibility.
 const CERT_TYPES = {
   associate: 'associate_researcher',
   independent: 'independent_researcher',
   lead: 'lead_researcher',
+  chapter: 'chapter_leader',
 };
 
 const certCode = () => {
