@@ -1905,17 +1905,58 @@ export function digestData() {
   };
 }
 
+// Advanced roles a member can apply for (Associate Researcher is granted on
+// onboarding approval — it's never an application, ROLE_WORKFLOWS §3.2 / §4).
+const APPLICABLE_ROLES = new Set(['Lead Researcher', 'Independent Researcher', 'Chapter Leader']);
+
 export function addApplication(app) {
   // You can't apply to a listing you lead.
   if (app.listingId) {
     const listing = db.listings.find((l) => l.id === app.listingId);
     if (listing && listing.leadId === app.userId) throw httpError(400, "You can't apply to your own listing");
   }
+  // Role-upgrade applications (no listing): validate the requested role and the
+  // required essay so the Moderator queue never receives a half-filled form.
+  if (!app.listingId && app.role) {
+    if (app.role === 'Associate Researcher')
+      throw httpError(400, 'Associate Researcher is granted automatically — no application needed.');
+    if (!APPLICABLE_ROLES.has(app.role)) throw httpError(400, 'Unknown role');
+    const u = getResearcherById(app.userId);
+    if (u && (u.tags || []).includes(ROLE_TO_TAG[app.role]))
+      throw httpError(400, `You already hold the ${app.role} role.`);
+    if (db.applications.some((a) => a.userId === app.userId && a.role === app.role && a.status === 'pending'))
+      throw httpError(400, `You already have a pending ${app.role} application.`);
+    if (!String(app.message || '').trim())
+      throw httpError(400, 'Please answer the application questions before submitting.');
+  }
   const record = { id: `app_${db.applications.length + 1}`, status: 'pending', at: now(), ...app };
   db.applications.push(record);
   notifyEvent({ title: '📝 New application', body: `${record.userName} applied${record.role ? ` for ${record.role}` : ''}.` });
   schedulePersist();
   return record;
+}
+
+// A rejected sign-up revises their profile and asks for another review: flip
+// their onboarding row back to pending and clear the rejection flag so the
+// pending screen shows "under review" again (ROLE_WORKFLOWS §3.1).
+export function resubmitOnboarding(userId) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'Researcher not found');
+  if (u.approved) throw httpError(400, 'Your membership is already active.');
+  const a = db.applications
+    .filter((x) => x.kind === 'onboarding' && x.userId === userId)
+    .sort((x, y) => new Date(y.at) - new Date(x.at))[0];
+  if (a) {
+    a.status = 'pending';
+    a.reviewedBy = null;
+    a.reviewedAt = null;
+    a.resubmittedAt = now();
+  }
+  u.onboardingRejected = false;
+  notifyEvent({ title: '🔁 Membership resubmitted', body: `${u.name} updated their profile and asked for another review.` });
+  schedulePersist();
+  const { password, twoFactorSecret, ...safe } = u;
+  return safe;
 }
 
 // --- researcher project tasks (Track 4) ------------------------------------
