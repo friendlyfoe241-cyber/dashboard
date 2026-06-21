@@ -31,6 +31,7 @@ function buildSeed() {
     projects: clone(seed.projects),
     listings: clone(seed.listings),
     applications: clone(seed.applications),
+    proposals: clone(seed.proposals || []),
     chapters: clone(seed.chapters),
     news: clone(seed.news),
     audit: clone(seed.audit),
@@ -1675,7 +1676,112 @@ export const allApplications = () =>
       legacyProject: u.legacyProject || null,
       recommendation: recommendRole(u),
     };
-  });
+  })
+  // Independent project proposals join the same queue so the Moderator console
+  // can review them alongside membership/role applications.
+  .concat(listProposals());
+
+// --- independent research proposals (Track 4) ------------------------------
+// Independent Researchers submit a research proposal (title, category,
+// description, methodology). It sits in a pending queue a Moderator reviews:
+// on approve a real project is created and handed to the member; on reject the
+// member gets feedback and can revise & resubmit. Modeled like applications
+// (id/userId/userName/status/at) so the Moderator console can surface them.
+
+const PROPOSAL_TAG = 'independent_researcher';
+
+// Shape a proposal as an application-style row (kind: 'proposal') so existing
+// admin/moderator queues can render + review it with the same controls.
+function proposalRow(p) {
+  return { ...p, kind: 'proposal' };
+}
+
+const proposals = () => db.proposals || (db.proposals = []);
+export const listProposals = () => proposals().map(proposalRow);
+export const listProposalsForUser = (userId) =>
+  proposals().filter((p) => p.userId === userId).map(proposalRow);
+export const getProposal = (id) => proposals().find((p) => p.id === id) || null;
+
+// Member submits a research proposal. Independent Researchers only — others
+// create projects directly (leads) or join teams (associates).
+export function addProposal({ userId, title, category, description, methodology }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'Researcher not found');
+  if (!Array.isArray(u.tags) || !u.tags.includes(PROPOSAL_TAG))
+    throw httpError(403, 'Only Independent Researchers can submit project proposals');
+  if (!title?.trim()) throw httpError(400, 'A title is required');
+  const record = {
+    id: uid('prop'),
+    userId,
+    userName: u.name,
+    title: title.trim().slice(0, 140),
+    category: category || '',
+    description: (description || '').trim().slice(0, 2000),
+    methodology: (methodology || '').trim().slice(0, 2000),
+    status: 'pending',
+    feedback: '',
+    projectId: null,
+    at: now(),
+    reviewedBy: null,
+    reviewedAt: null,
+  };
+  proposals().push(record);
+  recordAudit({ id: userId, name: u.name }, 'submit_proposal', record.title);
+  notifyEvent({ title: 'New research proposal', body: `${u.name} proposed "${record.title}".` });
+  schedulePersist();
+  return proposalRow(record);
+}
+
+// Member revises a rejected proposal and resubmits it (back to pending).
+export function reviseProposal({ id, userId, title, category, description, methodology }) {
+  const p = getProposal(id);
+  if (!p) throw httpError(404, 'Proposal not found');
+  if (p.userId !== userId) throw httpError(403, 'Not your proposal');
+  if (p.status === 'approved') throw httpError(400, 'An approved proposal can’t be edited');
+  if (typeof title === 'string' && title.trim()) p.title = title.trim().slice(0, 140);
+  if (typeof category === 'string' && category) p.category = category;
+  if (typeof description === 'string') p.description = description.trim().slice(0, 2000);
+  if (typeof methodology === 'string') p.methodology = methodology.trim().slice(0, 2000);
+  p.status = 'pending';
+  p.reviewedBy = null;
+  p.reviewedAt = null;
+  notifyEvent({ title: 'Proposal resubmitted', body: `${p.userName} revised "${p.title}".` });
+  schedulePersist();
+  return proposalRow(p);
+}
+
+// Moderator reviews a proposal. On approve a real project is created (the member
+// is the lead/owner) and they can begin work; on reject they get feedback to
+// revise & resubmit. Feedback is optional but surfaced to the member either way.
+export function reviewProposal({ id, status, reviewerId, feedback }) {
+  const p = getProposal(id);
+  if (!p) throw httpError(404, 'Proposal not found');
+  if (!['approved', 'rejected'].includes(status)) throw httpError(400, 'Invalid status');
+  if (p.status === 'approved') throw httpError(400, 'This proposal was already approved');
+  p.status = status;
+  p.feedback = (feedback || '').trim();
+  p.reviewedBy = reviewerId || null;
+  p.reviewedAt = now();
+  recordAudit({ id: reviewerId }, 'review_proposal', `${p.userName}: "${p.title}" -> ${status}`);
+
+  if (status === 'approved') {
+    // Create the project and hand it to the member so they can start working.
+    const project = {
+      id: uid('proj'), title: p.title, category: p.category || '',
+      description: p.description || '', methodology: p.methodology || '',
+      leadId: p.userId, members: [p.userId], origin: 'proposal', proposalId: p.id,
+      announcements: [], tasks: [], links: [], ideas: [], roles: [], invites: [],
+    };
+    db.projects.push(project);
+    p.projectId = project.id;
+    recordActivity(p.userId, 'project_started', `started the project ${project.title}`, `/researcher/project/${project.id}`);
+    pushNotif(p.userId, { type: 'project', title: 'Proposal approved — your project is live', body: project.title, link: `/researcher/project/${project.id}` });
+  } else {
+    pushNotif(p.userId, { type: 'application', title: 'Your project proposal needs revisions', body: p.feedback || p.title, link: '/researcher/independent' });
+  }
+  schedulePersist();
+  return proposalRow(p);
+}
 
 const ROLE_TO_TAG = {
   'Lead Researcher': 'lead_researcher',
@@ -1702,7 +1808,11 @@ function restoreLegacyProject(u, actorId) {
 // Auditor/Director reviews an onboarding or role application. On approval they
 // may assign a researcher tag directly (assignTag), otherwise the application's
 // requested role maps to a tag.
-export function setApplicationStatus({ id, status, reviewerId, assignTag }) {
+export function setApplicationStatus({ id, status, reviewerId, assignTag, feedback }) {
+  // Independent project proposals share the Moderator queue but follow their own
+  // approve→create-project path, so delegate when the id is a proposal. Proposals
+  // carry no role tag, so only `feedback` is forwarded (never `assignTag`).
+  if (getProposal(id)) return reviewProposal({ id, status, reviewerId, feedback });
   const a = db.applications.find((x) => x.id === id);
   if (!a) throw httpError(404, 'Application not found');
   if (!['pending', 'approved', 'rejected'].includes(status)) throw httpError(400, 'Invalid status');

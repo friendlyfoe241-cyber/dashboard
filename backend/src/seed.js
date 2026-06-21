@@ -596,6 +596,7 @@ export const researchers = [
 const leadId = researchers[0].id;
 const assocId = researchers[1].id;
 const taylorId = researchers[2].id;
+const robinId = researchers[3].id; // Robin Diaz — demo Independent Researcher
 const caseyId = researchers[4].id;
 const testallId = editors.find((e) => e.username === 'testall')?.id;
 
@@ -705,7 +706,30 @@ export const projects = [
     ideas: [],
     roles: [],
   },
+  // Robin's solo project — created when their Independent proposal was approved.
+  {
+    id: id('proj'),
+    title: 'Backyard Pollinator Diversity Census',
+    category: 'Biology',
+    description: 'Track native bee and butterfly diversity across urban gardens over a season.',
+    methodology: 'Weekly 15-minute pollinator counts at 6 garden sites; photo-log species; analyze diversity vs. plant cover.',
+    leadId: robinId,
+    members: [robinId],
+    origin: 'proposal',
+    announcements: [],
+    tasks: [
+      task('Pick 6 garden survey sites', 'task', [robinId], 'done', { createdBy: robinId }),
+      task('Run week 1 pollinator counts', 'task', [robinId], 'in_progress', { createdBy: robinId, dueAt: '2026-06-30' }),
+    ],
+    links: [],
+    ideas: [],
+    roles: [],
+  },
 ];
+
+// The approved-proposal project above (Robin's) — keep its id to link from the
+// seeded proposal record below.
+const robinProjectId = projects[projects.length - 1].id;
 
 // Demo: seed a couple personal "Pathway" to-dos + a follow edge.
 researchers[1].pathway = [
@@ -714,6 +738,52 @@ researchers[1].pathway = [
 ];
 researchers[1].following = [researchers[0].id]; // Jordan follows Sam
 researchers[1].interests = ['air quality', 'sensors'];
+
+// Demo: give Robin (Independent Researcher) a started Pathway so the home page
+// shows progress, plus interests for the feed.
+researchers[3].pathway = [
+  { id: id('pw'), title: 'Pick a research question', deliverable: 'A one-sentence question + why it matters', dueAt: null, done: true, track: 'own' },
+  { id: id('pw'), title: 'Write a short literature scan', deliverable: '5–8 sources with one-line takeaways', dueAt: null, done: true, track: 'own' },
+  { id: id('pw'), title: 'Find a mentor or advisor', deliverable: 'One person who agreed to advise', dueAt: null, done: false, track: 'own' },
+  { id: id('pw'), title: 'Draft a project proposal', deliverable: '1-page outline: question, method, timeline', dueAt: null, done: false, track: 'own' },
+];
+researchers[3].interests = ['ecology', 'pollinators', 'citizen science'];
+
+// Independent project proposals (Track 4). Modeled like applications so the
+// Moderator console can review them. Robin has one approved (its project lives
+// in `projects` above) and one still pending.
+export const proposals = [
+  {
+    id: id('prop'),
+    userId: robinId,
+    userName: 'Robin Diaz',
+    title: 'Backyard Pollinator Diversity Census',
+    category: 'Biology',
+    description: 'Track native bee and butterfly diversity across urban gardens over a season.',
+    methodology: 'Weekly 15-minute pollinator counts at 6 garden sites; photo-log species; analyze diversity vs. plant cover.',
+    status: 'approved',
+    feedback: 'Great scope for a solo project — approved. Log your sites in the project links.',
+    projectId: robinProjectId,
+    at: new Date(Date.now() - 9 * 864e5).toISOString(),
+    reviewedBy: null,
+    reviewedAt: new Date(Date.now() - 7 * 864e5).toISOString(),
+  },
+  {
+    id: id('prop'),
+    userId: robinId,
+    userName: 'Robin Diaz',
+    title: 'Soil Microplastics in Community Gardens',
+    category: 'Chemistry',
+    description: 'Survey microplastic concentration in topsoil across community garden plots.',
+    methodology: 'Collect topsoil cores, density-separate, count microplastics under a microscope; compare by plot age.',
+    status: 'pending',
+    feedback: '',
+    projectId: null,
+    at: new Date(Date.now() - 1 * 864e5).toISOString(),
+    reviewedBy: null,
+    reviewedAt: null,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Chapters + onboarding (Track 4)

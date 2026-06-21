@@ -92,7 +92,7 @@ export const api = {
   // admin (director / auditor)
   adminAnalytics: () => request('/admin/analytics'),
   adminApplications: () => request('/admin/applications'),
-  reviewApplication: (id, status, assignTag) => request(`/admin/applications/${id}`, { method: 'POST', body: { status, assignTag } }),
+  reviewApplication: (id, status, assignTag, feedback) => request(`/admin/applications/${id}`, { method: 'POST', body: { status, assignTag, feedback } }),
   adminSetTags: (id, body) => request(`/admin/users/${id}/tags`, { method: 'POST', body }),
   adminUsers: (q) => request(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   adminSetRole: (id, body) => request(`/admin/users/${id}/role`, { method: 'POST', body }),
@@ -231,6 +231,12 @@ export const api = {
   seedPathway: (track) => request('/researcher/pathway/seed', { method: 'POST', body: { track } }),
   togglePathway: (id, done) => request(`/researcher/pathway/${id}/toggle`, { method: 'POST', body: { done } }),
   deletePathway: (id) => request(`/researcher/pathway/${id}`, { method: 'DELETE' }),
+  // independent research proposals (submit → Moderator approval → project)
+  myProposals: () => request('/researcher/proposals'),
+  submitProposal: (body) => request('/researcher/proposals', { method: 'POST', body }),
+  reviseProposal: (id, body) => request(`/researcher/proposals/${id}/revise`, { method: 'POST', body }),
+  adminProposals: () => request('/admin/proposals'),
+  reviewProposal: (id, status, feedback) => request(`/admin/proposals/${id}`, { method: 'POST', body: { status, feedback } }),
   people: () => request('/people'),
   follow: (id) => request(`/people/${id}/follow`, { method: 'POST' }),
   unfollow: (id) => request(`/people/${id}/unfollow`, { method: 'POST' }),
