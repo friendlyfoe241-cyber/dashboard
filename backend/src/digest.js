@@ -16,16 +16,16 @@ const esc = (s) => String(s == null ? '' : s).replace(/[<>&]/g, (c) => ({ '<': '
 export function buildDigestText(name, { activity = [], listings = [], programs = [], events = [] }) {
   const parts = [`Hi ${name || 'researcher'},\n\nHere's your ${BRAND} week:`];
   if (activity.length) {
-    parts.push('👥 From people you follow:\n' + activity.map((a) => `  • ${a.actorName} ${a.text}`).join('\n'));
+    parts.push('From people you follow:\n' + activity.map((a) => `  • ${a.actorName} ${a.text}`).join('\n'));
   }
   if (programs.length) {
-    parts.push('🎓 Programs open for applications:\n' + programs.map((p) => `  • ${p.title}${p.cohortLabel ? ` (${p.cohortLabel})` : ''}${p.applyDeadline ? ` — apply by ${day(p.applyDeadline)}` : ''}`).join('\n'));
+    parts.push('Programs open for applications:\n' + programs.map((p) => `  • ${p.title}${p.cohortLabel ? ` (${p.cohortLabel})` : ''}${p.applyDeadline ? ` — apply by ${day(p.applyDeadline)}` : ''}`).join('\n'));
   }
   if (listings.length) {
-    parts.push('🔬 Open project spots:\n' + listings.slice(0, 6).map((l) => `  • ${l.title} (${l.category}${l.spots ? `, ${l.spots} spots` : ''})${l.leadName ? ` — led by ${l.leadName}` : ''}`).join('\n'));
+    parts.push('Open project spots:\n' + listings.slice(0, 6).map((l) => `  • ${l.title} (${l.category}${l.spots ? `, ${l.spots} spots` : ''})${l.leadName ? ` — led by ${l.leadName}` : ''}`).join('\n'));
   }
   if (events.length) {
-    parts.push('📅 Deadlines in the next 7 days:\n' + events.map((e) => `  • ${day(e.dueAt)} — ${e.title}`).join('\n'));
+    parts.push('Deadlines in the next 7 days:\n' + events.map((e) => `  • ${day(e.dueAt)} — ${e.title}`).join('\n'));
   }
   if (parts.length === 1) parts.push('A quiet week — a good time to start something new.');
   parts.push(`Jump back in: ${FRONTEND_URL || 'https://app.synthica.org'}/researcher\n\n— The ${BRAND} Team`);
@@ -36,18 +36,18 @@ export function buildDigestText(name, { activity = [], listings = [], programs =
 function buildDigestHtml(name, { activity = [], listings = [], programs = [], events = [] }) {
   const blocks = [];
   if (activity.length) {
-    blocks.push(emailBox('👥 From people you follow', activity.map((a) => `<strong>${esc(a.actorName)}</strong> ${esc(a.text)}`).join('<br>')));
+    blocks.push(emailBox('From people you follow', activity.map((a) => `<strong>${esc(a.actorName)}</strong> ${esc(a.text)}`).join('<br>')));
   }
   if (programs.length) {
-    blocks.push(emailBox('🎓 Programs open', programs.map((p) => `${esc(p.title)}${p.cohortLabel ? ` (${esc(p.cohortLabel)})` : ''}${p.applyDeadline ? ` — apply by ${esc(day(p.applyDeadline))}` : ''}`).join('<br>')));
+    blocks.push(emailBox('Programs open', programs.map((p) => `${esc(p.title)}${p.cohortLabel ? ` (${esc(p.cohortLabel)})` : ''}${p.applyDeadline ? ` — apply by ${esc(day(p.applyDeadline))}` : ''}`).join('<br>')));
   }
   if (listings.length) {
-    blocks.push(emailBox('🔬 Open project spots', listings.slice(0, 6).map((l) => `${esc(l.title)} (${esc(l.category)}${l.spots ? `, ${l.spots} spots` : ''})`).join('<br>')));
+    blocks.push(emailBox('Open project spots', listings.slice(0, 6).map((l) => `${esc(l.title)} (${esc(l.category)}${l.spots ? `, ${l.spots} spots` : ''})`).join('<br>')));
   }
   if (events.length) {
-    blocks.push(emailBox('📅 Deadlines this week', events.map((e) => `${esc(day(e.dueAt))} — ${esc(e.title)}`).join('<br>')));
+    blocks.push(emailBox('Deadlines this week', events.map((e) => `${esc(day(e.dueAt))} — ${esc(e.title)}`).join('<br>')));
   }
-  if (!blocks.length) blocks.push('A quiet week — a good time to start something new. 🌱');
+  if (!blocks.length) blocks.push('A quiet week — a good time to start something new.');
   return emailLayout({
     heading: `Your ${BRAND} week`,
     intro: `Hi ${esc(String(name || 'there').split(/\s+/)[0])}, here's what's happening with your network and across the community.`,

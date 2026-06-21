@@ -4,6 +4,7 @@ import { Card, Badge, Button, Field } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { useAuth } from '../../auth.jsx';
 import NewsPoster from '../../components/NewsPoster.jsx';
+import Icon from '../../components/Icon.jsx';
 
 // Director-only control center: analytics, integrations (API keys/webhooks),
 // and application review (the "auditor" function).
@@ -42,8 +43,8 @@ function EmailStatusBanner() {
   useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
   if (!cfg || cfg.emailConfigured !== false) return null;
   return (
-    <div className="login-error" style={{ background: '#fffbeb', color: '#92400e', borderColor: '#fde68a', marginBottom: '1rem' }}>
-      ⚠️ Email delivery isn’t configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won’t actually send. Set it in your backend env to enable them.
+    <div className="login-error alert-warning" style={{ marginBottom: '1rem' }}>
+      <span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won't actually send. Set it in your backend env to enable them.</span>
     </div>
   );
 }
@@ -145,7 +146,7 @@ function People({ isDirector }) {
                   )}
                   <div className="row" style={{ marginTop: '0.3rem' }}>
                     {(u.tags || []).map((t) => (
-                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} ✕</button>
+                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} <Icon name="x" size={12} /></button>
                     ))}
                   </div>
                 </div>
@@ -165,23 +166,10 @@ function People({ isDirector }) {
           ))}
           {users.length > visibleCount && (
             <button
+              type="button"
+              className="btn btn-ghost btn-sm"
               onClick={() => setVisibleCount((c) => Math.min(c + 5, users.length))}
-              style={{
-                marginTop: '0.5rem',
-                display: 'block',
-                width: '100%',
-                padding: '0.5rem 1rem',
-                background: 'transparent',
-                border: '1.5px solid #2589ed',
-                borderRadius: '8px',
-                color: '#2589ed',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseOver={(e) => { e.target.style.background = '#f0f7ff'; }}
-              onMouseOut={(e) => { e.target.style.background = 'transparent'; }}
+              style={{ marginTop: '0.5rem', width: '100%' }}
             >
               Show more ({users.length - visibleCount} remaining)
             </button>
@@ -364,11 +352,11 @@ function AnalyticsCards() {
   useEffect(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
   if (!a) return null;
   const kpis = [
-    { icon: '👥', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
-    { icon: '📄', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
-    { icon: '🧪', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
-    { icon: '👁', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
-    { icon: '🪪', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
+    { icon: 'users', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
+    { icon: 'file-text', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
+    { icon: 'flask', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
+    { icon: 'eye', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
+    { icon: 'id-card', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
   ];
   return (
     <div style={{ marginBottom: '1.5rem' }}>
@@ -376,7 +364,7 @@ function AnalyticsCards() {
       <div className="kpi-grid">
         {kpis.map((k) => (
           <div key={k.label} className={`kpi ${k.hot ? 'kpi-hot' : ''}`}>
-            <span className="kpi-icon">{k.icon}</span>
+            <span className="kpi-icon"><Icon name={k.icon} size={22} /></span>
             <div className="kpi-value">{k.value}</div>
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-sub">{k.sub}</div>
@@ -516,7 +504,7 @@ function AdminPubRow({ p, onChanged, onRemove }) {
   const [busy, setBusy] = useState(false);
 
   const feature = () =>
-    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive ⭐'); onChanged(); }).catch((e) => toast.error(e.message));
+    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive'); onChanged(); }).catch((e) => toast.error(e.message));
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -529,12 +517,12 @@ function AdminPubRow({ p, onChanged, onRemove }) {
       <div className="card-row">
         <div style={{ minWidth: 0 }}>
           <strong>{p.title}</strong>{' '}
-          {p.featured && <Badge tone="gold">⭐ featured</Badge>}{' '}
+          {p.featured && <Badge tone="gold"><span className="icon-label"><Icon name="star" size={12} /> featured</span></Badge>}{' '}
           {p.verified === false && <Badge tone="gold">unverified</Badge>} <Badge tone="gray">{p.source || 'editorial'}</Badge>
           <div className="muted" style={{ fontSize: '0.8rem' }}>{(p.authors || []).map((a) => a.name).join(', ')} · {p.category} · {p.doi}</div>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
-          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? '★ Unfeature' : '☆ Feature'}</Button>
+          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? <span className="icon-label"><Icon name="star" size={14} /> Unfeature</span> : <span className="icon-label"><Icon name="star-outline" size={14} /> Feature</span>}</Button>
           <Button className="btn-sm" variant="ghost" onClick={() => setEditing((x) => !x)}>{editing ? 'Cancel' : 'Edit'}</Button>
           <Button variant="reject" className="btn-sm" onClick={() => onRemove(p.id)}>Delete</Button>
         </div>
@@ -622,7 +610,7 @@ function UploadForm({ onDone }) {
                 <option value="">link profile…</option>
                 {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove">✕</button>}
+              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove"><Icon name="x" size={14} /></button>}
             </div>
           ))}
         </div>
@@ -997,7 +985,7 @@ function BroadcastEmail() {
       <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
       <Card>
         {cfg && cfg.emailConfigured === false && (
-          <p className="muted" style={{ marginTop: 0, color: '#92400e' }}>⚠️ Email delivery isn’t configured — broadcasts will be logged only.</p>
+          <p className="muted alert-warning" style={{ marginTop: 0 }}><span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured — broadcasts will be logged only.</span></p>
         )}
         <form onSubmit={send}>
           <div className="grid grid-2">
@@ -1040,7 +1028,7 @@ function ReportsQueue() {
         Reports queue {reports.length > 0 && <Badge tone="gold">{reports.length} open</Badge>}
       </h2>
       {reports.length === 0 ? (
-        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. 🎉</p></Card>
+        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. <span className="icon-label"><Icon name="party" size={16} /></span></p></Card>
       ) : (
         <div className="stack">
           {reports.map((r) => (

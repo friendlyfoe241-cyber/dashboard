@@ -6,6 +6,7 @@ import { useToast } from '../../components/toast.jsx';
 import { safeHref } from '../../url.js';
 import { imageSrc } from '../../files.js';
 import { GroupArtFields } from './Groups.jsx';
+import Icon from '../../components/Icon.jsx';
 
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
@@ -38,7 +39,7 @@ export default function GroupDetail() {
           <h1 className="page-title" style={{ margin: 0 }}>{g.name}</h1>
         </div>
         <div className="row" style={{ gap: '0.4rem', flexShrink: 0 }}>
-          {g.isLeader && <Button variant="ghost" className="btn-sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Cancel' : '✏️ Customize'}</Button>}
+          {g.isLeader && <Button variant="ghost" className="btn-sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Cancel' : <span className="icon-label"><Icon name="pen" size={16} /> Customize</span>}</Button>}
           {g.isLeader
             ? <Badge tone="gold">you lead this</Badge>
             : g.isMember
@@ -92,7 +93,7 @@ export default function GroupDetail() {
                           <option value="">— open —</option>
                           {g.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
-                        <button className="btn btn-ghost btn-sm" onClick={() => run(api.removeGroupPosition(id, pos.id))}>✕</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => run(api.removeGroupPosition(id, pos.id))}><Icon name="x" size={14} /></button>
                       </div>
                     )}
                   </div>
@@ -123,7 +124,7 @@ export default function GroupDetail() {
               {g.links.map((l) => (
                 <div key={l.id} className="card-row">
                   {safeHref(l.url) ? <a href={safeHref(l.url)} target="_blank" rel="noreferrer">{l.label}</a> : <span>{l.label}</span>}
-                  {g.isLeader && <button className="btn btn-ghost btn-sm" onClick={() => run(api.removeGroupLink(id, l.id))}>✕</button>}
+                  {g.isLeader && <button className="btn btn-ghost btn-sm" onClick={() => run(api.removeGroupLink(id, l.id))}><Icon name="x" size={14} /></button>}
                 </div>
               ))}
             </div>

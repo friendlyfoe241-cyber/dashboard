@@ -5,6 +5,7 @@ import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import { imageSrc } from '../files.js';
 import UploadButton from '../components/UploadButton.jsx';
+import Icon from '../components/Icon.jsx';
 
 // Common social platforms for the repeatable "More social links" adder. The
 // dedicated fields above cover the researcher essentials (LinkedIn, GitHub, X,
@@ -124,7 +125,7 @@ export default function Profile() {
               </Field>
             </div>
             <Field label="One-line blurb (shown everywhere next to your name)">
-              <input value={form.blurb} onChange={set('blurb')} maxLength={140} placeholder="e.g. High-schooler studying coral reef genetics 🌊" />
+              <input value={form.blurb} onChange={set('blurb')} maxLength={140} placeholder="e.g. High-schooler studying coral reef genetics" />
             </Field>
 
             <div className="field-group-title">Affiliations &amp; contact</div>
@@ -211,7 +212,7 @@ export default function Profile() {
             {missing.length > 0 ? (
               <p className="muted" style={{ margin: '0.6rem 0 0' }}>Add: {missing.join(' · ')}</p>
             ) : (
-              <p className="muted" style={{ margin: '0.6rem 0 0' }}>🎉 Your profile is complete — nice.</p>
+              <p className="muted" style={{ margin: '0.6rem 0 0' }}><span className="icon-label"><Icon name="party" size={16} /> Your profile is complete — nice.</span></p>
             )}
           </Card>
 
@@ -228,7 +229,7 @@ export default function Profile() {
           </div>
           {form.blurb && <p style={{ marginTop: '0.5rem', color: 'var(--slate)' }}>{form.blurb}</p>}
           {previewAffiliations.length > 0 && <p className="muted" style={{ marginTop: '0.5rem' }}>{previewAffiliations.join(' · ')}</p>}
-          {form.researchGroup && <p className="muted" style={{ marginTop: '0.25rem' }}>🔬 {form.researchGroup}</p>}
+          {form.researchGroup && <p className="muted" style={{ marginTop: '0.25rem' }}><span className="icon-label"><Icon name="flask" size={14} /> {form.researchGroup}</span></p>}
           {form.interests.trim() && (
             <div className="row" style={{ marginTop: '0.5rem', gap: '0.3rem' }}>
               {form.interests.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 8).map((i) => <Badge key={i} tone="gray">{i}</Badge>)}
@@ -239,7 +240,7 @@ export default function Profile() {
             <a href={publicUrl} target="_blank" rel="noreferrer">View public profile →</a>{' '}
             {form.public ? <Badge tone="green">public</Badge> : <Badge tone="gray">hidden</Badge>}
           </p>
-          <Button type="button" variant="ghost" className="btn-sm" onClick={copyProfileLink}>🔗 Copy profile link</Button>
+          <Button type="button" variant="ghost" className="btn-sm" onClick={copyProfileLink}><span className="icon-label"><Icon name="link" size={16} /> Copy profile link</span></Button>
           </Card>
         </div>
       </div>

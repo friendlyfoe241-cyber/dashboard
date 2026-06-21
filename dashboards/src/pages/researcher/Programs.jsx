@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { Card, Badge, Button, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
+import Icon from '../../components/Icon.jsx';
 
 const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
@@ -42,7 +43,7 @@ export default function Programs({ embedded }) {
                     {p.cohortLabel && <Badge>{p.cohortLabel}</Badge>}
                     {p.category && <Badge tone="gray">{p.category}</Badge>}
                     <Badge tone={p.status === 'open' ? 'green' : 'gray'}>{p.status}</Badge>
-                    {p.myStatus === 'member' && <Badge tone="green">you're in 🎉</Badge>}
+                    {p.myStatus === 'member' && <Badge tone="green"><span className="icon-label"><Icon name="party" size={12} /> you're in</span></Badge>}
                     {p.myStatus === 'applied' && <Badge tone="gold">application pending</Badge>}
                   </div>
                 </div>
@@ -60,7 +61,7 @@ export default function Programs({ embedded }) {
                   <ul style={{ margin: '0.3rem 0 0', paddingLeft: '1.2rem' }}>
                     {p.milestones.map((m) => (
                       <li key={m.id} style={{ opacity: m.done ? 0.65 : 1 }}>
-                        {m.done ? '✅' : '⬜️'} {m.title}{m.dueAt && <span className="login-hint"> — {fmtDay(m.dueAt)}</span>}
+                        <span className="icon-label"><Icon name={m.done ? 'check-square' : 'square'} size={16} /> {m.title}</span>{m.dueAt && <span className="login-hint"> — {fmtDay(m.dueAt)}</span>}
                       </li>
                     ))}
                   </ul>

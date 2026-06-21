@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { Embed } from '../../components/embed.jsx';
+import Icon from '../../components/Icon.jsx';
 
 const isOverdue = (t) => t.dueAt && t.status !== 'done' && new Date(t.dueAt) < new Date(new Date().toDateString());
 
@@ -351,7 +352,7 @@ function TasksCard({ project, onChange }) {
                     <option value="">Assign…</option>
                     {team.map((m) => (
                       <option key={m.userId} value={m.userId}>
-                        {t.assignedTo.includes(m.userId) ? '✓ ' : ''}{m.name}
+                        {t.assignedTo.includes(m.userId) ? '(assigned) ' : ''}{m.name}
                       </option>
                     ))}
                   </select>
@@ -435,7 +436,7 @@ function InviteByEmail({ projectId, invites, onChange }) {
       </form>
       {invites.length > 0 && (
         <div className="muted" style={{ marginTop: '0.45rem', fontSize: '0.78rem' }}>
-          ✉️ Waiting on: {invites.map((i) => i.email).join(', ')} — they'll join automatically when they sign up.
+          <span className="icon-label"><Icon name="mail" size={14} /> Waiting on: {invites.map((i) => i.email).join(', ')} — they'll join automatically when they sign up.</span>
         </div>
       )}
     </div>

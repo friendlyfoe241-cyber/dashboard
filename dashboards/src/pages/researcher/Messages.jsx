@@ -6,6 +6,7 @@ import { useToast } from '../../components/toast.jsx';
 import SafetyMenu from '../../components/SafetyMenu.jsx';
 import { imageSrc } from '../../files.js';
 import { useRealtime } from '../../realtime.js';
+import Icon from '../../components/Icon.jsx';
 
 const ago = (iso) => {
   const s = Math.floor((Date.now() - new Date(iso)) / 1000);
@@ -102,7 +103,7 @@ function Thread({ userId, onSent }) {
         </span>
       </div>
       <div className="dm-messages">
-        {data.messages.length === 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '1rem' }}>No messages yet — say hello 👋</p>}
+        {data.messages.length === 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '1rem' }}>No messages yet — say hello <Icon name="message" size={16} /></p>}
         {data.messages.map((m) => (
           <div key={m.id} className={`dm-bubble ${m.mine ? 'mine' : ''}`}>
             <span>{m.text}</span>

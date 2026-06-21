@@ -1,5 +1,6 @@
 // Small set of brand-styled UI primitives shared across both dashboards.
 import { useEffect, useState } from 'react';
+import Icon from './Icon.jsx';
 
 export function Card({ children, className = '', ...rest }) {
   return (
@@ -81,6 +82,10 @@ export function Modal({ title, onClose, children, wide }) {
 
 // Profile picture with graceful fallback: broken/missing URLs show initials
 // on the brand gradient instead of a broken-image icon.
+export function IconLabel({ icon, children, size = 16, className = '' }) {
+  return <span className={`icon-label ${className}`.trim()}><Icon name={icon} size={size} />{children}</span>;
+}
+
 export function Pfp({ name, url, size }) {
   const [broken, setBroken] = useState(false);
   useEffect(() => setBroken(false), [url]);

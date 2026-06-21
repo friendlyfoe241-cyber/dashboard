@@ -52,7 +52,7 @@ export function notifyMove({ title, paperId, category, label, decision }) {
   const kind = decision === 'declined' ? 'declined' : decision === 'published' ? 'published' : 'move';
   const embed = {
     title:
-      kind === 'declined' ? '❌ Paper declined' : kind === 'published' ? '🎉 Paper ready to publish' : '📤 Paper moved up',
+      kind === 'declined' ? 'Paper declined' : kind === 'published' ? 'Paper ready to publish' : 'Paper moved up',
     color: COLOR[kind],
     fields: [
       { name: 'Paper', value: `${title} (#${String(paperId).replace('paper_', '')})` },
@@ -79,6 +79,6 @@ export function notifyEvent({ title, body }) {
 export function sendTest() {
   return postDiscord({
     username: 'Synthica',
-    content: "✅ Synthica webhook connected — you'll get editorial queue updates here.",
+    content: "Synthica webhook connected — you'll get editorial queue updates here.",
   });
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useRealtime } from '../realtime.js';
+import Icon from './Icon.jsx';
 
 // Notification bell with unread count + dropdown. Live over SSE (+ a 60s poll
 // as a fallback).
@@ -44,7 +45,7 @@ export default function Bell() {
   return (
     <div className="bell" ref={ref}>
       <button className="bell-btn" onClick={toggle} aria-label="Notifications">
-        🔔{unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
+        <Icon name="bell" size={20} />{unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {open && (
         <div className="bell-menu">

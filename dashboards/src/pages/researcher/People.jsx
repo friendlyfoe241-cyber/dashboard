@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Card, Badge, Button, Pfp, EmptyState } from '../../components/ui.jsx';
 import { imageSrc } from '../../files.js';
+import Icon from '../../components/Icon.jsx';
 
 // Directory + your network (people you follow / who follow you). Follow to get
 // their updates in your feed; message anyone directly.
@@ -77,7 +78,7 @@ function PersonCard({ p, onToggle }) {
       )}
       <div className="row" style={{ marginTop: '0.6rem' }}>
         <Link className="btn btn-ghost btn-sm" to={`/researcher/messages/${p.id}`}>Message</Link>
-        <Button className="btn-sm" variant={p.following ? 'ghost' : 'primary'} onClick={() => onToggle(p)}>{p.following ? 'Following ✓' : 'Follow'}</Button>
+        <Button className="btn-sm" variant={p.following ? 'ghost' : 'primary'} onClick={() => onToggle(p)}>{p.following ? <span className="icon-label"><Icon name="check" size={14} /> Following</span> : 'Follow'}</Button>
       </div>
     </Card>
   );

@@ -558,7 +558,7 @@ app.get('/api/journal/publications/:id/share', wrap((req, res) => {
 // --- Track 3: Editor dashboard ---------------------------------------------
 // All editor routes require auth and act as the logged-in editor.
 const editorOnly = (req, res, next) =>
-  req.user.kind === 'editor' ? next() : res.status(403).json({ error: 'Editors only' });
+  req.user.kind === 'editor' || req.user.allViewsDemo ? next() : res.status(403).json({ error: 'Editors only' });
 
 app.get('/api/editor/papers', requireAuth, editorOnly, wrap((req, res) => {
   res.json(store.papersForEditor(req.user.id));
@@ -657,9 +657,9 @@ app.post('/api/editor/settings/test', requireAuth, editorOnly, directorOnly, wra
 
 // --- Track 4: Researcher dashboard -----------------------------------------
 const researcherOnly = (req, res, next) => {
-  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
-  // New members can't act until an auditor assigns their role.
-  if (req.user.approved === false) return res.status(403).json({ error: 'Your account is awaiting role assignment by an auditor.' });
+  if (req.user.kind !== 'researcher' && !req.user.allViewsDemo) {
+    return res.status(403).json({ error: 'Researchers only' });
+  }
   next();
 };
 
@@ -876,6 +876,10 @@ app.post('/api/people/:id/unfollow', requireAuth, wrap((req, res) => res.json(st
 app.get('/api/feed', requireAuth, wrap((req, res) => res.json(store.feedFor(req.user.id))));
 
 // Onboarding (current researcher).
+app.post('/api/researcher/roles/associate', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.claimAssociateRole(req.user.id));
+}));
+
 app.get('/api/researcher/onboarding', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.myOnboarding(req.user.id));
 }));

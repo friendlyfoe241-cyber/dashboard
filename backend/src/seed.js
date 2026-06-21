@@ -176,6 +176,33 @@ export const editors = [
     twoFactorEnabled: false,
     following: [],
   },
+  // Demo account with every view-switcher workspace unlocked (dev only).
+  {
+    id: id('usr'),
+    name: 'Test All Views',
+    username: 'testall',
+    password: DEMO_PASSWORD,
+    kind: 'editor',
+    role: EDITOR_ROLES.DIRECTOR,
+    category: null,
+    email: 'testall@synthica.org',
+    discord: 'testall',
+    slug: 'testall',
+    institution: 'Synthica',
+    bio: 'Demo account for testing every dashboard view.',
+    avatarUrl: '',
+    interests: [],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+    allViewsDemo: true,
+    tags: [RESEARCHER_TAGS.LEAD_RESEARCHER, RESEARCHER_TAGS.CHAPTER_LEADER],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -371,7 +398,7 @@ export const researchers = [
     affiliations: ['Phillips Exeter Academy', 'Synthica Research Group'],
     institution: 'Phillips Exeter Academy',
     pronouns: 'she/her',
-    blurb: 'Lead researcher studying coral-reef genetics 🌊',
+    blurb: 'Lead researcher studying coral-reef genetics',
     bio: 'High-school researcher leading a team on reef resilience. I love turning messy field data into models that say something real about a warming ocean.',
     interests: ['marine biology', 'genomics', 'climate modeling'],
     researchGroup: 'Reef Genomics Group',
@@ -513,6 +540,7 @@ const leadId = researchers[0].id;
 const assocId = researchers[1].id;
 const taylorId = researchers[2].id;
 const caseyId = researchers[4].id;
+const testallId = editors.find((e) => e.username === 'testall')?.id;
 
 // task(title, type, assignedTo, status, opts)
 function task(title, type, assignedTo, status, opts = {}) {
@@ -605,6 +633,14 @@ export const chapters = [
       member(assocId, ['discord', 'profile']),
     ],
   },
+  ...(testallId ? [{
+    id: id('chap'),
+    name: 'Demo Test Chapter',
+    location: 'Global (demo)',
+    leaderId: testallId,
+    handbookUrl: 'https://example.com/synthica-chapter-handbook',
+    members: [member(testallId, ['discord', 'profile', 'handbook'])],
+  }] : []),
 ];
 
 // Open project listings for the Research Hub.
@@ -715,7 +751,7 @@ export const posts = [
   {
     id: id('post'),
     authorId: leadId,
-    text: 'Kicking off our reef-genomics project this summer! 🌊 If anyone has experience with R for ecology data, I’d love to collaborate — drop a comment.',
+    text: 'Kicking off our reef-genomics project this summer! If anyone has experience with R for ecology data, I’d love to collaborate — drop a comment.',
     linkUrl: '', imageUrl: '',
     likes: [assocId, caseyId],
     comments: [

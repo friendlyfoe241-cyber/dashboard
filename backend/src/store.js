@@ -184,6 +184,34 @@ function dedupeAccounts() {
   if (removed) console.log(`[store] dedupe: removed ${removed} duplicate-email account(s)`);
 }
 
+// Add seed demo/staff accounts that are missing from a loaded dataset (e.g. the
+// in-memory server was started before a new demo account was added, or a
+// persisted provider snapshot predates a seed update).
+function backfillSeedAccounts() {
+  const baseline = buildSeed();
+  const known = new Set(
+    [...db.editors, ...db.researchers]
+      .map((u) => (u.email || u.username || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  let added = 0;
+  for (const u of baseline.editors) {
+    const key = (u.email || u.username || '').trim().toLowerCase();
+    if (!key || known.has(key)) continue;
+    db.editors.push(clone(u));
+    known.add(key);
+    added += 1;
+  }
+  for (const u of baseline.researchers) {
+    const key = (u.email || u.username || '').trim().toLowerCase();
+    if (!key || known.has(key)) continue;
+    db.researchers.push(clone(u));
+    known.add(key);
+    added += 1;
+  }
+  if (added) console.log(`[store] backfill: added ${added} seed account(s)`);
+}
+
 // Load the active provider's data. Called once at server startup.
 export async function init() {
   const name = (process.env.DATA_PROVIDER || 'memory').toLowerCase();
@@ -200,6 +228,7 @@ export async function init() {
     db = buildSeed();
   }
   dedupeAccounts();
+  backfillSeedAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -212,6 +241,7 @@ export async function init() {
 export async function reset() {
   db = provider ? await loadFromProvider() : buildSeed();
   dedupeAccounts();
+  backfillSeedAccounts();
   bootstrapAdmin();
   assignPendingReviewers();
   schedulePersist();
@@ -338,9 +368,10 @@ export function findOrCreateGoogleUser({ email, name, googleId }) {
       username: lower.split('@')[0],
       password: '', // Google-only account
       kind: 'researcher',
-      // Same gate as password sign-ups: no role until an auditor assigns one.
       tags: [],
-      approved: false,
+      approved: true,
+      onboarded: false,
+      rolesIntroSeen: false,
       email,
       discord: '',
       resumeUrl: '',
@@ -350,18 +381,7 @@ export function findOrCreateGoogleUser({ email, name, googleId }) {
     };
     db.researchers.push(user);
     claimProjectInvites(user);
-    db.applications.push({
-      id: `app_${db.applications.length + 1}`,
-      kind: 'onboarding',
-      userId: user.id,
-      userName: user.name,
-      listingId: null,
-      role: null,
-      message: 'New member sign-up (Google) — assign a role',
-      status: 'pending',
-      at: now(),
-    });
-    notifyEvent({ title: '👋 New member', body: `${user.name} joined Synthica (Google).` });
+    notifyEvent({ title: 'New member', body: `${user.name} joined Synthica (Google).` });
   }
   if (user.emailVerified === undefined) user.emailVerified = true;
   schedulePersist();
@@ -462,13 +482,13 @@ const refCountFor = (userId) => db.researchers.filter((r) => r.referredBy === us
 
 // Achievement badges, computed from a member's activity.
 const BADGE_DEFS = [
-  { id: 'published', label: 'Published Researcher', icon: '📜', earned: (u) => pubCountFor(u.id) > 0 },
-  { id: 'lead', label: 'Project Lead', icon: '🧭', earned: (u) => db.projects.some((p) => p.leadId === u.id) },
-  { id: 'founder', label: 'Group Founder', icon: '🏛️', earned: (u) => (db.groups || []).some((g) => g.leaderId === u.id) },
-  { id: 'cohort', label: 'Cohort Member', icon: '🎓', earned: (u) => (db.programs || []).some((pr) => (pr.cohort || []).includes(u.id)) },
-  { id: 'chapter', label: 'Chapter Leader', icon: '🌍', earned: (u) => (db.chapters || []).some((c) => c.leaderId === u.id) },
-  { id: 'connector', label: 'Connector', icon: '🤝', earned: (u) => refCountFor(u.id) >= 3 },
-  { id: 'contributor', label: 'Community Contributor', icon: '💬', earned: (u) => postCountFor(u.id) >= 5 },
+  { id: 'published', label: 'Published Researcher', icon: 'scroll', earned: (u) => pubCountFor(u.id) > 0 },
+  { id: 'lead', label: 'Project Lead', icon: 'compass', earned: (u) => db.projects.some((p) => p.leadId === u.id) },
+  { id: 'founder', label: 'Group Founder', icon: 'building', earned: (u) => (db.groups || []).some((g) => g.leaderId === u.id) },
+  { id: 'cohort', label: 'Cohort Member', icon: 'graduation-cap', earned: (u) => (db.programs || []).some((pr) => (pr.cohort || []).includes(u.id)) },
+  { id: 'chapter', label: 'Chapter Leader', icon: 'globe', earned: (u) => (db.chapters || []).some((c) => c.leaderId === u.id) },
+  { id: 'connector', label: 'Connector', icon: 'handshake', earned: (u) => refCountFor(u.id) >= 3 },
+  { id: 'contributor', label: 'Community Contributor', icon: 'message', earned: (u) => postCountFor(u.id) >= 5 },
 ];
 
 export function badgesFor(userId) {
@@ -580,6 +600,7 @@ export function updateProfile(userId, patch) {
   if (typeof patch.public === 'boolean') u.public = patch.public;
   // Durable onboarding completion (so the wizard never re-shows on a new device).
   if (patch.onboarded === true) u.onboarded = true;
+  if (patch.rolesIntroSeen === true) u.rolesIntroSeen = true;
   if (typeof patch.experienceSummary === 'string') u.experienceSummary = patch.experienceSummary.slice(0, 800);
   if (patch.gpa !== undefined) u.gpa = String(patch.gpa).trim().slice(0, 12);
   if (patch.researchExperience !== undefined && patch.researchExperience !== null && patch.researchExperience !== '') {
@@ -602,6 +623,26 @@ export function updateProfile(userId, patch) {
       ? { title: String(lp.title).trim().slice(0, 140), category: CATEGORIES.includes(lp.category) ? lp.category : '', description: String(lp.description || '').slice(0, 600) }
       : null;
   }
+  schedulePersist();
+  const { password, twoFactorSecret, ...safe } = u;
+  return safe;
+}
+
+/** Instant self-serve Associate Researcher role (after onboarding). */
+export function claimAssociateRole(userId) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'Researcher not found');
+  if (!u.onboarded) throw httpError(403, 'Complete your profile setup first');
+  if (!Array.isArray(u.tags)) u.tags = [];
+  if (u.tags.includes('associate_researcher')) {
+    const { password, twoFactorSecret, ...safe } = u;
+    return safe;
+  }
+  u.tags.push('associate_researcher');
+  u.approved = true;
+  u.rolesIntroSeen = true;
+  recordRoleActivity(u.id, ['associate_researcher']);
+  u.newRoleCongrats = TAG_LABEL.associate_researcher;
   schedulePersist();
   const { password, twoFactorSecret, ...safe } = u;
   return safe;
@@ -1198,7 +1239,7 @@ export function addPastPaper(userId, input) {
   const pub = buildPublication({ ...input, authors }, { source: 'self', verified: false, addedBy: userId, authorUserId: userId });
   db.publications.push(pub);
   recordAudit(u, 'add_past_paper', pub.title);
-  notifyEvent({ title: '📄 Past paper submitted', body: `${u.name} added "${pub.title}" — needs verification.` });
+  notifyEvent({ title: 'Past paper submitted', body: `${u.name} added "${pub.title}" — needs verification.` });
   schedulePersist();
   return pub;
 }
@@ -1322,7 +1363,7 @@ export function submitToJournal({ userId, title, category, abstract, pdfUrl, coA
     history: [],
   };
   db.submissions.push(sub);
-  notifyEvent({ title: '📥 New journal submission', body: `${u.name}: ${sub.title} (${category})` });
+  notifyEvent({ title: 'New journal submission', body: `${u.name}: ${sub.title} (${category})` });
   schedulePersist();
   return decorate(sub);
 }
@@ -1346,9 +1387,9 @@ export function addRevision({ paperId, userId, url, note }) {
   sub.pdfUrl = safeRevision;
   sub.revisionRequested = false;
   log(sub, { type: 'revision', version });
-  if (sub.assignee) pushNotif(sub.assignee, { type: 'paper', title: '🔁 Revised paper submitted', body: `"${sub.title}" — v${version}`, link: '/editor' });
-  notifyReviewers(sub, '🔁 A paper you reviewed was revised', `"${sub.title}" — v${version}`);
-  notifyEvent({ title: '🔁 Revision submitted', body: `${sub.title} — v${version}` });
+  if (sub.assignee) pushNotif(sub.assignee, { type: 'paper', title: 'Revised paper submitted', body: `"${sub.title}" — v${version}`, link: '/editor' });
+  notifyReviewers(sub, 'A paper you reviewed was revised', `"${sub.title}" — v${version}`);
+  notifyEvent({ title: 'Revision submitted', body: `${sub.title} — v${version}` });
   schedulePersist();
   return decorate(sub);
 }
@@ -1362,8 +1403,8 @@ export function requestRevision({ paperId, editorId, note }) {
   sub.comments = sub.comments || [];
   sub.comments.push({ id: `cmt_${Date.now()}`, authorId: editorId, authorName: e?.name || 'Editor', role: e?.role || null, body: `Revision requested: ${note || 'please submit a revised version.'}`, at: now() });
   log(sub, { type: 'revision_requested', editorId });
-  pushNotif(sub.submittedBy, { type: 'revision', title: '✏️ Revision requested', body: `"${sub.title}" — ${note || 'please revise'}`, link: '/researcher/journal' });
-  notifyEvent({ title: '✏️ Revision requested', body: `${sub.title}` });
+  pushNotif(sub.submittedBy, { type: 'revision', title: 'Revision requested', body: `"${sub.title}" — ${note || 'please revise'}`, link: '/researcher/journal' });
+  notifyEvent({ title: 'Revision requested', body: `${sub.title}` });
   sendEmail({
     to: sub.authorEmail,
     subject: `Revision requested: ${sub.title}`,
@@ -1393,7 +1434,7 @@ function advance(sub, nextStage, note) {
     [STAGE.ASSOCIATE]: 'associate editor revisions',
     [STAGE.SENIOR_FINAL]: 'senior editor final review',
     [STAGE.CHIEF]: 'editor-in-chief review',
-    [STAGE.PUBLISHED]: 'publication 🎉',
+    [STAGE.PUBLISHED]: 'publication',
   };
   if (sub.submittedBy) {
     recordActivity(
@@ -1412,9 +1453,9 @@ function advance(sub, nextStage, note) {
   });
   if (nextStage === STAGE.PUBLISHED) {
     emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'published' });
-    notifyReviewers(sub, '🎉 A paper you reviewed was approved for publication', `"${sub.title}" · by ${sub.authorName}`);
+    notifyReviewers(sub, 'A paper you reviewed was approved for publication', `"${sub.title}" · by ${sub.authorName}`);
   } else {
-    notifyReviewers(sub, '📤 A paper you reviewed moved forward', `"${sub.title}" → ${note.label}`);
+    notifyReviewers(sub, 'A paper you reviewed moved forward', `"${sub.title}" → ${note.label}`);
   }
 }
 
@@ -1424,7 +1465,7 @@ function reject(sub, reachedLabel) {
   log(sub, { type: 'reject', notifyDirector: true, label: reachedLabel, decision: 'declined' });
   notifyMove({ title: sub.title, paperId: sub.id, category: sub.category, label: reachedLabel, decision: 'declined' });
   emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'declined' });
-  notifyReviewers(sub, '❌ A paper you reviewed was declined', `"${sub.title}"`);
+  notifyReviewers(sub, 'A paper you reviewed was declined', `"${sub.title}"`);
 }
 
 function httpError(status, message) {
@@ -1549,7 +1590,7 @@ function restoreLegacyProject(u, actorId) {
     leadId: u.id, members: [u.id], announcements: [], tasks: [], links: [], ideas: [], invites: [],
   });
   recordAudit({ id: actorId }, 'restore_project', `${lp.title} (for ${u.name})`);
-  pushNotif(u.id, { type: 'project', title: '📁 Your project was restored', body: lp.title, link: '/researcher/projects' });
+  pushNotif(u.id, { type: 'project', title: 'Your project was restored', body: lp.title, link: '/researcher/projects' });
   u.legacyProject = null;
 }
 
@@ -1586,8 +1627,8 @@ export function setApplicationStatus({ id, status, reviewerId, assignTag }) {
           const site = (process.env.FRONTEND_URL || 'https://app.synthica.org').replace(/\/$/, '');
           actionEmail({
             to: u.email,
-            subject: `You're approved — welcome as a ${TAG_LABEL[tag] || tag}! 🎉`,
-            heading: `You're in — welcome aboard! 🎉`,
+            subject: `You're approved — welcome as a ${TAG_LABEL[tag] || tag}!`,
+            heading: `You're in — welcome aboard!`,
             intro: `Hi ${String(u.name || 'there').split(/\s+/)[0]},`,
             blocks: [
               `Congrats! Your membership was approved and you've been assigned the role of <strong>${TAG_LABEL[tag] || tag}</strong>.`,
@@ -1726,7 +1767,7 @@ export function applyToProgram({ programId, userId, message }) {
     at: now(),
   };
   db.applications.push(record);
-  notifyEvent({ title: '🎓 Program application', body: `${record.userName} applied to ${p.title}${p.cohortLabel ? ` (${p.cohortLabel})` : ''}.` });
+  notifyEvent({ title: 'Program application', body: `${record.userName} applied to ${p.title}${p.cohortLabel ? ` (${p.cohortLabel})` : ''}.` });
   schedulePersist();
   return record;
 }
@@ -1794,7 +1835,7 @@ export function toggleProgramMilestone({ programId, milestoneId, done, actor }) 
   const m = p?.milestones.find((x) => x.id === milestoneId);
   if (!m) throw httpError(404, 'Milestone not found');
   m.done = !!done;
-  if (m.done) for (const uid of p.cohort) pushNotif(uid, { type: 'program', title: `🎯 Milestone complete: ${m.title}`, body: `${p.title} (${p.cohortLabel}) just hit a milestone.`, link: '/researcher/programs' });
+  if (m.done) for (const uid of p.cohort) pushNotif(uid, { type: 'program', title: `Milestone complete: ${m.title}`, body: `${p.title} (${p.cohortLabel}) just hit a milestone.`, link: '/researcher/programs' });
   recordAudit(actor, 'program.milestone', `${p.title}: ${m.title} → ${m.done ? 'done' : 'open'}`);
   schedulePersist();
   return p;
@@ -1811,7 +1852,7 @@ export function reviewProgramApplication({ id, status, reviewerId }) {
   const p = getProgram(a.programId);
   if (a.status === 'accepted' && p && !p.cohort.includes(a.userId)) {
     p.cohort.push(a.userId);
-    pushNotif(a.userId, { type: 'program', title: `🎉 You're in: ${p.title}`, body: `Welcome to the ${p.cohortLabel || ''} cohort! Check your milestones.`, link: '/researcher/programs' });
+    pushNotif(a.userId, { type: 'program', title: `You're in: ${p.title}`, body: `Welcome to the ${p.cohortLabel || ''} cohort! Check your milestones.`, link: '/researcher/programs' });
   } else if (p) {
     pushNotif(a.userId, { type: 'program', title: `Update on ${p.title}`, body: 'Your program application was not accepted this round — more cohorts are coming.', link: '/researcher/programs' });
   }
@@ -1906,6 +1947,10 @@ export function digestData() {
 }
 
 export function addApplication(app) {
+  // Associate researchers join instantly — no application form.
+  if (app.role === 'Associate Researcher') {
+    throw httpError(400, 'Associate Researcher is instant — use “Join as Associate” instead of applying.');
+  }
   // You can't apply to a listing you lead.
   if (app.listingId) {
     const listing = db.listings.find((l) => l.id === app.listingId);
@@ -1913,7 +1958,7 @@ export function addApplication(app) {
   }
   const record = { id: `app_${db.applications.length + 1}`, status: 'pending', at: now(), ...app };
   db.applications.push(record);
-  notifyEvent({ title: '📝 New application', body: `${record.userName} applied${record.role ? ` for ${record.role}` : ''}.` });
+  notifyEvent({ title: 'New application', body: `${record.userName} applied${record.role ? ` for ${record.role}` : ''}.` });
   schedulePersist();
   return record;
 }
@@ -2190,7 +2235,7 @@ export function sendMessage({ from, to, text }) {
   if (!Array.isArray(db.messages)) db.messages = [];
   const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
   db.messages.push(msg);
-  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
+  pushNotif(to, { type: 'message', title: `New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
   emit(to, 'message', { from, text: msg.text, at: msg.at });
   schedulePersist();
   return { ...msg, mine: true };
@@ -2466,27 +2511,30 @@ export function referralLeaderboard() {
 }
 
 export function registerResearcher({ name, email, discord, password, username, resumeUrl, ref }) {
-  if (!name?.trim() || !email?.trim()) throw httpError(400, 'Name and email are required');
-  if (!discord?.trim()) throw httpError(400, 'A Discord username is required');
+  if (!email?.trim()) throw httpError(400, 'Email is required');
   if (!password || password.length < 6) throw httpError(400, 'Password must be at least 6 characters');
 
-  const uname = (username?.trim() || email.trim().split('@')[0]).toLowerCase();
+  const emailTrim = email.trim().toLowerCase();
+  const displayName = (name?.trim())
+    || emailTrim.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const uname = (username?.trim() || emailTrim.split('@')[0]).toLowerCase();
   const all = [...db.editors, ...db.researchers];
   if (all.some((u) => u.username.toLowerCase() === uname)) throw httpError(409, 'That username is taken');
-  if (all.some((u) => u.email && u.email.toLowerCase() === email.trim().toLowerCase()))
+  if (all.some((u) => u.email && u.email.toLowerCase() === emailTrim))
     throw httpError(409, 'An account with that email already exists');
 
   const user = {
     id: `usr_${Date.now()}`,
-    name: name.trim(),
+    name: displayName,
     username: uname,
     password: hashPassword(password),
     kind: 'researcher',
-    // No role yet — an auditor decides it before the account is usable.
     tags: [],
-    approved: false,
-    email: email.trim(),
-    discord: discord.trim(),
+    approved: true,
+    onboarded: false,
+    rolesIntroSeen: false,
+    email: emailTrim,
+    discord: (discord || '').trim(),
     resumeUrl: safeUrl(resumeUrl, 400),
     gpa: '',
     experienceSummary: '',
@@ -2510,27 +2558,14 @@ export function registerResearcher({ name, email, discord, password, username, r
     referredBy: null,
   };
   user.referralCode = genReferralCode(user);
-  // Credit the referrer if a valid code was used (and it isn't self-referral).
   const referrer = userByReferralCode(ref);
   if (referrer && referrer.id !== user.id) {
     user.referredBy = referrer.id;
-    pushNotif(referrer.id, { type: 'referral', title: '🎉 Someone joined with your link', body: `${user.name} signed up — thanks for spreading the word!`, link: '/researcher/account' });
+    pushNotif(referrer.id, { type: 'referral', title: 'Someone joined with your link', body: `${user.name} signed up — thanks for spreading the word!`, link: '/researcher/account' });
   }
   db.researchers.push(user);
   claimProjectInvites(user);
-  // Surface every new member in the auditor's onboarding queue for role assignment.
-  db.applications.push({
-    id: `app_${db.applications.length + 1}`,
-    kind: 'onboarding',
-    userId: user.id,
-    userName: user.name,
-    listingId: null,
-    role: null,
-    message: 'New member sign-up — assign a role',
-    status: 'pending',
-    at: now(),
-  });
-  notifyEvent({ title: '👋 New member', body: `${user.name} joined Synthica.` });
+  notifyEvent({ title: 'New member', body: `${user.name} joined Synthica.` });
   schedulePersist();
   const { password: _pw, ...safe } = user;
   return safe;
@@ -2578,9 +2613,9 @@ export function addNews({ authorId, authorName, title, body, audience, bannerUrl
   if (!db.news) db.news = [];
   db.news.unshift(item);
   recordAudit({ id: authorId, name: authorName }, 'post_news', title);
-  notifyEvent({ title: '📣 Announcement', body: `${title}` });
+  notifyEvent({ title: 'Announcement', body: `${title}` });
   for (const u of [...db.editors, ...db.researchers]) {
-    pushNotif(u.id, { type: 'news', title: '📣 ' + item.title, body: item.body.slice(0, 140), link: '' });
+    pushNotif(u.id, { type: 'news', title: item.title, body: item.body.slice(0, 140), link: '' });
   }
   schedulePersist();
   return item;
@@ -2613,7 +2648,7 @@ export function addCompetition({ actor, title, description, url, category, deadl
   };
   db.competitions.unshift(c);
   recordAudit(actor, 'post_competition', c.title);
-  notifyEvent({ title: '🏆 New competition', body: c.title });
+  notifyEvent({ title: 'New competition', body: c.title });
   schedulePersist();
   return c;
 }
@@ -2807,7 +2842,7 @@ export function reportContent({ reporterId, kind, targetId, reason }) {
   db.reports.unshift(report);
   // Ping the moderation team in-app.
   for (const ed of db.editors || []) {
-    if (isModerator(ed)) pushNotif(ed.id, { type: 'report', title: '🚩 New content report', body: `${report.reporterName} reported a ${kind}`, link: '/editor' });
+    if (isModerator(ed)) pushNotif(ed.id, { type: 'report', title: 'New content report', body: `${report.reporterName} reported a ${kind}`, link: '/editor' });
   }
   schedulePersist();
   return { ok: true };
@@ -2996,7 +3031,7 @@ export function addEvent({ userId, title, type, dueAt, projectId, chapterId, gro
         : [];
   const ctx = project?.title || chapter?.name || group?.name || '';
   for (const id of audience)
-    pushNotif(id, { type: 'deadline', title: `📅 New ${ev.type}: ${ev.title}`, body: `${ctx} · ${ev.dueAt}`, link: '/researcher/calendar' });
+    pushNotif(id, { type: 'deadline', title: `New ${ev.type}: ${ev.title}`, body: `${ctx} · ${ev.dueAt}`, link: '/researcher/calendar' });
   recordAudit(u, 'add_event', `${ev.title} (${ev.dueAt})`);
   schedulePersist();
   return ev;
@@ -3093,7 +3128,7 @@ export function addChapterAnnouncement({ leaderId, title, body }) {
   chapter.announcements.unshift(ann);
   for (const m of chapter.members || [])
     if (m.userId !== leaderId)
-      pushNotif(m.userId, { type: 'chapter', title: `📣 ${chapter.name}: ${ann.title}`, body: ann.body.slice(0, 120), link: '/researcher' });
+      pushNotif(m.userId, { type: 'chapter', title: `${chapter.name}: ${ann.title}`, body: ann.body.slice(0, 120), link: '/researcher' });
   recordAudit(lead, 'chapter_announcement', `${chapter.name}: ${ann.title}`);
   schedulePersist();
   return ann;
@@ -3189,7 +3224,7 @@ export function addChapterMember({ leaderId, name, email, discord }) {
   if (!user.tags.includes('associate_researcher')) user.tags.push('associate_researcher'); // get tagged
   chapter.members.push({ userId: user.id, joinedAt: now(), onboarding: freshOnboarding() });
   pushNotif(user.id, { type: 'chapter', title: `You were added to ${chapter.name}`, body: 'Welcome — finish your onboarding to get started.', link: '/researcher' });
-  notifyEvent({ title: '👋 Chapter member added', body: `${user.name} joined ${chapter.name}.` });
+  notifyEvent({ title: 'Chapter member added', body: `${user.name} joined ${chapter.name}.` });
   schedulePersist();
   return { id: user.id, name: user.name, email: user.email, discord: user.discord, existing };
 }

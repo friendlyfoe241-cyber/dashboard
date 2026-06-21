@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Card, Badge, Button, EmptyState } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
+import Icon from '../components/Icon.jsx';
 
 // Role certificates — same templates and typography as the official Synthica
 // generator repos (AssociateResearcherGen / IndependentResearcherGen /
@@ -94,7 +95,7 @@ export default function Certificates() {
             const cert = issuedFor(type);
             return (
               <Card key={type}>
-                <h3 style={{ margin: '0 0 0.4rem' }}>🏅 {CERT_META[type].label}</h3>
+                <h3 style={{ margin: '0 0 0.4rem' }}><span className="icon-label"><Icon name="award" size={18} /> {CERT_META[type].label}</span></h3>
                 {cert
                   ? <p className="login-hint" style={{ margin: '0 0 0.6rem' }}>Issued {new Date(cert.issuedAt).toLocaleDateString()} · code <code>{cert.code}</code></p>
                   : <p className="login-hint" style={{ margin: '0 0 0.6rem' }}>Ready to generate.</p>}

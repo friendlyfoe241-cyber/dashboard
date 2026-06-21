@@ -8,24 +8,29 @@ import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
 
-// Editors share one shell. Auditors get the Admin view (no review queue);
-// Directors get Director Desk + Admin; the platform Admin sees everything;
-// everyone else gets their review queue.
+// Editors share one shell. Sidebar + view switcher adapt to each role workspace.
 export default function EditorApp() {
   const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'admin';
-  const isDirector = user?.role === 'director' || isSuperAdmin;
-  const isAuditor = user?.role === 'auditor';
-  const isAdmin = isDirector || isAuditor;
-  // Auditors and the platform Admin have no personal review queue.
-  const hasQueue = !isAuditor && !isSuperAdmin;
+  const demo = user?.allViewsDemo;
+  const isSuperAdmin = !demo && user?.role === 'admin';
+  const isDirector = demo || user?.role === 'director' || user?.role === 'admin';
+  const isAuditor = !demo && user?.role === 'auditor';
+  const isAdmin = demo || isDirector || isAuditor;
+  const hasQueue = demo || (!isAuditor && !isSuperAdmin);
 
   const nav = [];
-  if (hasQueue) nav.push({ to: '/editor', label: 'My Queue', icon: '📥', end: true });
-  if (isDirector) nav.push({ to: '/editor/director', label: 'Director Desk', icon: '🗂️' });
-  if (isAdmin) nav.push({ to: '/editor/admin', label: 'Admin', icon: '⚙️' });
-  nav.push({ to: '/archive', label: 'Archive', icon: '📚' });
-  nav.push({ to: '/editor/account', label: 'Account', icon: '👤' });
+  if (hasQueue) {
+    nav.push({ to: '/editor', label: 'My Queue', icon: 'inbox', end: true, views: ['editor-queue'] });
+  }
+  if (isDirector) {
+    nav.push({ to: '/editor/director', label: 'Director Desk', icon: 'folder-open', views: ['editor-director'] });
+  }
+  if (isAdmin) {
+    nav.push({ to: '/editor/admin', label: 'Admin', icon: 'settings', views: ['editor-admin'] });
+  }
+  nav.push({ to: '/archive', label: 'Archive', icon: 'archive', views: ['*'] });
+  nav.push({ spacer: true, views: ['*'] });
+  nav.push({ to: '/editor/account', label: 'Account', icon: 'user', views: ['*'] });
 
   return (
     <Layout nav={nav}>

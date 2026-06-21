@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../../api.js';
 import { Modal, Button, Field, Badge } from '../../components/ui.jsx';
 import { Embed, embedSrc } from '../../components/embed.jsx';
+import Icon from '../../components/Icon.jsx';
 
 // The "See more" detail view. Renders the paper's extracted info plus the
 // decision controls appropriate to the editor's role.
@@ -155,7 +156,7 @@ function PaperInfo({ paper, role }) {
       </div>
       <p>
         <a href={paper.pdfUrl} target="_blank" rel="noreferrer">
-          📄 Open paper PDF (Google Drive)
+          <span className="icon-label"><Icon name="file-text" size={16} /> Open paper PDF (Google Drive)</span>
         </a>
       </p>
       {embedSrc(paper.pdfUrl) && <Embed url={paper.pdfUrl} height={420} title="Paper preview" />}

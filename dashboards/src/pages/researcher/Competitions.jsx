@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { Card, Badge, EmptyState } from '../../components/ui.jsx';
 import { safeHref } from '../../url.js';
+import Icon from '../../components/Icon.jsx';
 
 const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
@@ -48,7 +49,7 @@ export default function Competitions({ embedded }) {
                     </div>
                     {c.description && <p style={{ margin: '0.5rem 0' }}>{c.description}</p>}
                     <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
-                      {c.prize && <Badge tone="green">🏆 {c.prize}</Badge>}
+                      {c.prize && <Badge tone="green"><span className="icon-label"><Icon name="trophy" size={12} /> {c.prize}</span></Badge>}
                       <DeadlineBadge deadline={c.deadline} />
                     </div>
                     {href && <p style={{ marginTop: '0.7rem', marginBottom: 0 }}><a className="btn btn-primary btn-sm" href={href} target="_blank" rel="noreferrer">Learn more →</a></p>}
@@ -71,12 +72,12 @@ function FeaturedComp({ c }) {
     <div className="comp-hero pop-in">
       <div className="comp-hero-glow" aria-hidden="true" />
       <div className="comp-hero-body">
-        <span className="comp-hero-tag">✦ Featured opportunity</span>
+        <span className="comp-hero-tag"><span className="icon-label"><Icon name="star" size={14} /> Featured opportunity</span></span>
         <h2 className="comp-hero-title">{c.title}</h2>
         {c.description && <p className="comp-hero-desc">{c.description}</p>}
         <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginBottom: href ? '1rem' : 0 }}>
           {c.category && <Badge tone="gray">{c.category}</Badge>}
-          {c.prize && <Badge tone="green">🏆 {c.prize}</Badge>}
+          {c.prize && <Badge tone="green"><span className="icon-label"><Icon name="trophy" size={12} /> {c.prize}</span></Badge>}
           <DeadlineBadge deadline={c.deadline} />
         </div>
         {href && <a className="btn btn-primary" href={href} target="_blank" rel="noreferrer">Learn more →</a>}

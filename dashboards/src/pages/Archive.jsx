@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { getDefaultHomePath } from '../views.js';
 import { Card, Badge } from '../components/ui.jsx';
 import { embedSrc } from '../files.js';
 import { useReloadOnFocus } from '../useReload.js';
+import Icon, { BrandMark } from '../components/Icon.jsx';
 
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
@@ -59,10 +61,10 @@ export default function Archive() {
     <div className="archive-page">
       <header className="archive-hero">
         <nav className="archive-topnav">
-          <Link to="/" className="topbar-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</Link>
+          <Link to="/" className="topbar-brand"><BrandMark size={22} />Synthica</Link>
           <span className="row" style={{ gap: '0.8rem' }}>
             {user
-              ? <Link className="btn btn-ghost btn-sm" to="/">My dashboard</Link>
+              ? <Link className="btn btn-ghost btn-sm" to={getDefaultHomePath(user)}>My dashboard</Link>
               : <Link className="btn btn-ghost btn-sm" to="/login">Sign in</Link>}
           </span>
         </nav>
@@ -99,7 +101,7 @@ function PaperRow({ p, open, onToggle }) {
     <article className={`arx-row ${open ? 'open' : ''}`}>
       <button className="arx-head" onClick={onToggle}>
         <div className="arx-meta-line">
-          {p.featured && <Badge tone="gold">⭐ Featured</Badge>}
+          {p.featured && <Badge tone="gold"><span className="icon-label"><Icon name="star" size={12} /> Featured</span></Badge>}
           <Badge tone="blue">{p.category}</Badge>
           <span className="arx-type">{p.articleType || 'Article'}</span>
           {p.openAccess !== false && <span className="arx-oa">Open Access</span>}
@@ -180,9 +182,9 @@ function PaperDetail({ p }) {
           </dl>
 
           <div className="row" style={{ gap: '0.4rem', margin: '0.8rem 0 0.4rem' }}>
-            {p.pdfUrl && <a className="btn btn-ghost btn-sm" href={p.pdfUrl} target="_blank" rel="noreferrer">PDF ↗</a>}
-            {p.sourceUrl && <a className="btn btn-ghost btn-sm" href={p.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>}
-            {String(p.doi || '').startsWith('10.') && <a className="btn btn-ghost btn-sm" href={`https://doi.org/${p.doi}`} target="_blank" rel="noreferrer">doi.org ↗</a>}
+            {p.pdfUrl && <a className="btn btn-ghost btn-sm" href={p.pdfUrl} target="_blank" rel="noreferrer"><span className="icon-label"><Icon name="external-link" size={14} /> PDF</span></a>}
+            {p.sourceUrl && <a className="btn btn-ghost btn-sm" href={p.sourceUrl} target="_blank" rel="noreferrer"><span className="icon-label"><Icon name="external-link" size={14} /> Source</span></a>}
+            {String(p.doi || '').startsWith('10.') && <a className="btn btn-ghost btn-sm" href={`https://doi.org/${p.doi}`} target="_blank" rel="noreferrer"><span className="icon-label"><Icon name="external-link" size={14} /> doi.org</span></a>}
           </div>
 
           <h4 className="arx-h4" style={{ marginTop: '0.8rem' }}>Cite this paper</h4>
@@ -192,7 +194,7 @@ function PaperDetail({ p }) {
             ))}
           </div>
           <pre className="arx-cite">{cites[tab]}</pre>
-          <button className="btn btn-ghost btn-sm" onClick={copy}>{copied ? 'Copied ✓' : 'Copy citation'}</button>
+          <button className="btn btn-ghost btn-sm" onClick={copy}>{copied ? <><Icon name="check" size={14} /> Copied</> : 'Copy citation'}</button>
         </aside>
       </div>
     </div>

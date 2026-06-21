@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { EXP_ANCHORS, LEAD_ANCHORS, anchorFor } from '../../onboardingScales.js';
+import Icon from '../../components/Icon.jsx';
 
 const INTERESTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Economics', 'Psychology', 'Humanities', 'Machine Learning', 'Neuroscience'];
 const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
@@ -34,7 +35,7 @@ export default function PendingApproval() {
     return (
       <div className="login-wrap">
         <div className="login-card" style={{ maxWidth: 480 }}>
-          <div style={{ fontSize: '2.5rem' }}>📪</div>
+          <div style={{ fontSize: '2.5rem' }}><Icon name="inbox" size={40} /></div>
           <h1 style={{ marginBottom: '0.25rem' }}>Your application wasn't approved</h1>
           <p className="sub">
             Thanks for your interest in Synthica. Our auditors couldn't approve your membership this time.
@@ -56,7 +57,7 @@ export default function PendingApproval() {
     return (
       <div className="login-wrap">
         <div className="login-card" style={{ maxWidth: 480 }}>
-          <div style={{ fontSize: '2.5rem' }}>⏳</div>
+          <div style={{ fontSize: '2.5rem' }}><Icon name="alert" size={40} /></div>
           <h1 style={{ marginBottom: '0.25rem' }}>Application under review</h1>
           <p className="sub">
             Thanks, {user?.name?.split(' ')[0]} — an auditor is assigning your role. You'll get access
@@ -67,7 +68,7 @@ export default function PendingApproval() {
             <span className="badge badge-blue">Research {user.researchExperience}/10</span>
             <span className="badge badge-blue">Leadership {user.leadershipExperience ?? '—'}/10</span>
             {user.wantsChapterLead && <span className="badge badge-gold">Chapter lead candidate</span>}
-            <span className={`badge ${user.resumeUrl ? 'badge-green' : 'badge-gray'}`}>{user.resumeUrl ? 'Résumé added ✓' : 'No résumé yet'}</span>
+            <span className={`badge ${user.resumeUrl ? 'badge-green' : 'badge-gray'}`}>{user.resumeUrl ? <span className="icon-label"><Icon name="check" size={12} /> Résumé added</span> : 'No résumé yet'}</span>
           </div>
 
           {!user.resumeUrl && (
@@ -127,10 +128,10 @@ function IntakeForm({ user, refreshUser, logout, onDone }) {
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520, textAlign: 'left' }}>
-        <h1 style={{ marginBottom: '0.25rem' }}>One last step, {user?.name?.split(' ')[0]} 🪪</h1>
+        <h1 style={{ marginBottom: '0.25rem' }}>One last step, {user?.name?.split(' ')[0]} <Icon name="id-card" size={24} /></h1>
         <p className="sub">Tell us a little about yourself so our auditors can assign you the right role.</p>
 
-        <label className="label-up">Resume / CV link <span className="muted">(recommended ⭐)</span></label>
+        <label className="label-up">Resume / CV link <span className="muted">(recommended <Icon name="star" size={12} />)</span></label>
         <input value={f.resumeUrl} onChange={(e) => set({ resumeUrl: e.target.value })} placeholder="https://drive.google.com/…" style={{ marginBottom: '0.7rem' }} />
 
         <div className="grid grid-2" style={{ marginBottom: '0.7rem' }}>

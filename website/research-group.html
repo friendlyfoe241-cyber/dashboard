@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/logo/favicon.png" />
+
   <title>Research Group — Synthica</title>
   <meta name="description" content="Join a mentored small-group research experience with Synthica — go from your first question to a published paper, free, alongside 1000+ researchers in 93+ countries." />
   <link rel="canonical" href="https://www.synthica.org/research-group.html" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232589ed'/%3E%3Ctext x='16' y='23' font-family='Arial,sans-serif' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
+  
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Synthica" />
   <meta property="og:title" content="Research Group — Synthica" />
@@ -17,15 +20,16 @@
   <meta name="twitter:title" content="Research Group — Synthica" />
   <meta name="twitter:description" content="Mentored small-group research that takes you from your first question to a published paper — free, with a global community of young researchers." />
   <meta name="twitter:image" content="https://www.synthica.org/src/logo/Synthica Preview Image.png" />
-  <link href="https://fonts.cdnfonts.com/css/garet" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="design-system.css" />
+  <script src="icons.js"></script>
   <script>
     /* Apply saved theme before paint to avoid a flash of the wrong theme. */
     (function () {
       try {
-        if (localStorage.getItem('synthica.theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+        var t = localStorage.getItem('synthica.theme');
+        var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
         var m = new Date().getMonth();
         var s = m <= 1 || m === 11 ? 'winter' : m <= 4 ? 'spring' : m <= 7 ? 'summer' : 'autumn';
         document.documentElement.setAttribute('data-season', s);
@@ -121,17 +125,17 @@
 
       <div class="grid grid-3">
         <article class="card feature-card" data-spotlight data-reveal="0">
-          <div class="feature-icon" aria-hidden="true">&#128101;</div>
+          <div class="feature-icon" data-icon="users" aria-hidden="true"></div>
           <h3>Small groups</h3>
           <p>You'll work in a small team, so there's always someone to bounce ideas off and no one gets lost in the crowd.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="100">
-          <div class="feature-icon" aria-hidden="true">&#129309;</div>
+          <div class="feature-icon" data-icon="handshake" aria-hidden="true"></div>
           <h3>A real mentor</h3>
           <p>An experienced mentor guides your group through each step, answering questions in plain language as they come up.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="200">
-          <div class="feature-icon" aria-hidden="true">&#128214;</div>
+          <div class="feature-icon" data-icon="book-open" aria-hidden="true"></div>
           <h3>A published paper</h3>
           <p>The goal is a finished, peer-reviewed paper you can be proud of &mdash; published free for the whole world to read.</p>
         </article>
@@ -187,17 +191,17 @@
 
       <div class="grid grid-3">
         <article class="card feature-card" data-spotlight data-reveal="0">
-          <div class="feature-icon" aria-hidden="true">&#127793;</div>
+          <div class="feature-icon" data-icon="sprout" aria-hidden="true"></div>
           <h3>First-time researchers</h3>
           <p>Never written a paper before? Perfect. Your mentor and group will walk you through it from scratch.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="100">
-          <div class="feature-icon" aria-hidden="true">&#128161;</div>
+          <div class="feature-icon" data-icon="lightbulb" aria-hidden="true"></div>
           <h3>Idea-havers</h3>
           <p>Got a question that won't leave you alone? Bring it. A Research Group is a great place to chase it down.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="200">
-          <div class="feature-icon" aria-hidden="true">&#127757;</div>
+          <div class="feature-icon" data-icon="globe" aria-hidden="true"></div>
           <h3>Students everywhere</h3>
           <p>Wherever you are in the world, you can join. Everything happens online and stays completely free.</p>
         </article>

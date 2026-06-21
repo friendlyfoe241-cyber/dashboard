@@ -14,17 +14,17 @@ export function embedSrc(url) {
 // Icon + human kind for a URL, for file-tile rendering.
 export function fileMeta(url = '') {
   const u = String(url).toLowerCase();
-  if (/\.pdf($|[?#])/.test(u) || /drive\.google\.com\/file/.test(u)) return { icon: '📄', kind: 'PDF' };
-  if (/docs\.google\.com\/document/.test(u)) return { icon: '📝', kind: 'Doc' };
-  if (/docs\.google\.com\/spreadsheets/.test(u)) return { icon: '📊', kind: 'Sheet' };
-  if (/docs\.google\.com\/presentation/.test(u)) return { icon: '📽', kind: 'Slides' };
-  if (/drive\.google\.com\/drive\/folders/.test(u)) return { icon: '📁', kind: 'Folder' };
-  if (/github\.com|gitlab\.com/.test(u)) return { icon: '💻', kind: 'Code' };
-  if (/youtube\.com|youtu\.be|vimeo\.com|loom\.com/.test(u)) return { icon: '🎬', kind: 'Video' };
-  if (/notion\.so|notion\.site/.test(u)) return { icon: '🗒', kind: 'Notion' };
-  if (/overleaf\.com/.test(u)) return { icon: '📐', kind: 'LaTeX' };
-  if (/zotero|mendeley/.test(u)) return { icon: '📚', kind: 'Refs' };
-  return { icon: '🔗', kind: 'Link' };
+  if (/\.pdf($|[?#])/.test(u) || /drive\.google\.com\/file/.test(u)) return { icon: 'file-text', kind: 'PDF' };
+  if (/docs\.google\.com\/document/.test(u)) return { icon: 'pen', kind: 'Doc' };
+  if (/docs\.google\.com\/spreadsheets/.test(u)) return { icon: 'table', kind: 'Sheet' };
+  if (/docs\.google\.com\/presentation/.test(u)) return { icon: 'presentation', kind: 'Slides' };
+  if (/drive\.google\.com\/drive\/folders/.test(u)) return { icon: 'folder', kind: 'Folder' };
+  if (/github\.com|gitlab\.com/.test(u)) return { icon: 'code', kind: 'Code' };
+  if (/youtube\.com|youtu\.be|vimeo\.com|loom\.com/.test(u)) return { icon: 'video', kind: 'Video' };
+  if (/notion\.so|notion\.site/.test(u)) return { icon: 'clipboard', kind: 'Notion' };
+  if (/overleaf\.com/.test(u)) return { icon: 'scroll', kind: 'LaTeX' };
+  if (/zotero|mendeley/.test(u)) return { icon: 'books', kind: 'Refs' };
+  return { icon: 'link', kind: 'Link' };
 }
 
 // Direct-image URL for <img> tags. People paste Google Drive *share* links,

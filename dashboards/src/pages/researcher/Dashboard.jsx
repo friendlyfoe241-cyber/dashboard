@@ -4,9 +4,9 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
-import OnboardingWizard from '../../components/OnboardingWizard.jsx';
 import CertificateGenerator from '../../components/CertificateGenerator.jsx';
 import { imageSrc } from '../../files.js';
+import Icon from '../../components/Icon.jsx';
 
 const TAG_LABEL = {
   chapter_leader: 'Chapter Leader',
@@ -27,8 +27,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <OnboardingWizard />
-
       <h1 className="page-title">
         Welcome, <span className="yellow-text">{firstName}</span>
       </h1>
@@ -61,7 +59,7 @@ function MemberStats() {
   useEffect(() => { api.myStats().then(setS).catch(() => {}); }, []);
   if (!s) return null;
   const stats = [
-    ['⭐ Reputation', s.reputation],
+    [{ icon: 'star', label: 'Reputation' }, s.reputation],
     ['Profile views', s.profileViews],
     ['Posts', s.posts],
     ['Projects', s.projects],
@@ -72,15 +70,17 @@ function MemberStats() {
     <Card style={{ marginBottom: '1.25rem' }}>
       <div className="row" style={{ gap: 'clamp(1rem, 4vw, 2.5rem)', flexWrap: 'wrap' }}>
         {stats.map(([label, n]) => (
-          <div key={label} style={{ textAlign: 'center' }}>
+          <div key={typeof label === 'object' ? label.label : label} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--brand-deep)' }}>{n}</div>
-            <div className="muted" style={{ fontSize: '0.78rem' }}>{label}</div>
+            <div className="muted" style={{ fontSize: '0.78rem' }}>
+              {typeof label === 'object' ? <span className="icon-label"><Icon name={label.icon} size={14} /> {label.label}</span> : label}
+            </div>
           </div>
         ))}
       </div>
       {(s.badges || []).length > 0 && (
         <div className="row" style={{ gap: '0.4rem', marginTop: '0.9rem', flexWrap: 'wrap' }}>
-          {s.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}>{b.icon} {b.label}</Badge>)}
+          {s.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}><Icon name={b.icon} size={12} /> {b.label}</Badge>)}
         </div>
       )}
     </Card>
@@ -96,7 +96,7 @@ function LatestNews() {
   return (
     <Card style={{ marginBottom: '1.25rem' }}>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
-        <div className="section-head" style={{ margin: 0 }}><div className="section-badge">📣 Latest news</div></div>
+        <div className="section-head" style={{ margin: 0 }}><div className="section-badge"><span className="icon-label"><Icon name="megaphone" size={14} /> Latest news</span></div></div>
         <Link to="/researcher/news" className="muted" style={{ fontSize: '0.82rem' }}>View all →</Link>
       </div>
       <div className="stack">
@@ -203,7 +203,7 @@ function Pathway() {
                   {it.deliverable && <span className="muted" style={{ marginLeft: '0.4rem' }}>· {it.deliverable}</span>}
                 </div>
                 {it.dueAt && <span className={overdue(it) ? 'overdue' : 'muted'} style={{ fontSize: '0.75rem' }}>{overdue(it) ? 'overdue ' : 'due '}{it.dueAt}</span>}
-                <button className="link-btn" style={{ color: 'var(--body-alt)' }} onClick={() => remove(it)} aria-label="Delete">✕</button>
+                <button className="link-btn" style={{ color: 'var(--body-alt)' }} onClick={() => remove(it)} aria-label="Delete"><Icon name="x" size={14} /></button>
               </div>
             ))}
           </>
@@ -221,7 +221,7 @@ function UpcomingDeadlines() {
   const upcoming = items?.filter((i) => i.date >= today).slice(0, 4) || [];
   const overdue = items?.filter((i) => i.date < today).length || 0;
   if (!upcoming.length && !overdue) return null;
-  const icons = { paper: '📄', task: '✅', event: '📅', pathway: '🧭' };
+  const icons = { paper: 'file-text', task: 'check-square', event: 'calendar', pathway: 'compass' };
   const fmt = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
   return (
     <section style={{ marginBottom: '2rem' }}>
@@ -231,14 +231,14 @@ function UpcomingDeadlines() {
       </div>
       {overdue > 0 && (
         <div className="info-block" style={{ marginBottom: '0.6rem', borderLeft: '3px solid var(--danger)' }}>
-          ⏰ {overdue} deadline{overdue === 1 ? ' is' : 's are'} overdue — <Link to="/researcher/calendar">review them</Link>.
+          <span className="icon-label"><Icon name="alert" size={16} /> {overdue} deadline{overdue === 1 ? ' is' : 's are'} overdue — <Link to="/researcher/calendar">review them</Link>.</span>
         </div>
       )}
       <div className="grid grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' }}>
         {upcoming.map((it) => (
           <Card key={it.id} className="paper-card" style={{ padding: '0.85rem 1rem' }}>
             <div className="row" style={{ gap: '0.5rem', flexWrap: 'nowrap' }}>
-              <span style={{ fontSize: '1.2rem' }}>{icons[it.kind] || '📅'}</span>
+              <span><Icon name={icons[it.kind] || 'calendar'} size={20} /></span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</div>
                 <div className="muted" style={{ fontSize: '0.75rem' }}>{fmt(it.date)} · {it.context}</div>
@@ -315,7 +315,7 @@ function OnboardingCard() {
         <div className="card-row">
           <div>
             <h3>
-              {ob.pct === 100 ? "You're all set 🎉" : 'Get started'} · {ob.chapterName}
+              {ob.pct === 100 ? <span className="icon-label"><Icon name="party" size={16} /> You're all set</span> : 'Get started'} · {ob.chapterName}
             </h3>
             <p className="muted" style={{ margin: '0.2rem 0 0' }}>
               Onboarding {ob.pct}% complete
@@ -494,7 +494,7 @@ function ChapterAnnouncements({ chapter, onPosted }) {
     <Card style={{ marginBottom: '1.1rem' }}>
       <div className="card-row">
         <h3>Chapter announcements</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : '📣 Send announcement'}</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : <span className="icon-label"><Icon name="megaphone" size={16} /> Send announcement</span>}</button>
       </div>
       {err && <div className="login-error" style={{ marginTop: '0.5rem' }}>{err}</div>}
       {open && (

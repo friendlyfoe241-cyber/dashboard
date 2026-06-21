@@ -2,6 +2,7 @@
 // using Canvas to draw the user's name on the certificate template
 import { useState } from 'react';
 import { Button } from './ui.jsx';
+import Icon from './Icon.jsx';
 
 // Map of role tags to certificate folder paths
 const CERT_PATHS = {
@@ -118,7 +119,7 @@ export default function CertificateGenerator({ user }) {
               disabled={generating}
               onClick={() => generateCertificate(role)}
             >
-              {generating ? 'Generating…' : downloaded ? 'Downloaded ✓' : `Download ${CERT_TITLES[role]} Certificate`}
+              {generating ? 'Generating…' : downloaded ? <><Icon name="check" size={14} /> Downloaded</> : `Download ${CERT_TITLES[role]} Certificate`}
             </Button>
           ))}
         </div>

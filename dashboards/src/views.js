@@ -1,0 +1,286 @@
+/** Role-based workspace views — used by the top-right switcher + sidebar filtering. */
+
+const EDITOR_ROLE_LABELS = {
+  admin: 'Platform admin',
+  director: 'Director',
+  auditor: 'Auditor',
+  chief: 'Editor-in-Chief',
+  senior: 'Senior editor',
+  associate: 'Associate editor',
+  reviews: 'Reviews editor',
+};
+
+const TAG_LABELS = {
+  lead_researcher: 'Lead researcher',
+  associate_researcher: 'Associate researcher',
+  chapter_leader: 'Chapter leader',
+  independent_researcher: 'Independent researcher',
+};
+
+const VIEW_KEY = 'synthica.activeViewId';
+
+/** Dev-only account flag — unlocks every workspace in the view switcher. */
+export function isAllViewsDemo(user) {
+  return !!user?.allViewsDemo;
+}
+
+/** Whether this account may open a portal route (`editor` or `researcher`). */
+export function canAccessPortal(user, kind) {
+  if (!user || !kind) return true;
+  if (user.kind === kind) return true;
+  return isAllViewsDemo(user);
+}
+
+function portalKindForPath(path = '') {
+  if (path.startsWith('/editor')) return 'editor';
+  if (path.startsWith('/researcher')) return 'researcher';
+  return null;
+}
+
+const ALL_DEMO_VIEWS = [
+  {
+    id: 'editor-queue',
+    label: 'Review queue',
+    description: 'Editorial reviews',
+    path: '/editor',
+    kind: 'editor',
+    icon: 'inbox',
+  },
+  {
+    id: 'editor-director',
+    label: 'Director desk',
+    description: 'Publish papers & notify authors',
+    path: '/editor/director',
+    kind: 'editor',
+    icon: 'folder-open',
+  },
+  {
+    id: 'editor-admin',
+    label: 'Admin',
+    description: 'Platform settings',
+    path: '/editor/admin',
+    kind: 'editor',
+    icon: 'settings',
+  },
+  {
+    id: 'researcher',
+    label: 'Member portal',
+    description: 'Community & research hub',
+    path: '/researcher',
+    kind: 'researcher',
+    icon: 'home',
+  },
+  {
+    id: 'lead',
+    label: 'Lead researcher',
+    description: 'Projects, listings & team tools',
+    path: '/researcher/hub',
+    kind: 'researcher',
+    icon: 'rocket',
+  },
+  {
+    id: 'chapter',
+    label: 'Chapter leader',
+    description: 'Your chapter & members',
+    path: '/researcher',
+    kind: 'researcher',
+    icon: 'globe',
+  },
+  {
+    id: 'archive',
+    label: 'Synthica Archive',
+    description: 'Browse published papers',
+    path: '/archive',
+    kind: 'shared',
+    icon: 'archive',
+  },
+];
+
+export function formatResearcherTags(tags = []) {
+  if (!tags.length) return 'Member';
+  return tags.map((t) => TAG_LABELS[t] || t).join(' · ');
+}
+
+function pathMatches(viewPath, pathname) {
+  if (viewPath === '/archive') return pathname.startsWith('/archive');
+  if (pathname === viewPath) return true;
+  if (viewPath !== '/' && pathname.startsWith(`${viewPath}/`)) return true;
+  return false;
+}
+
+/** All workspaces the signed-in user can open. */
+export function getAvailableViews(user) {
+  if (!user) return [];
+  if (isAllViewsDemo(user)) return ALL_DEMO_VIEWS;
+
+  const views = [];
+
+  if (user.kind === 'editor') {
+    const isSuperAdmin = user.role === 'admin';
+    const isDirector = user.role === 'director' || isSuperAdmin;
+    const isAuditor = user.role === 'auditor';
+    const isAdmin = isDirector || isAuditor;
+    const hasQueue = !isAuditor && !isSuperAdmin;
+
+    if (hasQueue) {
+      views.push({
+        id: 'editor-queue',
+        label: 'Review queue',
+        description: EDITOR_ROLE_LABELS[user.role] || 'Editorial reviews',
+        path: '/editor',
+        kind: 'editor',
+        icon: 'inbox',
+      });
+    }
+    if (isDirector) {
+      views.push({
+        id: 'editor-director',
+        label: 'Director desk',
+        description: 'Publish papers & notify authors',
+        path: '/editor/director',
+        kind: 'editor',
+        icon: 'folder-open',
+      });
+    }
+    if (isAdmin) {
+      views.push({
+        id: 'editor-admin',
+        label: isAuditor ? 'Auditor console' : 'Admin',
+        description: isAuditor ? 'Applications & moderation' : 'Platform settings',
+        path: '/editor/admin',
+        kind: 'editor',
+        icon: 'settings',
+      });
+    }
+  } else if (user.kind === 'researcher') {
+    views.push({
+      id: 'researcher',
+      label: 'Member portal',
+      description: formatResearcherTags(user.tags),
+      path: '/researcher',
+      kind: 'researcher',
+      icon: 'home',
+    });
+
+    const tags = user.tags || [];
+    if (tags.includes('lead_researcher')) {
+      views.push({
+        id: 'lead',
+        label: 'Lead researcher',
+        description: 'Projects, listings & team tools',
+        path: '/researcher/hub',
+        kind: 'researcher',
+        icon: 'rocket',
+      });
+    }
+    if (tags.includes('chapter_leader')) {
+      views.push({
+        id: 'chapter',
+        label: 'Chapter leader',
+        description: 'Your chapter & members',
+        path: '/researcher',
+        kind: 'researcher',
+        icon: 'globe',
+      });
+    }
+  }
+
+  views.push({
+    id: 'archive',
+    label: 'Synthica Archive',
+    description: 'Browse published papers',
+    path: '/archive',
+    kind: 'shared',
+    icon: 'archive',
+  });
+
+  return views;
+}
+
+export function readSavedViewId(userId) {
+  if (userId && typeof localStorage !== 'undefined') {
+    const scoped = localStorage.getItem(`${VIEW_KEY}.${userId}`);
+    if (scoped) return scoped;
+  }
+  if (typeof localStorage !== 'undefined') return localStorage.getItem(VIEW_KEY);
+  return null;
+}
+
+export function saveActiveViewId(viewId, userId) {
+  if (typeof localStorage === 'undefined' || !viewId) return;
+  localStorage.setItem(VIEW_KEY, viewId);
+  if (userId) localStorage.setItem(`${VIEW_KEY}.${userId}`, viewId);
+}
+
+/** Pick the workspace that best matches the current URL (or saved preference). */
+export function resolveActiveView(views, pathname, userId) {
+  if (!views.length) return null;
+
+  const saved = readSavedViewId(userId);
+  const savedView = saved ? views.find((v) => v.id === saved) : null;
+
+  if (pathname.startsWith('/archive')) {
+    return views.find((v) => v.id === 'archive') || savedView || views[0];
+  }
+
+  if (pathname.startsWith('/editor')) {
+    const editorMatch = views
+      .filter((v) => v.kind === 'editor')
+      .sort((a, b) => b.path.length - a.path.length)
+      .find((v) => pathMatches(v.path, pathname));
+    return editorMatch || savedView || views.find((v) => v.kind === 'editor') || views[0];
+  }
+
+  if (pathname.startsWith('/researcher')) {
+    if (savedView?.kind === 'researcher') return savedView;
+    return views.find((v) => v.id === 'researcher') || savedView || views[0];
+  }
+
+  return savedView || views.find((v) => v.kind !== 'shared') || views[0];
+}
+
+export function getDefaultHomePath(user) {
+  const views = getAvailableViews(user);
+  const saved = readSavedViewId(user?.id);
+  const picked = saved && views.find((v) => v.id === saved && v.kind !== 'shared');
+  if (picked?.path) {
+    const portal = portalKindForPath(picked.path);
+    if (!portal || canAccessPortal(user, portal)) return picked.path;
+  }
+  const primary = views.find((v) => v.kind === user?.kind);
+  return primary?.path || (user?.kind === 'editor' ? '/editor' : '/researcher');
+}
+
+/** Sidebar items declare `views: ['*']` or specific view ids. */
+export function filterNavForView(nav, activeViewId) {
+  if (!activeViewId) return nav;
+
+  const visible = (item) => {
+    if (item.spacer) return true;
+    if (item.section) return false;
+    const scopes = item.views || ['*'];
+    return scopes.includes('*') || scopes.includes(activeViewId);
+  };
+
+  const out = [];
+  let pendingSection = null;
+
+  for (const item of nav) {
+    if (item.section) {
+      pendingSection = item;
+      continue;
+    }
+    if (item.spacer) {
+      if (out.some((x) => x.to)) out.push(item);
+      continue;
+    }
+    if (!visible(item)) continue;
+    if (pendingSection) {
+      out.push(pendingSection);
+      pendingSection = null;
+    }
+    out.push(item);
+  }
+
+  return out;
+}

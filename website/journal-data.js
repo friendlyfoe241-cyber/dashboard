@@ -167,6 +167,13 @@ const initialsOf = (name) =>
     .map((w) => w.charAt(0).toUpperCase())
     .join('') || '?';
 
+function profileIcon(name, size = 14) {
+  if (typeof window !== 'undefined' && window.SynthicaIcons && window.SynthicaIcons.iconSvg) {
+    return window.SynthicaIcons.iconSvg(name, size, 'profile-inline-icon');
+  }
+  return `<span class="profile-inline-icon" data-icon="${esc(name)}" data-icon-size="${size}"></span>`;
+}
+
 // Resolve a previewable embed URL for a paper's pdfUrl, or null if it isn't a
 // real, embeddable document (e.g. the "#" placeholder in the sample data).
 // - Google Drive file links (.../file/d/<id>/...) -> the /preview viewer.
@@ -458,11 +465,11 @@ async function renderProfile() {
   if (profile.researchGroup) {
     const rgHref = safeHref(profile.researchGroupUrl);
     metaBits.push(rgHref
-      ? `🔬 <a href="${esc(rgHref)}" target="_blank" rel="noopener">${esc(profile.researchGroup)}</a>`
-      : `🔬 ${esc(profile.researchGroup)}`);
+      ? `${profileIcon('microscope')} <a href="${esc(rgHref)}" target="_blank" rel="noopener">${esc(profile.researchGroup)}</a>`
+      : `${profileIcon('microscope')} ${esc(profile.researchGroup)}`);
   }
-  if (profile.contactEmail) metaBits.push(`✉️ <a href="mailto:${esc(profile.contactEmail)}">${esc(profile.contactEmail)}</a>`);
-  if (profile.dob) metaBits.push(`🎂 ${esc(profile.dob)}`);
+  if (profile.contactEmail) metaBits.push(`${profileIcon('mail')} <a href="mailto:${esc(profile.contactEmail)}">${esc(profile.contactEmail)}</a>`);
+  if (profile.dob) metaBits.push(`${profileIcon('cake')} ${esc(profile.dob)}`);
   const metaLine = metaBits.length ? `<p class="profile-meta">${metaBits.join(' &nbsp;·&nbsp; ')}</p>` : '';
 
   const avatar = profile.avatarUrl
@@ -533,8 +540,8 @@ async function renderProfile() {
   const badges = Array.isArray(profile.badges) ? profile.badges : [];
   const badgesBlock = badges.length
     ? `<section class="profile-section">
-        <h2 class="profile-section-title">Achievements${profile.reputation ? ` <span class="profile-count">⭐ ${profile.reputation}</span>` : ''}</h2>
-        <div class="profile-tags">${badges.map((bd) => `<span class="tag">${esc(bd.icon)} ${esc(bd.label)}</span>`).join('')}</div>
+        <h2 class="profile-section-title">Achievements${profile.reputation ? ` <span class="profile-count">${profileIcon('star', 14)} ${profile.reputation}</span>` : ''}</h2>
+        <div class="profile-tags">${badges.map((bd) => `<span class="tag">${profileIcon(bd.icon, 14)} ${esc(bd.label)}</span>`).join('')}</div>
       </section>`
     : '';
 
@@ -592,6 +599,14 @@ async function renderProfile() {
       ${projectsBlock}
       ${pubsBlock}
     </div>`;
+
+  root.querySelectorAll('[data-icon]').forEach((el) => {
+    if (el.innerHTML.trim()) return;
+    const size = el.getAttribute('data-icon-size') || 14;
+    if (window.SynthicaIcons && window.SynthicaIcons.iconSvg) {
+      el.innerHTML = window.SynthicaIcons.iconSvg(el.getAttribute('data-icon'), Number(size), 'profile-inline-icon');
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

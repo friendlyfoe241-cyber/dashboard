@@ -85,7 +85,7 @@ export function emailBox(title, html) {
 export function welcomeEmail({ name, verifyUrl, communityUrl }) {
   const first = String(name || 'there').split(/\s+/)[0];
   const html = emailLayout({
-    heading: `Welcome to ${BRAND}, ${esc(first)}! 🎉`,
+    heading: `Welcome to ${BRAND}, ${esc(first)}!`,
     intro: `Thank you so much for joining the ${esc(BRAND)} community! We're beyond excited to have you onboard.`,
     blocks: [
       `${esc(BRAND)} is a global community for students offering free, accessible opportunities — from competitions, workshops, and mentorship to real research and publication.`,
@@ -96,7 +96,7 @@ export function welcomeEmail({ name, verifyUrl, communityUrl }) {
     signoff: `Welcome aboard!`,
   });
   const text = `Hi ${first},\n\nWelcome to ${BRAND}! We're excited to have you.\n\n${BRAND} is a global community for students with free competitions, workshops, mentorship, and publication opportunities.\n\nTo-dos:\n- ${verifyUrl ? `Confirm your email: ${verifyUrl}\n- ` : ''}Complete your profile and say hello.\n\nWelcome aboard,\nThe ${BRAND} Team\n${SITE}`;
-  return { subject: `Welcome to ${BRAND}, ${first}! 🎉`, html, text };
+  return { subject: `Welcome to ${BRAND}, ${first}!`, html, text };
 }
 
 // Generic branded action email (verification, password reset, role approval…).
@@ -114,7 +114,7 @@ export function emailDecision({ authorEmail, authorName, title, decision }) {
   return actionEmail({
     to: authorEmail,
     subject: published ? `Your ${BRAND} submission has been accepted: ${title}` : `Update on your ${BRAND} submission: ${title}`,
-    heading: published ? 'Your paper was accepted 🎉' : 'Submission update',
+    heading: published ? 'Your paper was accepted' : 'Submission update',
     intro: `Hi ${esc(first)},`,
     blocks: published
       ? [`Great news — <strong>“${esc(title)}”</strong> has cleared editorial review and is being prepared for publication in the ${esc(BRAND)} Journal. We'll follow up with next steps.`]

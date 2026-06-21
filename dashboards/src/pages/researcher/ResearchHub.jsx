@@ -6,6 +6,7 @@ import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx'
 import { useToast } from '../../components/toast.jsx';
 import { imageSrc } from '../../files.js';
 import { Pfp } from '../../components/ui.jsx';
+import Icon from '../../components/Icon.jsx';
 
 // Browse all open project listings; apply to one. Leads can post listings.
 export default function ResearchHub() {
@@ -34,7 +35,7 @@ export default function ResearchHub() {
       <p className="page-sub">Every open project listing across Synthica — find one and apply.</p>
       <div className="info-block" style={{ marginBottom: '1rem' }}>
         {user?.resumeUrl
-          ? '📎 Your résumé is attached automatically when you apply.'
+          ? <span className="icon-label"><Icon name="paperclip" size={16} /> Your résumé is attached automatically when you apply.</span>
           : <>No résumé on file — <Link to="/researcher/tools">add one in Tools</Link> to auto-apply.</>}
       </div>
       {error && <div className="login-error">{error}</div>}
@@ -90,7 +91,7 @@ export default function ResearchHub() {
                     onClick={() => apply(l)}
                     variant={applied[l.id] ? 'ghost' : 'primary'}
                   >
-                    {applied[l.id] ? 'Applied ✓' : 'Apply'}
+                    {applied[l.id] ? <span className="icon-label"><Icon name="check" size={14} /> Applied</span> : 'Apply'}
                   </Button>
                 )}
               </div>
@@ -212,7 +213,7 @@ function BannerPreview({ url }) {
   const [bad, setBad] = useState(false);
   useEffect(() => setBad(false), [url]);
   if (!url?.trim()) return null;
-  if (bad) return <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.8rem' }}>⚠️ That image couldn't load — check the URL is a direct image link.</p>;
+  if (bad) return <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.8rem' }}><span className="icon-label"><Icon name="alert" size={14} /> That image couldn't load — check the URL is a direct image link.</span></p>;
   return <img src={imageSrc(url)} alt="Banner preview" onError={() => setBad(true)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 12, margin: '0 0 0.6rem', border: '1px solid var(--border)' }} />;
 }
 
@@ -237,7 +238,7 @@ function LeadTools({ onCreated }) {
           <div className="muted" style={{ fontSize: '0.78rem' }}>Recruit collaborators for one of your projects.</div>
         </div>
         <div className="seg">
-          <button type="button" className={`seg-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}>📣 Post listing</button>
+          <button type="button" className={`seg-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}><span className="icon-label"><Icon name="megaphone" size={16} /> Post listing</span></button>
         </div>
       </div>
       {open && (

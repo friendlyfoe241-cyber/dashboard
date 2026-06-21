@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 
-// Role-specific application forms. `key` is the question label stored in answers.
 const COMMON = [
   { key: 'Full Name', type: 'text', required: true },
   { key: 'Discord Display Name', type: 'text', required: true },
@@ -25,10 +25,6 @@ const FORMS = {
     { key: 'How do you plan to conduct your research topic? (150 words max)', type: 'textarea', required: true },
     { key: 'Why should we make you a lead researcher? (150 words max)', type: 'textarea', required: true },
   ],
-  'Associate Researcher': [
-    ...COMMON,
-    { key: 'Which projects/fields interest you?', type: 'textarea', required: true },
-  ],
   'Chapter Leader': [
     ...COMMON,
     { key: 'Where would you run your chapter?', type: 'text', required: true },
@@ -45,7 +41,8 @@ const ROLES = Object.keys(FORMS);
 export default function ApplicationHub() {
   const { user } = useAuth();
   const toast = useToast();
-  const [role, setRole] = useState('Lead Researcher');
+  const [params] = useSearchParams();
+  const [role, setRole] = useState(params.get('role') || 'Lead Researcher');
   const [answers, setAnswers] = useState({});
   const [apps, setApps] = useState([]);
   const [error, setError] = useState('');
@@ -54,15 +51,22 @@ export default function ApplicationHub() {
   const load = () => api.myApplications().then(setApps).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
-  // Prefill name/email/discord from the logged-in user when the role changes.
+  useEffect(() => {
+    const fromUrl = params.get('role');
+    if (fromUrl && ROLES.includes(fromUrl)) setRole(fromUrl);
+  }, [params]);
+
   useEffect(() => {
     setAnswers((a) => ({
       'Full Name': a['Full Name'] || user.name || '',
       'Discord Display Name': a['Discord Display Name'] || user.discord || '',
       Email: a.Email || user.email || '',
+      'Current School': a['Current School'] || user.institution || '',
+      'Background in Research': a['Background in Research'] || user.experienceSummary || '',
+      'Current GPA': a['Current GPA'] || user.gpa || '',
       ...a,
     }));
-  }, [role]); // eslint-disable-line
+  }, [role, user]);
 
   const fields = FORMS[role];
   const set = (k) => (e) => setAnswers({ ...answers, [k]: e.target.value });
@@ -84,15 +88,21 @@ export default function ApplicationHub() {
     }
   };
 
+  const hasAssociate = (user?.tags || []).includes('associate_researcher');
+
   return (
     <div>
-      <h1 className="page-title">Application Hub</h1>
-      <p className="page-sub">Apply for a role on the team. Once a director approves, your role updates automatically.</p>
+      <h1 className="page-title">Apply for a role</h1>
+      <p className="page-sub">
+        {hasAssociate
+          ? 'Apply for advanced roles. Associate Researcher is already on your account.'
+          : 'Lead, Chapter Leader, and Independent Researcher roles are reviewed by our team.'}
+      </p>
       {error && <div className="login-error">{error}</div>}
 
       <div className="grid grid-2" style={{ alignItems: 'start' }}>
         <Card>
-          <h3>Apply for a role</h3>
+          <h3>Submit an application</h3>
           <Field label="Role">
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLES.map((r) => <option key={r}>{r}</option>)}
@@ -100,7 +110,7 @@ export default function ApplicationHub() {
           </Field>
           {role === 'Lead Researcher' && (
             <p className="muted" style={{ marginBottom: '0.75rem' }}>
-              Lead Researchers run their own project and a team. We look for research background, leadership, and activeness.
+              Lead Researchers run their own project and a team. We review your background and research plan.
             </p>
           )}
           <form onSubmit={submit}>
@@ -119,14 +129,14 @@ export default function ApplicationHub() {
 
         <Card>
           <h3>My applications</h3>
-          {apps.length === 0 ? (
-            <EmptyState>No applications yet.</EmptyState>
+          {apps.filter((a) => a.role).length === 0 ? (
+            <EmptyState>No role applications yet.</EmptyState>
           ) : (
             <div className="stack">
-              {apps.map((a) => (
+              {apps.filter((a) => a.role).map((a) => (
                 <div key={a.id} className="info-block">
                   <div className="card-row">
-                    <strong>{a.role || 'Project application'}</strong>
+                    <strong>{a.role}</strong>
                     <Badge tone={a.status === 'pending' ? 'gray' : a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>
                   </div>
                   {a.answers && (

@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import UploadButton from '../components/UploadButton.jsx';
+import Icon from '../components/Icon.jsx';
 
 // A shared "Tools" space — résumé editor + my stats for researchers, activity
 // stats for editors, plus scaffold cards for future additions.
@@ -170,7 +171,7 @@ function ResumeCard({ user }) {
       <Button onClick={save} disabled={busy}>
         {busy ? 'Saving…' : 'Save résumé'}
       </Button>
-      {saved && <span className="muted" style={{ marginLeft: '0.6rem' }}>Saved ✓</span>}
+      {saved && <span className="muted" style={{ marginLeft: '0.6rem' }}><span className="icon-label"><Icon name="check" size={14} /> Saved</span></span>}
     </Card>
   );
 }

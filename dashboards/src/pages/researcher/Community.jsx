@@ -7,6 +7,7 @@ import { useToast } from '../../components/toast.jsx';
 import SafetyMenu from '../../components/SafetyMenu.jsx';
 import { imageSrc } from '../../files.js';
 import { safeHref } from '../../url.js';
+import Icon from '../../components/Icon.jsx';
 import News from './News.jsx';
 
 const ago = (iso) => {
@@ -90,7 +91,7 @@ function Composer({ onPosted }) {
           />
           {showLink && <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://… (optional link)" style={{ marginTop: '0.4rem' }} />}
           <div className="row" style={{ justifyContent: 'space-between', marginTop: '0.5rem' }}>
-            <Button variant="ghost" className="btn-sm" onClick={() => setShowLink((v) => !v)}>🔗 {showLink ? 'Remove link' : 'Add link'}</Button>
+            <Button variant="ghost" className="btn-sm" onClick={() => setShowLink((v) => !v)}><span className="icon-label"><Icon name="link" size={16} /> {showLink ? 'Remove link' : 'Add link'}</span></Button>
             <Button className="btn-sm" disabled={busy || (!text.trim() && !linkUrl.trim())} onClick={submit}>{busy ? 'Posting…' : 'Post'}</Button>
           </div>
         </div>
@@ -135,17 +136,17 @@ function PostCard({ post, onChange, onDeleted }) {
               onBlocked={() => onDeleted(post.id)}
             />
           )}
-          {post.canDelete && <button className="btn btn-ghost btn-sm" onClick={del} title="Delete">✕</button>}
+          {post.canDelete && <button className="btn btn-ghost btn-sm" onClick={del} title="Delete"><Icon name="x" size={14} /></button>}
         </div>
       </div>
 
       {post.text && <p style={{ margin: '0.7rem 0', whiteSpace: 'pre-wrap' }}>{post.text}</p>}
       {post.imageUrl && <img src={imageSrc(post.imageUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 12, maxHeight: 360, objectFit: 'cover' }} />}
-      {link && <a href={link} target="_blank" rel="noreferrer" className="info-block" style={{ display: 'block', marginTop: '0.5rem', wordBreak: 'break-all' }}>🔗 {post.linkUrl}</a>}
+      {link && <a href={link} target="_blank" rel="noreferrer" className="info-block" style={{ display: 'block', marginTop: '0.5rem', wordBreak: 'break-all' }}><span className="icon-label"><Icon name="link" size={14} /> {post.linkUrl}</span></a>}
 
       <div className="row" style={{ marginTop: '0.7rem', gap: '1rem' }}>
-        <button className="btn btn-ghost btn-sm" onClick={like}>{post.likedByMe ? '❤️' : '🤍'} {post.likeCount > 0 ? post.likeCount : ''} Like</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowComments((v) => !v)}>💬 {post.commentCount > 0 ? post.commentCount : ''} Comment</button>
+        <button className="btn btn-ghost btn-sm" onClick={like}><span className="icon-label"><Icon name={post.likedByMe ? 'heart' : 'heart-outline'} size={16} /> {post.likeCount > 0 ? post.likeCount : ''} Like</span></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowComments((v) => !v)}><span className="icon-label"><Icon name="message" size={16} /> {post.commentCount > 0 ? post.commentCount : ''} Comment</span></button>
       </div>
 
       {showComments && (
