@@ -3,15 +3,15 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
-import Icon from '../../components/Icon.jsx';
 
 const KIND_META = {
-  paper: { icon: 'file-text', tone: 'gold', label: 'Paper' },
-  task: { icon: 'check-square', tone: 'blue', label: 'Task' },
-  event: { icon: 'calendar', tone: 'gray', label: 'Event' },
-  workshop: { icon: 'graduation-cap', tone: 'blue', label: 'Workshop' },
-  meetup: { icon: 'handshake', tone: 'blue', label: 'Meetup' },
-  pathway: { icon: 'compass', tone: 'gray', label: 'Pathway' },
+  paper: { icon: '📄', tone: 'gold', label: 'Paper' },
+  task: { icon: '✅', tone: 'blue', label: 'Task' },
+  event: { icon: '📅', tone: 'gray', label: 'Event' },
+  workshop: { icon: '🎓', tone: 'blue', label: 'Workshop' },
+  meetup: { icon: '🤝', tone: 'blue', label: 'Meetup' },
+  pathway: { icon: '🧭', tone: 'gray', label: 'Pathway' },
+  mentor: { icon: '🧑‍🏫', tone: 'gold', label: 'Mentor call' },
 };
 const iso = (d) => d.toISOString().slice(0, 10);
 
@@ -123,7 +123,7 @@ export default function Calendar() {
         <Card>
           <h3 style={{ marginTop: 0 }}>Coming up</h3>
           {upcoming.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>No upcoming deadlines. Enjoy the calm <Icon name="sun" size={16} /></p>
+            <p className="muted" style={{ margin: 0 }}>No upcoming deadlines. Enjoy the calm 🌤</p>
           ) : (
             <div className="stack">
               {upcoming.map((it) => <CalRow key={it.id} it={it} onRemove={remove} onRsvp={rsvp} showDate />)}
@@ -140,7 +140,7 @@ function CalRow({ it, onRemove, onRsvp, showDate }) {
   const overdue = it.date < new Date().toISOString().slice(0, 10);
   return (
     <div className="cal-item">
-      <span className="cal-item-icon"><Icon name={meta.icon} size={18} /></span>
+      <span className="cal-item-icon">{meta.icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600 }}>{it.title}</div>
         <div className="muted" style={{ fontSize: '0.78rem' }}>
@@ -151,11 +151,11 @@ function CalRow({ it, onRemove, onRsvp, showDate }) {
       </div>
       {it.rsvpable && onRsvp && (
         <button className={`btn btn-sm ${it.going ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onRsvp(it)}>
-          {it.going ? <span className="icon-label"><Icon name="check" size={14} /> Going</span> : 'RSVP'}
+          {it.going ? '✓ Going' : 'RSVP'}
         </button>
       )}
       <Badge tone={overdue ? 'red' : meta.tone}>{overdue ? 'overdue' : meta.label}</Badge>
-      {it.canDelete && <button className="link-btn" onClick={() => onRemove(it)} aria-label="Delete"><Icon name="x" size={14} /></button>}
+      {it.canDelete && <button className="link-btn" onClick={() => onRemove(it)} aria-label="Delete">✕</button>}
     </div>
   );
 }
@@ -172,8 +172,8 @@ function DeadlineForm({ onAdded }) {
     Promise.allSettled([api.myProjects(), api.chapter()]).then(([pr, ch]) => {
       const t = [];
       if (pr.status === 'fulfilled')
-        for (const p of pr.value.filter((x) => x.leadId === user.id)) t.push({ value: `project:${p.id}`, label: p.title, icon: 'folder' });
-      if (ch.status === 'fulfilled' && ch.value?.id) t.push({ value: `chapter:${ch.value.id}`, label: `${ch.value.name} (chapter)`, icon: 'globe' });
+        for (const p of pr.value.filter((x) => x.leadId === user.id)) t.push({ value: `project:${p.id}`, label: `📁 ${p.title}` });
+      if (ch.status === 'fulfilled' && ch.value?.id) t.push({ value: `chapter:${ch.value.id}`, label: `🌍 ${ch.value.name} (chapter)` });
       setTargets(t);
       if (t[0]) setF((x) => ({ ...x, target: t[0].value }));
     });

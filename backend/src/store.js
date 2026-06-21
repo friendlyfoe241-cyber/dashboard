@@ -44,6 +44,9 @@ function buildSeed() {
     activities: clone(seed.activities || []),
     messages: clone(seed.messages || []),
     reports: clone(seed.reports || []),
+    // Expertise-mentor 1:1 bookings (ROLE_WORKFLOWS §7). Mentor profile + slots
+    // live on the researcher record; this collection holds the booked calls.
+    mentorBookings: clone(seed.mentorBookings || []),
   };
 }
 
@@ -396,6 +399,7 @@ const TAG_LABEL = {
   associate_researcher: 'Associate Researcher',
   lead_researcher: 'Lead Researcher',
   independent_researcher: 'Independent Researcher',
+  expertise_mentor: 'Expertise Mentor',
 };
 const EDITOR_ROLE_LABEL = {
   reviews: 'Reviews Editor',
@@ -453,6 +457,9 @@ function publicProfileOf(u) {
     links: u.links || [], category: u.category || null, currentProjects, publications,
     groups: (db.groups || []).filter((g) => (g.members || []).includes(u.id)).map((g) => ({ id: g.id, name: g.name })),
     badges: badgesFor(u.id), reputation: reputationFor(u.id),
+    // Expertise-mentor profile (only meaningful when the mentor tag is held).
+    specialties: u.specialties || [],
+    mentorBio: u.mentorBio || '',
   };
 }
 
@@ -3148,7 +3155,263 @@ export function calendarFor(userId) {
   for (const it of me?.pathway || [])
     if (it.dueAt && !it.done)
       items.push({ id: `pw:${it.id}`, date: String(it.dueAt).slice(0, 10), title: it.title, kind: 'pathway', context: 'My pathway', byName: '', canDelete: false });
+  // Mentor calls the user is party to (either the mentor or the booking
+  // researcher) surface on the calendar as a Google-Calendar-style entry.
+  for (const b of db.mentorBookings || []) {
+    if (b.status === 'cancelled') continue;
+    if (b.mentorId !== userId && b.researcherId !== userId) continue;
+    const amMentor = b.mentorId === userId;
+    const other = getUserById(amMentor ? b.researcherId : b.mentorId);
+    items.push({
+      id: `mbk:${b.id}`, date: String(b.slot).slice(0, 10), title: amMentor ? `Mentoring call with ${other?.name || 'a researcher'}` : `Mentor call with ${other?.name || 'your mentor'}`,
+      kind: 'mentor', context: amMentor ? 'You are mentoring' : 'Expertise mentoring', byName: '', canDelete: false,
+    });
+  }
   return items.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// --- Expertise mentors (ROLE_WORKFLOWS §7) ---------------------------------
+// Researchers with the `expertise_mentor` tag advertise specialty areas and
+// availability windows; any researcher can browse them and book a 1:1 call.
+// Calendar sync is an in-app stub (no real Google OAuth) — bookings create
+// calendar entries for both parties via calendarFor() reading db.mentorBookings.
+
+const MENTOR_TAG = 'expertise_mentor';
+const isMentor = (u) => Array.isArray(u?.tags) && u.tags.includes(MENTOR_TAG);
+
+// A slot is bookable when it's in the future and not already claimed.
+const slotIsOpen = (s) => !s.booked && new Date(s.slot).getTime() > Date.now();
+
+// Shape a mentor (researcher record) into the card the directory/detail shows.
+function mentorCard(u, { withSlots = false } = {}) {
+  const all = (u.availability || []).slice().sort((a, b) => String(a.slot).localeCompare(String(b.slot)));
+  const open = all.filter(slotIsOpen);
+  return {
+    id: u.id,
+    slug: u.slug || u.id,
+    name: u.name,
+    avatarUrl: u.avatarUrl || '',
+    institution: (u.affiliations && u.affiliations[0]) || u.institution || '',
+    specialties: u.specialties || [],
+    mentorBio: u.mentorBio || u.bio || '',
+    openSlots: open.length,
+    // Detail view gets the actual open slots to pick from; the list view doesn't.
+    slots: withSlots ? open.map((s) => ({ id: s.id, slot: s.slot })) : undefined,
+  };
+}
+
+// Directory: every mentor, optionally filtered by a specialty string.
+export function listMentors({ specialty } = {}) {
+  const needle = String(specialty || '').trim().toLowerCase();
+  return db.researchers
+    .filter((u) => isMentor(u) && isVisible(u))
+    .filter((u) => !needle || (u.specialties || []).some((s) => s.toLowerCase().includes(needle)))
+    .map((u) => mentorCard(u))
+    .sort((a, b) => b.openSlots - a.openSlots || a.name.localeCompare(b.name));
+}
+
+// The distinct specialty chips across all mentors (drives the filter UI).
+export function mentorSpecialties() {
+  const set = new Set();
+  for (const u of db.researchers) if (isMentor(u)) for (const s of u.specialties || []) set.add(s);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// One mentor's detail (bio, specialties, open slots) for the booking view.
+export function getMentor(id) {
+  const u = getResearcherById(id) || getUserBySlug(id);
+  if (!u || !isMentor(u) || !isVisible(u)) throw httpError(404, 'Mentor not found');
+  return mentorCard(u, { withSlots: true });
+}
+
+// --- mentor self-service: own profile + availability -----------------------
+
+// The signed-in mentor's own dashboard payload: editable profile, all their
+// slots (open + booked), and their bookings split into upcoming / past.
+export function mentorDashboard(userId) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!isMentor(u)) throw httpError(403, 'You are not an expertise mentor');
+  const slots = (u.availability || [])
+    .slice()
+    .sort((a, b) => String(a.slot).localeCompare(String(b.slot)))
+    .map((s) => ({ id: s.id, slot: s.slot, booked: !!s.booked, past: new Date(s.slot).getTime() <= Date.now() }));
+  return {
+    specialties: u.specialties || [],
+    mentorBio: u.mentorBio || '',
+    calendarConnected: !!u.googleCalendarConnected, // stub flag; no real OAuth
+    slots,
+    bookings: bookingsForMentor(userId),
+  };
+}
+
+// Edit specialties + bio. Specialties come in as an array or comma string.
+export function setMentorProfile({ userId, specialties, mentorBio }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!isMentor(u)) throw httpError(403, 'You are not an expertise mentor');
+  if (specialties !== undefined) {
+    const list = Array.isArray(specialties) ? specialties : String(specialties).split(',');
+    u.specialties = [...new Set(list.map((s) => String(s).trim()).filter(Boolean))].slice(0, 12);
+  }
+  if (mentorBio !== undefined) u.mentorBio = String(mentorBio).slice(0, 600);
+  recordAudit(u, 'mentor_profile', `specialties=[${(u.specialties || []).join(', ')}]`);
+  schedulePersist();
+  return mentorDashboard(userId);
+}
+
+// Add an availability slot (a future datetime the mentor is open for a call).
+export function addMentorSlot({ userId, slot }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!isMentor(u)) throw httpError(403, 'You are not an expertise mentor');
+  const t = new Date(slot).getTime();
+  if (!slot || Number.isNaN(t)) throw httpError(400, 'A valid date and time is required');
+  if (t <= Date.now()) throw httpError(400, 'Pick a time in the future');
+  if (!Array.isArray(u.availability)) u.availability = [];
+  const iso = new Date(slot).toISOString();
+  if (u.availability.some((s) => s.slot === iso)) throw httpError(409, 'You already have a slot at that time');
+  u.availability.push({ id: uid('slot'), slot: iso, booked: false });
+  schedulePersist();
+  return mentorDashboard(userId);
+}
+
+// Remove an availability slot. A booked slot can't be dropped — cancel the
+// booking instead (which notifies the researcher).
+export function removeMentorSlot({ userId, slotId }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!isMentor(u)) throw httpError(403, 'You are not an expertise mentor');
+  const idx = (u.availability || []).findIndex((s) => s.id === slotId);
+  if (idx === -1) throw httpError(404, 'Slot not found');
+  if (u.availability[idx].booked) throw httpError(409, 'That slot is booked — cancel the call first');
+  u.availability.splice(idx, 1);
+  schedulePersist();
+  return mentorDashboard(userId);
+}
+
+// Stub: pretend to (dis)connect Google Calendar. Two-way sync is wireable later
+// — this only flips an in-app flag so the UI can reflect the connection.
+export function setMentorCalendarConnected({ userId, connected }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (!isMentor(u)) throw httpError(403, 'You are not an expertise mentor');
+  u.googleCalendarConnected = !!connected;
+  schedulePersist();
+  return { connected: u.googleCalendarConnected };
+}
+
+// --- bookings --------------------------------------------------------------
+
+const bookingView = (b) => {
+  const mentor = getUserById(b.mentorId);
+  const researcher = getUserById(b.researcherId);
+  return {
+    id: b.id, mentorId: b.mentorId, researcherId: b.researcherId,
+    mentorName: mentor?.name || 'Mentor', mentorSlug: mentor?.slug || b.mentorId, mentorAvatarUrl: mentor?.avatarUrl || '',
+    researcherName: researcher?.name || 'Researcher', researcherSlug: researcher?.slug || b.researcherId, researcherAvatarUrl: researcher?.avatarUrl || '',
+    slot: b.slot, note: b.note || '', status: b.status, meetingUrl: b.meetingUrl || '', at: b.at,
+    past: new Date(b.slot).getTime() <= Date.now(),
+  };
+};
+
+// Bookings where the user is the mentor, newest-relevant first.
+function bookingsForMentor(mentorId) {
+  return (db.mentorBookings || [])
+    .filter((b) => b.mentorId === mentorId)
+    .sort((a, b) => String(a.slot).localeCompare(String(b.slot)))
+    .map(bookingView);
+}
+
+// A researcher books an open slot with a mentor. Creates the booking, claims
+// the slot, mirrors it onto both calendars (via calendarFor), and notifies the
+// mentor in-app. A confirmation email is best-effort (no-op without RESEND).
+export function bookMentor({ researcherId, mentorId, slot, note }) {
+  const researcher = getResearcherById(researcherId);
+  if (!researcher) throw httpError(404, 'User not found');
+  const mentor = getResearcherById(mentorId);
+  if (!mentor || !isMentor(mentor)) throw httpError(404, 'Mentor not found');
+  if (mentorId === researcherId) throw httpError(400, "You can't book yourself");
+
+  // Resolve the requested slot: prefer a real availability slot, but accept a
+  // raw datetime that matches an open one so the API stays forgiving.
+  const wanted = slot && !Number.isNaN(new Date(slot).getTime()) ? new Date(slot).toISOString() : null;
+  if (!wanted) throw httpError(400, 'Pick a valid time slot');
+  const avail = (mentor.availability || []).find((s) => s.slot === wanted);
+  if (!avail) throw httpError(404, 'That time slot is no longer offered');
+  if (avail.booked) throw httpError(409, 'Sorry — that slot was just booked. Pick another.');
+
+  avail.booked = true;
+  if (!Array.isArray(db.mentorBookings)) db.mentorBookings = [];
+  const booking = {
+    id: uid('mbk'),
+    mentorId,
+    researcherId,
+    slotId: avail.id,
+    slot: wanted,
+    note: String(note || '').slice(0, 500),
+    status: 'confirmed',
+    // A stand-in meeting link (a real integration would mint a Meet/Zoom URL).
+    meetingUrl: `https://meet.synthica.org/${uid('call').replace('call_', '')}`,
+    at: now(),
+  };
+  db.mentorBookings.push(booking);
+
+  const when = new Date(wanted).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  // In-app notification to the mentor (the headline acceptance check).
+  pushNotif(mentorId, {
+    type: 'mentor',
+    title: `📅 New mentoring booking from ${researcher.name}`,
+    body: `${when}${booking.note ? ` — “${booking.note}”` : ''}`,
+    link: '/researcher/mentor',
+  });
+  // Confirmation to the researcher: best-effort email (no-op without RESEND).
+  if (researcher.email) {
+    sendEmail({
+      to: researcher.email,
+      subject: `Your mentoring call with ${mentor.name} is booked`,
+      html: `<p>You're booked for a 1:1 with <strong>${mentor.name}</strong> on <strong>${when}</strong>.</p>` +
+        `<p>Join link: <a href="${booking.meetingUrl}">${booking.meetingUrl}</a></p>` +
+        (booking.note ? `<p>Your note: ${booking.note}</p>` : ''),
+    }).catch(() => {});
+  }
+  recordAudit(researcher, 'book_mentor', `${researcher.name} booked ${mentor.name} for ${wanted}`);
+  schedulePersist();
+  return bookingView(booking);
+}
+
+// A researcher's own bookings (as the person who booked the call).
+export function myMentorBookings(researcherId) {
+  return (db.mentorBookings || [])
+    .filter((b) => b.researcherId === researcherId)
+    .sort((a, b) => String(a.slot).localeCompare(String(b.slot)))
+    .map(bookingView);
+}
+
+// Cancel a booking. Either party can cancel; it frees the slot and notifies the
+// other side so their calendar updates.
+export function cancelMentorBooking({ userId, bookingId }) {
+  const b = (db.mentorBookings || []).find((x) => x.id === bookingId);
+  if (!b) throw httpError(404, 'Booking not found');
+  if (b.mentorId !== userId && b.researcherId !== userId) throw httpError(403, 'Not your booking');
+  if (b.status === 'cancelled') return bookingView(b);
+  b.status = 'cancelled';
+  // Release the mentor's slot so it can be offered again (if still in future).
+  const mentor = getResearcherById(b.mentorId);
+  const slot = (mentor?.availability || []).find((s) => s.id === b.slotId);
+  if (slot) slot.booked = false;
+  const canceller = getUserById(userId);
+  const otherId = userId === b.mentorId ? b.researcherId : b.mentorId;
+  const when = new Date(b.slot).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  pushNotif(otherId, {
+    type: 'mentor',
+    title: `Mentoring call cancelled`,
+    body: `${canceller?.name || 'Someone'} cancelled the ${when} call.`,
+    link: userId === b.mentorId ? '/researcher/calendar' : '/researcher/mentors',
+  });
+  recordAudit(canceller, 'cancel_mentor_booking', `${bookingId} (${b.slot})`);
+  schedulePersist();
+  return bookingView(b);
 }
 
 // --- audit log + backup export ---------------------------------------------

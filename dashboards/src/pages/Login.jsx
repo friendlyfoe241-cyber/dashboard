@@ -17,6 +17,7 @@ const DEMO_ACCOUNTS = [
   { label: 'Lead researcher', email: 'sam@example.com' },
   { label: 'Associate researcher', email: 'jordan@example.com' },
   { label: 'Independent researcher', email: 'testindependent@synthica.org' },
+  { label: 'Expertise mentor', email: 'testmentor@synthica.org' },
 ];
 
 export default function Login() {

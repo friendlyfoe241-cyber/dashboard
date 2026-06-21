@@ -269,4 +269,20 @@ export const api = {
   getSettings: () => request('/editor/settings'),
   setWebhook: (discordWebhookUrl) => request('/editor/settings', { method: 'PUT', body: { discordWebhookUrl } }),
   testWebhook: () => request('/editor/settings/test', { method: 'POST' }),
+
+  // Expertise mentors (ROLE_WORKFLOWS §7)
+  // Directory + booking (any researcher):
+  mentors: (specialty) => request(`/mentors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''}`),
+  mentorSpecialties: () => request('/mentors/specialties'),
+  mentor: (id) => request(`/mentors/${id}`),
+  bookMentor: (id, body) => request(`/mentors/${id}/book`, { method: 'POST', body }),
+  myMentorBookings: () => request('/me/mentor-bookings'),
+  cancelMentorBooking: (id) => request(`/mentor-bookings/${id}/cancel`, { method: 'POST' }),
+  // Mentor self-service (mentor's own dashboard):
+  mentorDashboard: () => request('/mentor/dashboard'),
+  setMentorProfile: (body) => request('/mentor/profile', { method: 'PUT', body }),
+  mentorAvailability: () => request('/mentor/dashboard'),
+  setMentorAvailability: (body) => request('/mentor/availability', { method: 'POST', body }),
+  removeMentorSlot: (slotId) => request(`/mentor/availability/${slotId}`, { method: 'DELETE' }),
+  connectMentorCalendar: (connected) => request('/mentor/calendar-connect', { method: 'POST', body: { connected } }),
 };

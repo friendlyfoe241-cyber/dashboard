@@ -534,6 +534,63 @@ export const researchers = [
     twoFactorEnabled: false,
     following: [],
   },
+  // --- Expertise mentors (ROLE_WORKFLOWS §7) -------------------------------
+  // Subject-matter advisors researchers can book 1:1 calls with. Each carries
+  // specialties + a mentor bio + future availability slots (built below).
+  researcher('Dr. Maya Chen', 'maya', [RESEARCHER_TAGS.EXPERTISE_MENTOR], {
+    affiliations: ['Stanford University'],
+    institution: 'Stanford University',
+    pronouns: 'she/her',
+    blurb: 'Computational biologist — happy to talk stats & study design 🧬',
+    bio: 'PhD in computational biology. I mentor students on experimental design and getting real signal out of noisy biological data.',
+    specialties: ['Biology', 'Statistics', 'Python'],
+    mentorBio: 'I help early researchers turn a vague hypothesis into a tractable study, and demystify the statistics so your results actually hold up. Bring your data — or just your questions.',
+    interests: ['computational biology', 'statistics'],
+  }),
+  researcher('Prof. Omar Haddad', 'omar', [RESEARCHER_TAGS.EXPERTISE_MENTOR], {
+    affiliations: ['MIT'],
+    institution: 'MIT',
+    pronouns: 'he/him',
+    blurb: 'ML researcher — model design, papers, and getting unstuck 🤖',
+    bio: 'I work on machine learning systems and love helping students scope an ML project that finishes.',
+    specialties: ['Computer Science', 'Machine Learning', 'Mathematics'],
+    mentorBio: 'Stuck on a model that won’t train, or unsure how to frame your CS project for a paper? Book a call and we’ll work through it together.',
+    interests: ['machine learning', 'optimization'],
+  }),
+  // A demo mentor account with @synthica.org credentials for easy sign-in, and
+  // a researcher who ALSO mentors (Casey already holds two tags) is set below.
+  {
+    id: id('usr'),
+    name: 'Test Expertise Mentor',
+    username: 'testmentor',
+    password: DEMO_PASSWORD,
+    kind: 'researcher',
+    tags: [RESEARCHER_TAGS.EXPERTISE_MENTOR],
+    email: 'testmentor@synthica.org',
+    discord: 'testmentor',
+    resumeUrl: '',
+    gpa: '',
+    researchExperience: 9,
+    leadRecommended: false,
+    pathway: [],
+    slug: 'testmentor',
+    institution: 'UC Berkeley',
+    affiliations: ['UC Berkeley'],
+    bio: 'Psychology researcher mentoring on study design and writing.',
+    blurb: 'Psych researcher — study design, surveys, and academic writing ✍️',
+    specialties: ['Psychology', 'Statistics', 'Academic Writing'],
+    mentorBio: 'I mentor on survey design, research ethics, and turning a messy first draft into a paper editors take seriously.',
+    avatarUrl: '',
+    interests: ['psychology', 'writing'],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+  },
 ];
 
 const leadId = researchers[0].id;
@@ -548,6 +605,31 @@ const coralProjectId = id('proj');
 const coralListingId = id('list');
 const coralQ1 = id('q');
 const coralQ2 = id('q');
+
+// Casey already leads a chapter + is an associate researcher — give them the
+// mentor tag too, so a multi-tag account also reaches the mentor dashboard.
+researchers[4].tags = [...new Set([...researchers[4].tags, RESEARCHER_TAGS.EXPERTISE_MENTOR])];
+researchers[4].specialties = ['Chemistry', 'Lab Safety', 'Data Analysis'];
+researchers[4].mentorBio = 'Chapter leader and lab veteran — ask me about running safe experiments and presenting your data clearly.';
+
+// Build future-dated availability slots for the mentors so the directory always
+// shows bookable times. Slots are at 16:00 UTC on the next several weekdays.
+function mentorSlots(dayOffsets, hour = 16) {
+  return dayOffsets.map((d) => {
+    const dt = new Date();
+    dt.setUTCHours(hour, 0, 0, 0);
+    dt.setUTCDate(dt.getUTCDate() + d);
+    return { id: id('slot'), slot: dt.toISOString(), booked: false };
+  });
+}
+researchers.find((r) => r.username === 'maya').availability = mentorSlots([2, 3, 5, 7], 15);
+researchers.find((r) => r.username === 'omar').availability = mentorSlots([1, 4, 6], 18);
+researchers.find((r) => r.username === 'testmentor').availability = mentorSlots([2, 4, 8], 17);
+researchers[4].availability = mentorSlots([3, 6], 14); // Casey
+
+// In-app mentor bookings (researcher ↔ mentor 1:1 calls). Seeded empty; created
+// at runtime when a researcher books a slot.
+export const mentorBookings = [];
 
 // task(title, type, assignedTo, status, opts)
 function task(title, type, assignedTo, status, opts = {}) {
