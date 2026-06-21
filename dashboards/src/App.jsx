@@ -12,6 +12,7 @@ const Verify = lazy(() => import('./pages/Verify.jsx'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
 const EditorApp = lazy(() => import('./pages/editor/EditorApp.jsx'));
+const ModeratorApp = lazy(() => import('./pages/moderator/ModeratorApp.jsx'));
 const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
 const Archive = lazy(() => import('./pages/Archive.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
