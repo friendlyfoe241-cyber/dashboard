@@ -83,6 +83,13 @@ function recordAudit(actor, action, detail) {
   });
 }
 
+// Audit a review-pipeline decision (every decision is logged for traceability,
+// per JOURNAL_PIPELINE §6.6/§12). `stageName` is a human-readable stage label.
+function auditDecision(sub, editorId, stageName, decision) {
+  const verb = decision === 'approve' ? 'approved' : 'rejected';
+  recordAudit(getEditorById(editorId), 'paper_decision', `${stageName} ${verb} ${sub.id} "${sub.title}"`);
+}
+
 // Assign reviewers to any submission sitting in the review stage without them
 // (covers fresh seed data and rows imported from the Google Form).
 function assignPendingReviewers() {
@@ -811,20 +818,30 @@ export function papersForEditor(editorId) {
       case EDITOR_ROLES.REVIEWS: {
         // Reviews editors see the paper single-blind (no author identity).
         const anon = anonymizeForReviews(s);
+        const coReview = raw.reviews.find((r) => r.editorId !== editorId && raw.assignedReviewers.includes(r.editorId));
         if (raw.stage === STAGE.REVIEW && raw.assignedReviewers.includes(editorId)) {
-          const coReview = raw.reviews.find((r) => r.editorId !== editorId);
-          inbox.push({ ...anon, myReview: myReview || null, coReviewerDecision: coReview?.decision || null });
+          // Live peer visibility: when the OTHER reviews editor has already
+          // submitted, surface their full decision + feedback + recommendation.
+          inbox.push({
+            ...anon,
+            myReview: myReview || null,
+            coReviewerDecision: coReview?.decision || null,
+            coReview: coReview ? coReviewView(coReview) : null,
+          });
         } else if (raw.assignedReviewers.includes(editorId) && myReview) {
-          archive.push(anon);
+          archive.push({ ...anon, myReview, coReview: coReview ? coReviewView(coReview) : null });
         }
         break;
       }
 
       case EDITOR_ROLES.SENIOR:
+        // Senior screening (§9.2) and final check (§9.4) both need the full
+        // reviews chain — decisions, feedback AND recommendations — so priorFeedback
+        // (decision + comments per editor, role-tagged) goes to both stages.
         if ((raw.stage === STAGE.SENIOR_SCREEN || raw.stage === STAGE.SENIOR_FINAL) && raw.assignee === editorId) {
-          inbox.push({ ...s, reviewerRecommendations: reviewerRecs(raw), feed: buildFeed(raw) });
+          inbox.push({ ...s, reviewerRecommendations: reviewerRecs(raw), priorFeedback: priorFeedback(raw), feed: buildFeed(raw) });
         } else if (raw.assignee === editorId && myReview) {
-          archive.push({ ...s, feed: buildFeed(raw) });
+          archive.push({ ...s, reviewerRecommendations: reviewerRecs(raw), priorFeedback: priorFeedback(raw), feed: buildFeed(raw) });
         }
         break;
 
@@ -851,11 +868,26 @@ function reviewerRecs(sub) {
     .map((r) => ({ editorName: getEditorById(r.editorId)?.name, recommendation: r.recommendation }));
 }
 
+// One reviews editor's submission as the peer reviewer sees it (single-blind:
+// the co-reviewer is identified by role, never by author identity).
+function coReviewView(r) {
+  return {
+    decision: r.decision,
+    comments: r.comments,
+    recommendation: r.recommendation || null,
+    at: r.at,
+  };
+}
+
+// Full prior decision chain, role-tagged so each upstream stage can be labelled
+// (Reviews Editor / Senior Editor). Used by senior, associate and chief views.
 function priorFeedback(sub) {
   return sub.reviews.map((r) => ({
     editorName: getEditorById(r.editorId)?.name,
+    role: getEditorById(r.editorId)?.role || null,
     decision: r.decision,
     comments: r.comments,
+    recommendation: r.recommendation || null,
   }));
 }
 
@@ -935,6 +967,7 @@ export function submitReviewDecision({ paperId, editorId, decision, comments, re
 
   sub.reviews.push({ editorId, decision, comments, recommendation: recommendation || null, at: now() });
   log(sub, { type: 'review', editorId, decision });
+  auditDecision(sub, editorId, 'Reviews Editor', decision);
 
   // Advance only once both assigned reviewers have weighed in.
   const both = sub.assignedReviewers.every((rid) => sub.reviews.some((r) => r.editorId === rid));
@@ -965,6 +998,7 @@ export function seniorDecision({ paperId, editorId, decision, comments }) {
   sub.reviews.push({ editorId, decision, comments, recommendation: null, at: now() });
   const wasScreen = sub.stage === STAGE.SENIOR_SCREEN;
   log(sub, { type: 'senior', editorId, decision });
+  auditDecision(sub, editorId, wasScreen ? 'Senior Editor (screening)' : 'Senior Editor (final)', decision);
 
   if (decision !== 'approve') {
     reject(sub, wasScreen ? STAGE_LABEL[STAGE.ASSOCIATE] : STAGE_LABEL[STAGE.CHIEF]);
@@ -988,6 +1022,7 @@ export function associateRound({ paperId, editorId, note }) {
 
   sub.associateRounds += 1;
   log(sub, { type: 'associate_round', editorId, round: sub.associateRounds, note: note || null });
+  recordAudit(getEditorById(editorId), 'associate_round', `${sub.id} "${sub.title}" — round ${sub.associateRounds}/${ASSOCIATE_TOTAL_ROUNDS}`);
 
   if (sub.associateRounds >= ASSOCIATE_TOTAL_ROUNDS) {
     advance(sub, STAGE.SENIOR_FINAL, { label: STAGE_LABEL[STAGE.SENIOR_FINAL], decision: 'approved' });
@@ -997,12 +1032,14 @@ export function associateRound({ paperId, editorId, note }) {
 }
 
 // Editor-in-chief final approval -> Director's publish queue.
-export function chiefDecision({ paperId, decision, comments }) {
+export function chiefDecision({ paperId, editorId, decision, comments }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   if (sub.stage !== STAGE.CHIEF) throw httpError(409, 'Paper is not awaiting the editor-in-chief');
+  if (!comments?.trim()) throw httpError(400, 'Feedback is required');
 
-  log(sub, { type: 'chief', decision, comments: comments || null });
+  log(sub, { type: 'chief', editorId, decision, comments: comments.trim() });
+  auditDecision(sub, editorId, 'Editor-in-Chief', decision);
   if (decision === 'approve') {
     advance(sub, STAGE.PUBLISHED, { label: STAGE_LABEL[STAGE.PUBLISHED], decision: 'approved' });
   } else {
