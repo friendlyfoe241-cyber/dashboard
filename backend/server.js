@@ -714,8 +714,8 @@ app.get('/api/researcher/my-listings', requireAuth, researcherOnly, wrap((req, r
 }));
 
 app.put('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
-  res.json(store.updateListing({ listingId: req.params.id, leadId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+  const { title, category, spots, description, bannerUrl, lookingFor, customApplication, customQuestions } = req.body || {};
+  res.json(store.updateListing({ listingId: req.params.id, leadId: req.user.id, title, category, spots, description, bannerUrl, lookingFor, customApplication, customQuestions }));
 }));
 
 app.delete('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
@@ -723,8 +723,8 @@ app.delete('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((re
 }));
 
 app.post('/api/researcher/listings', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
-  res.json(store.createListing({ userId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+  const { title, category, spots, description, bannerUrl, lookingFor, projectId, customApplication, customQuestions } = req.body || {};
+  res.json(store.createListing({ userId: req.user.id, title, category, spots, description, bannerUrl, lookingFor, projectId, customApplication, customQuestions }));
 }));
 
 // --- Shared calendar: lead/staff deadlines + due dates ----------------------
@@ -743,8 +743,8 @@ app.delete('/api/events/:id', requireAuth, wrap((req, res) => {
   res.json(store.deleteEvent({ id: req.params.id, userId: req.user.id }));
 }));
 app.post('/api/researcher/projects', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, description } = req.body || {};
-  res.json(store.createProject({ userId: req.user.id, title, category, description }));
+  const { title, category, description, spots, customApplication, customQuestions, publishListing } = req.body || {};
+  res.json(store.createProject({ userId: req.user.id, title, category, description, spots, customApplication, customQuestions, publishListing }));
 }));
 app.get('/api/researcher/listing-applications', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.myListingApplications(req.user.id));
