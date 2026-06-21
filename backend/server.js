@@ -600,7 +600,7 @@ app.post('/api/editor/papers/:id/request-revision', requireAuth, editorOnly, wra
 app.post('/api/editor/papers/:id/chief', requireAuth, editorOnly, wrap((req, res) => {
   if (req.user.role !== EDITOR_ROLES.CHIEF) return res.status(403).json({ error: 'Editor-in-chief only' });
   const { decision, comments } = req.body || {};
-  res.json(store.chiefDecision({ paperId: req.params.id, decision, comments }));
+  res.json(store.chiefDecision({ paperId: req.params.id, editorId: req.user.id, decision, comments }));
 }));
 
 // Director-only views + actions (the platform Admin sees these too).

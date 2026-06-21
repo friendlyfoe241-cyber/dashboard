@@ -4,6 +4,18 @@ import { Modal, Button, Field, Badge } from '../../components/ui.jsx';
 import { Embed, embedSrc } from '../../components/embed.jsx';
 import Icon from '../../components/Icon.jsx';
 
+// Human-readable label for the role that left a decision, so the feedback chain
+// reads clearly (Reviews Editor / Senior Editor / Editor-in-Chief).
+const ROLE_LABEL = {
+  reviews: 'Reviews Editor',
+  senior: 'Senior Editor',
+  associate: 'Associate Editor',
+  chief: 'Editor-in-Chief',
+};
+
+const decisionTone = (d) => (d === 'approve' || d === 'approved' ? 'green' : 'red');
+const decisionWord = (d) => (d === 'approve' || d === 'approved' ? 'approved' : 'declined');
+
 // The "See more" detail view. Renders the paper's extracted info plus the
 // decision controls appropriate to the editor's role.
 export default function PaperModal({ paper, role, onClose, onActed }) {
@@ -25,6 +37,11 @@ export default function PaperModal({ paper, role, onClose, onActed }) {
     }
   };
 
+  // Author identity is hidden from reviews editors (single-blind, §9.1) and
+  // revealed from the Associate stage onward — the backend already strips it
+  // for reviews, this also hides the UI block so nothing renders "null".
+  const showAuthor = role !== 'reviews';
+
   return (
     <Modal title={paper.title} onClose={onClose} wide>
       {error && <div className="login-error">{error}</div>}
@@ -37,7 +54,7 @@ export default function PaperModal({ paper, role, onClose, onActed }) {
         {paper.revisionRequested && <Badge tone="gold">revision requested</Badge>}
       </div>
 
-      <PaperInfo paper={paper} role={role} />
+      <PaperInfo paper={paper} showAuthor={showAuthor} />
 
       <RequestRevision paper={paper} busy={busy} run={run} />
 
@@ -119,7 +136,7 @@ function CommentThread({ paper }) {
         {comments.map((c) => (
           <div key={c.id} className="info-block">
             <div className="row" style={{ gap: '0.4rem' }}>
-              {c.role && <Badge tone="gray">{c.role}</Badge>}
+              {c.role && <Badge tone="gray">{ROLE_LABEL[c.role] || c.role}</Badge>}
               <strong>{c.authorName}</strong>
               <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>
                 {new Date(c.at).toLocaleString()}
@@ -138,22 +155,33 @@ function CommentThread({ paper }) {
 }
 
 // Shared read-only paper details extracted from the submission sheet.
-function PaperInfo({ paper, role }) {
+function PaperInfo({ paper, showAuthor }) {
   return (
     <>
       <p style={{ color: 'var(--body)', lineHeight: 1.6 }}>{paper.abstract}</p>
-      {/* Point of contact — email + Discord — visible to every editor handling it. */}
-      <div className="info-block">
-        <strong>Author:</strong> {paper.authorName}
-        {' · '}
-        <strong>Email:</strong> <a href={`mailto:${paper.authorEmail}`}>{paper.authorEmail}</a>
-        {paper.authorDiscord && (
-          <>
-            {' · '}
-            <strong>Discord:</strong> {paper.authorDiscord}
-          </>
-        )}
-      </div>
+      {/* Author identity — email + Discord — shown from the Associate stage
+          onward. Hidden from reviews editors to keep the screen single-blind. */}
+      {showAuthor ? (
+        <div className="info-block">
+          <strong>Author:</strong> {paper.authorName}
+          {paper.authorEmail && (
+            <>
+              {' · '}
+              <strong>Email:</strong> <a href={`mailto:${paper.authorEmail}`}>{paper.authorEmail}</a>
+            </>
+          )}
+          {paper.authorDiscord && (
+            <>
+              {' · '}
+              <strong>Discord:</strong> {paper.authorDiscord}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="info-block muted">
+          Author identity is hidden at the reviews stage (single-blind review).
+        </div>
+      )}
       <p>
         <a href={paper.pdfUrl} target="_blank" rel="noreferrer">
           <span className="icon-label"><Icon name="file-text" size={16} /> Open paper PDF (Google Drive)</span>
@@ -161,50 +189,33 @@ function PaperInfo({ paper, role }) {
       </p>
       {embedSrc(paper.pdfUrl) && <Embed url={paper.pdfUrl} height={420} title="Paper preview" />}
 
-      {/* Collective activity feed — every layer's votes + comments in order. */}
-      {paper.feed?.length > 0 && (
-        <div className="info-block">
-          <strong>Activity feed</strong>
-          {paper.feed.map((f, i) => (
-            <div key={i} style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-              <div className="row" style={{ gap: '0.4rem' }}>
-                {f.role && <Badge tone="gray">{f.role}</Badge>}
-                {f.decision && <Badge tone={f.decision === 'approve' || f.decision === 'approved' ? 'green' : 'red'}>{f.decision}</Badge>}
-                {f.kind === 'round' && <Badge tone="blue">round {f.round}</Badge>}
-                <span className="muted">{f.editorName}</span>
-                <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>
-                  {new Date(f.at).toLocaleDateString()}
-                </span>
-              </div>
-              {f.comments && <div style={{ marginTop: '0.25rem' }}>{f.comments}</div>}
-              {f.recommendation && (
-                <div className="muted" style={{ marginTop: '0.2rem' }}>↑ {f.recommendation}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Reviewer recommendations shown to senior/associate/chief. */}
-      {paper.reviewerRecommendations?.length > 0 && (
-        <div className="info-block">
-          <strong>Reviews editors' recommendations</strong>
-          {paper.reviewerRecommendations.map((r, i) => (
-            <div key={i} className="muted" style={{ marginTop: '0.3rem' }}>
-              {r.editorName}: {r.recommendation}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Full prior feedback for associate + chief. */}
+      {/* Full prior decision chain — role-tagged so senior/associate/chief can
+          read every upstream decision, its feedback and recommendation. */}
       {paper.priorFeedback?.length > 0 && (
         <div className="info-block">
-          <strong>Previous feedback</strong>
+          <strong>Decision history</strong>
           {paper.priorFeedback.map((f, i) => (
-            <div key={i} style={{ marginTop: '0.4rem' }}>
-              <Badge tone={f.decision === 'approve' ? 'green' : 'red'}>{f.decision}</Badge>{' '}
-              <span className="muted">{f.editorName}:</span> {f.comments}
+            <div key={i} style={{ marginTop: '0.5rem', paddingTop: i ? '0.5rem' : 0, borderTop: i ? '1px solid var(--border)' : 'none' }}>
+              <div className="row" style={{ gap: '0.4rem' }}>
+                {f.role && <Badge tone="gray">{ROLE_LABEL[f.role] || f.role}</Badge>}
+                <Badge tone={decisionTone(f.decision)}>{decisionWord(f.decision)}</Badge>
+                <span className="muted">{f.editorName}</span>
+              </div>
+              {f.comments && <div style={{ marginTop: '0.25rem' }}>{f.comments}</div>}
+              {f.recommendation && <div className="muted" style={{ marginTop: '0.2rem' }}>↑ Recommendation: {f.recommendation}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Associate revision rounds + the chief's call (anything not already in
+          priorFeedback) — keeps the chronological collaboration trail visible. */}
+      {paper.feed?.some((f) => f.kind === 'round') && (
+        <div className="info-block">
+          <strong>Revision rounds</strong>
+          {paper.feed.filter((f) => f.kind === 'round').map((f, i) => (
+            <div key={i} className="muted" style={{ marginTop: '0.3rem' }}>
+              <Badge tone="blue">round {f.round}</Badge> {f.editorName}{f.comments ? ` — ${f.comments}` : ''}
             </div>
           ))}
         </div>
@@ -213,18 +224,40 @@ function PaperInfo({ paper, role }) {
   );
 }
 
+// One reviews editor's submitted decision, shown to the peer reviewer (live
+// peer visibility, §5/§9.1) and on the senior's screen via priorFeedback.
+function PeerReviewBlock({ coReview }) {
+  if (!coReview) {
+    return <p className="muted">The other reviews editor hasn’t submitted yet — their decision is <Badge tone="gray">pending</Badge>.</p>;
+  }
+  return (
+    <div className="info-block">
+      <div className="row" style={{ gap: '0.4rem' }}>
+        <strong>Other reviews editor</strong>
+        <Badge tone={decisionTone(coReview.decision)}>{decisionWord(coReview.decision)}</Badge>
+      </div>
+      {coReview.comments && <div style={{ marginTop: '0.3rem' }}>{coReview.comments}</div>}
+      {coReview.recommendation && <div className="muted" style={{ marginTop: '0.2rem' }}>↑ Recommendation: {coReview.recommendation}</div>}
+    </div>
+  );
+}
+
 // --- Reviews editor: feedback + recommendation (rec only when approving) -----
 function ReviewsForm({ paper, busy, run }) {
   const [comments, setComments] = useState('');
   const [recommendation, setRecommendation] = useState('');
 
+  // Already decided → read-only summary + the peer's decision (visible in History).
   if (paper.myReview) {
     return (
-      <p className="muted">
-        You already submitted your decision (
-        <Badge tone={paper.myReview.decision === 'approve' ? 'green' : 'red'}>{paper.myReview.decision}</Badge>). The
-        paper advances only when both reviews editors approve.
-      </p>
+      <div>
+        <p className="muted">
+          You submitted your decision (
+          <Badge tone={decisionTone(paper.myReview.decision)}>{decisionWord(paper.myReview.decision)}</Badge>). A paper
+          advances only when both reviews editors approve.
+        </p>
+        <PeerReviewBlock coReview={paper.coReview} />
+      </div>
     );
   }
 
@@ -233,19 +266,12 @@ function ReviewsForm({ paper, busy, run }) {
 
   return (
     <>
-      {paper.coReviewerDecision && (
-        <p className="muted">
-          The other reviews editor has{' '}
-          <Badge tone={paper.coReviewerDecision === 'approve' ? 'green' : 'red'}>
-            {paper.coReviewerDecision === 'approve' ? 'approved' : 'declined'}
-          </Badge>{' '}
-          this paper.
-        </p>
-      )}
+      <h4 style={{ margin: '0 0 0.5rem' }}>Your decision</h4>
+      <PeerReviewBlock coReview={paper.coReview} />
       <Field label="Feedback (required)">
         <textarea value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Comments on the paper…" />
       </Field>
-      <Field label="Recommendation to move it up (required only when approving)">
+      <Field label="Recommendation to advance (required only when approving)">
         <textarea
           value={recommendation}
           onChange={(e) => setRecommendation(e.target.value)}
@@ -263,12 +289,16 @@ function ReviewsForm({ paper, busy, run }) {
   );
 }
 
-// --- Senior editor: same as reviews, no recommendation ----------------------
+// --- Senior editor: screening + final check (feedback only, no recommendation) ---
 function SeniorForm({ paper, busy, run }) {
   const [comments, setComments] = useState('');
   const submit = (decision) => run(() => api.senior(paper.id, { decision, comments }));
   return (
     <>
+      <h4 style={{ margin: '0 0 0.5rem' }}>Your decision</h4>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Approving sends the paper forward; rejecting declines it and notifies the Director. The full reviews chain is shown above.
+      </p>
       <Field label="Feedback (required)">
         <textarea value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Your assessment…" />
       </Field>
@@ -286,23 +316,28 @@ function SeniorForm({ paper, busy, run }) {
 // --- Associate editor: log revision rounds (2 total) ------------------------
 function AssociateForm({ paper, busy, run }) {
   const [note, setNote] = useState('');
-  const done = paper.associateRounds >= 2;
+  const rounds = paper.associateRounds || 0;
+  const done = rounds >= 2;
+  const isFinalRound = rounds + 1 >= 2;
   return (
     <>
+      <h4 style={{ margin: '0 0 0.5rem' }}>Revision rounds</h4>
       <div className="info-block">
-        <strong>Revision rounds:</strong> {paper.associateRounds} of 2 completed
+        <strong>{rounds} of 2 rounds completed</strong>
         <div className="progress" style={{ marginTop: '0.5rem' }}>
-          <span style={{ width: `${(paper.associateRounds / 2) * 100}%` }} />
+          <span style={{ width: `${(rounds / 2) * 100}%` }} />
         </div>
       </div>
-      <p className="muted">Contact the author at the email above to run each revision round.</p>
-      {!done && (
+      <p className="muted">Email the author (shown above) to run each revision round, then log it here. No approve/reject at this stage — it’s a collaboration step.</p>
+      {done ? (
+        <p className="muted">Both rounds complete — this paper has moved to the senior editor’s final check.</p>
+      ) : (
         <>
           <Field label="Round note (optional)">
             <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What changed this round?" />
           </Field>
           <Button disabled={busy} onClick={() => run(() => api.associateRound(paper.id, { note }))}>
-            Mark round {paper.associateRounds + 1} complete
+            {isFinalRound ? 'Complete final round & send to senior editor' : `Complete round ${rounds + 1}`}
           </Button>
         </>
       )}
@@ -310,19 +345,23 @@ function AssociateForm({ paper, busy, run }) {
   );
 }
 
-// --- Editor-in-chief: final sign-off ----------------------------------------
+// --- Editor-in-chief: final sign-off (feedback required) --------------------
 function ChiefForm({ paper, busy, run }) {
   const [comments, setComments] = useState('');
   const submit = (decision) => run(() => api.chief(paper.id, { decision, comments }));
   return (
     <>
-      <Field label="Final notes (optional)">
-        <textarea value={comments} onChange={(e) => setComments(e.target.value)} />
+      <h4 style={{ margin: '0 0 0.5rem' }}>Final sign-off</h4>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Approving sends the paper to the Director’s publish queue. The full history is shown above.
+      </p>
+      <Field label="Feedback (required)">
+        <textarea value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Your final assessment…" />
       </Field>
       <DecisionButtons
         busy={busy}
-        canApprove
-        canReject
+        canApprove={comments.trim()}
+        canReject={comments.trim()}
         approveLabel="Approve for publication"
         onApprove={() => submit('approve')}
         onReject={() => submit('reject')}

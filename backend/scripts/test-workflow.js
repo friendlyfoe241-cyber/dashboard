@@ -46,7 +46,7 @@ console.log('Path A — full acceptance to publication');
   ok(r2.stage === 'senior_final', '2 associate rounds -> senior_final');
   store.seniorDecision({ paperId: pid, editorId: senior.id, decision: 'approve', comments: 'ok' });
   ok(stageOf(pid) === 'chief', 'senior final approve -> chief');
-  store.chiefDecision({ paperId: pid, decision: 'approve' });
+  store.chiefDecision({ paperId: pid, editorId: chief.id, decision: 'approve', comments: 'Accept — strong result.' });
   ok(store.directorView().toPublish.some((p) => p.id === pid), 'chief approve -> director publish queue');
   const pubCount = store.listPublications().length;
   store.publishToJournal({ paperId: pid });
@@ -89,7 +89,7 @@ console.log('Path E — chief rejects at the end');
   store.associateRound({ paperId: pid, editorId: assoc.id });
   store.associateRound({ paperId: pid, editorId: assoc.id });
   store.seniorDecision({ paperId: pid, editorId: senior.id, decision: 'approve', comments: 'ok' });
-  const res = store.chiefDecision({ paperId: pid, decision: 'reject' });
+  const res = store.chiefDecision({ paperId: pid, editorId: chief.id, decision: 'reject', comments: 'Not ready — methodology gaps.' });
   ok(res.stage === 'rejected', 'chief reject at the end -> rejected');
 }
 

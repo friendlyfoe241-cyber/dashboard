@@ -10,25 +10,54 @@ import Icon from '../../components/Icon.jsx';
 
 const CAN_POST_NEWS = ['senior', 'chief', 'director'];
 
-const ROLE_TITLE = {
-  reviews: 'Reviews Editor Queue',
-  senior: 'Senior Editor Queue',
-  associate: 'Associate Editor Queue',
-  chief: 'Editor-in-Chief Queue',
-  director: 'Director Queue',
-};
-
-const ROLE_SUB = {
-  reviews: 'Two reviews editors must both approve before a paper advances.',
-  senior: 'Screen incoming papers and run the final check before the editor-in-chief.',
-  associate: 'Work revision rounds with authors — two rounds per paper.',
-  chief: 'Give papers their final sign-off before they reach the Director.',
-  director: 'Oversight of every paper in the pipeline.',
+// Per-tier framing: each editor role sees a dedicated queue explaining its job
+// in the pipeline (JOURNAL_PIPELINE §9).
+const TIERS = {
+  reviews: {
+    title: 'Reviews Editor — screening queue',
+    sub: 'First-pass screening. Two reviews editors read each paper single-blind; it only advances when you BOTH approve.',
+    job: [
+      'Read the paper and leave feedback (always required).',
+      'Approve and add a recommendation, or reject.',
+      'You can see the other reviews editor’s call live once they submit.',
+    ],
+    queueLabel: 'Papers awaiting your review',
+  },
+  senior: {
+    title: 'Senior Editor — quality checks',
+    sub: 'You run two checks: screening right after the reviews editors, and the final check after the associate’s revision rounds.',
+    job: [
+      'Screening: read both reviews decisions, then approve to send to an associate editor — or reject.',
+      'Final check: read the full feedback chain and the author’s details, then approve to send to the editor-in-chief — or reject.',
+      'Feedback is required; no recommendation needed at this stage.',
+    ],
+    queueLabel: 'Papers awaiting a senior decision',
+  },
+  associate: {
+    title: 'Associate Editor — author collaboration',
+    sub: 'You work directly with the author across two revision rounds. This is a collaboration stage, not a gate — there is no approve/reject here.',
+    job: [
+      'Contact the author (email shown on the paper) and run each revision round.',
+      'Log each completed round; the counter tracks 1 → 2.',
+      'After the second round the paper moves to the senior editor’s final check.',
+    ],
+    queueLabel: 'Papers in revision with you',
+  },
+  chief: {
+    title: 'Editor-in-Chief — final sign-off',
+    sub: 'The final scientific decision. Approve to hand the paper to the Director for publication, or reject.',
+    job: [
+      'Review the full history — every prior decision and round.',
+      'Approve with feedback to send it to the Director’s publish queue, or reject with feedback.',
+    ],
+    queueLabel: 'Papers awaiting your sign-off',
+  },
 };
 
 export default function EditorDashboard() {
   const { user } = useAuth();
   const toast = useToast();
+  const tier = TIERS[user.role];
   const [data, setData] = useState({ inbox: [], archive: [] });
   const [active, setActive] = useState(null); // paper open in modal
   const [error, setError] = useState('');
@@ -76,11 +105,33 @@ export default function EditorDashboard() {
 
   if (loading) return <p className="muted">Loading your queue…</p>;
 
+  // Directors / demo accounts have no personal review queue — point them to the desk.
+  if (!tier) {
+    return (
+      <div>
+        <h1 className="page-title">Editorial overview</h1>
+        <p className="page-sub">Your account isn’t a category editor, so you don’t have a personal review queue.</p>
+        <NewsFeed />
+        {CAN_POST_NEWS.includes(user.role) && <NewsPoster />}
+        <EmptyState>Head to the <strong>Director Desk</strong> to email authors and publish accepted papers.</EmptyState>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1 className="page-title">{ROLE_TITLE[user.role] || 'My Queue'}</h1>
-      <p className="page-sub">{ROLE_SUB[user.role]}</p>
+      <h1 className="page-title">{tier.title}</h1>
+      <p className="page-sub">{tier.sub}</p>
       {error && <div className="login-error">{error}</div>}
+
+      <div className="info-block" style={{ marginBottom: '1rem' }}>
+        <strong>Your job at this stage</strong>
+        <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+          {tier.job.map((line, i) => (
+            <li key={i} style={{ marginTop: i ? '0.25rem' : 0 }}>{line}</li>
+          ))}
+        </ul>
+      </div>
 
       <NewsFeed />
       {CAN_POST_NEWS.includes(user.role) && <NewsPoster />}
@@ -101,7 +152,7 @@ export default function EditorDashboard() {
       </div>
 
       <h2 className="section-title" style={{ marginBottom: '0.75rem' }}>
-        To review <Badge tone="gray">{inbox.length}</Badge>
+        {tier.queueLabel} <Badge tone="gray">{inbox.length}</Badge>
       </h2>
       {inbox.length === 0 ? (
         <EmptyState>{query ? 'No papers match your search.' : <>Nothing waiting on you right now. <Icon name="party" size={16} /></>}</EmptyState>
@@ -144,11 +195,19 @@ function PaperCard({ paper, role, archived, onOpen }) {
       </p>
 
       {/* Reviews editor: surface the co-reviewer's decision when present. */}
-      {role === 'reviews' && !archived && paper.coReviewerDecision && (
+      {role === 'reviews' && paper.coReviewerDecision && (
         <p className="muted" style={{ marginBottom: '0.6rem' }}>
           Co-reviewer:{' '}
           <Badge tone={paper.coReviewerDecision === 'approve' ? 'green' : 'red'}>
             {paper.coReviewerDecision === 'approve' ? 'approved' : 'declined'}
+          </Badge>
+        </p>
+      )}
+      {role === 'reviews' && archived && paper.myReview && (
+        <p className="muted" style={{ marginBottom: '0.6rem' }}>
+          Your call:{' '}
+          <Badge tone={paper.myReview.decision === 'approve' ? 'green' : 'red'}>
+            {paper.myReview.decision === 'approve' ? 'approved' : 'declined'}
           </Badge>
         </p>
       )}
