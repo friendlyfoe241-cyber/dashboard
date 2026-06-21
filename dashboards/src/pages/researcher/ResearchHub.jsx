@@ -2,32 +2,35 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
-import { Card, Badge, Button, Field, EmptyState } from '../../components/ui.jsx';
+import { Card, Badge, Button, Field, EmptyState, Modal } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { imageSrc } from '../../files.js';
 import { Pfp } from '../../components/ui.jsx';
-import Icon from '../../components/Icon.jsx';
 
 // Browse all open project listings; apply to one. Leads can post listings.
+// Applying respects a listing's custom-application setting (ROLE_WORKFLOWS §5.4):
+// profile-only with a short message, or extra Lead-defined questions.
 export default function ResearchHub() {
   const { user } = useAuth();
   const isLead = (user?.tags || []).includes('lead_researcher');
   const [listings, setListings] = useState([]);
+  const [myApps, setMyApps] = useState([]);
   const [filter, setFilter] = useState('All');
-  const [applied, setApplied] = useState({});
+  const [applying, setApplying] = useState(null); // listing being applied to
   const [error, setError] = useState('');
 
-  const load = useCallback(() => api.listings().then(setListings).catch((e) => setError(e.message)), []);
+  const load = useCallback(() => {
+    api.listings().then(setListings).catch((e) => setError(e.message));
+    api.myApplications().then(setMyApps).catch(() => {});
+  }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Map listingId → application status so cards reflect real state on reload.
+  const statusByListing = {};
+  for (const a of myApps) if (a.listingId) statusByListing[a.listingId] = a.status;
 
   const categories = ['All', ...new Set(listings.map((l) => l.category))];
   const shown = filter === 'All' ? listings : listings.filter((l) => l.category === filter);
-
-  const apply = (listing) =>
-    api
-      .apply({ listingId: listing.id, message: `Interested in ${listing.title}` })
-      .then(() => setApplied((a) => ({ ...a, [listing.id]: true })))
-      .catch((e) => setError(e.message));
 
   return (
     <div>
@@ -35,7 +38,7 @@ export default function ResearchHub() {
       <p className="page-sub">Every open project listing across Synthica — find one and apply.</p>
       <div className="info-block" style={{ marginBottom: '1rem' }}>
         {user?.resumeUrl
-          ? <span className="icon-label"><Icon name="paperclip" size={16} /> Your résumé is attached automatically when you apply.</span>
+          ? '📎 Your résumé is attached automatically when you apply.'
           : <>No résumé on file — <Link to="/researcher/tools">add one in Tools</Link> to auto-apply.</>}
       </div>
       {error && <div className="login-error">{error}</div>}
@@ -60,46 +63,150 @@ export default function ResearchHub() {
       ) : (
         <div className="grid grid-3">
           {shown.map((l) => (
-            <Card key={l.id} className="paper-card listing-card">
-              {l.bannerUrl && <img className="listing-banner" src={imageSrc(l.bannerUrl)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
-              <div className="card-row">
-                <Badge>{l.category}</Badge>
-                <span className="muted">{Math.max(0, (l.spots || 0) - Math.max(0, (l.filled || 1) - 1))} of {l.spots} spot{l.spots === 1 ? '' : 's'} open</span>
-              </div>
-              <h3>{l.title}</h3>
-              <p className="muted" style={{ marginBottom: '0.6rem' }}>{l.description}</p>
-              {l.lookingFor && (
-                <div className="row" style={{ gap: '0.3rem', marginBottom: '0.6rem' }}>
-                  <span className="muted" style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Looking for</span>
-                  {l.lookingFor.split(',').map((t) => t.trim()).filter(Boolean).map((t) => <Badge key={t} tone="gold">{t}</Badge>)}
-                </div>
-              )}
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="pfp-stack" title={(l.team || []).map((t) => t.name).join(', ')}>
-                  {(l.team || []).slice(0, 5).map((t) => (
-                    <Pfp key={t.id} name={t.name} url={imageSrc(t.avatarUrl)} size="xs" />
-                  ))}
-                  {(l.team || []).length > 5 && <span className="pfp pfp-xs pfp-more">+{l.team.length - 5}</span>}
-                  <span className="muted" style={{ marginLeft: '0.45rem', fontSize: '0.78rem' }}>{l.filled || 1} on board</span>
-                </span>
-                {l.leadId === user.id ? (
-                  <Badge tone="gold">Your listing</Badge>
-                ) : (
-                  <Button
-                    className="btn-sm"
-                    disabled={applied[l.id]}
-                    onClick={() => apply(l)}
-                    variant={applied[l.id] ? 'ghost' : 'primary'}
-                  >
-                    {applied[l.id] ? <span className="icon-label"><Icon name="check" size={14} /> Applied</span> : 'Apply'}
-                  </Button>
-                )}
-              </div>
-            </Card>
+            <ListingCard
+              key={l.id}
+              listing={l}
+              isMine={l.leadId === user.id}
+              status={statusByListing[l.id]}
+              onApply={() => setApplying(l)}
+            />
           ))}
         </div>
       )}
+
+      {applying && (
+        <ApplyModal
+          listing={applying}
+          onClose={() => setApplying(null)}
+          onApplied={() => { setApplying(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// One listing tile + its apply state. A listing's `customQuestions` (added by the
+// Lead) only changes the apply modal, not the card.
+function ListingCard({ listing: l, isMine, status, onApply }) {
+  const spotsOpen = Math.max(0, (l.spots || 0) - Math.max(0, (l.filled || 1) - 1));
+  const hasQuestions = Array.isArray(l.customQuestions) && l.customQuestions.length > 0;
+  return (
+    <Card className="paper-card listing-card">
+      {l.bannerUrl && <img className="listing-banner" src={imageSrc(l.bannerUrl)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+      <div className="card-row">
+        <Badge>{l.category}</Badge>
+        <span className="muted">{spotsOpen} of {l.spots} spot{l.spots === 1 ? '' : 's'} open</span>
+      </div>
+      <h3>{l.title}</h3>
+      <p className="muted" style={{ marginBottom: '0.6rem' }}>{l.description}</p>
+      {l.lookingFor && (
+        <div className="row" style={{ gap: '0.3rem', marginBottom: '0.6rem' }}>
+          <span className="muted" style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Looking for</span>
+          {l.lookingFor.split(',').map((t) => t.trim()).filter(Boolean).map((t) => <Badge key={t} tone="gold">{t}</Badge>)}
+        </div>
+      )}
+      {hasQuestions && !isMine && !status && (
+        <p className="muted" style={{ fontSize: '0.74rem', marginBottom: '0.6rem' }}>📝 A few questions to answer</p>
+      )}
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <span className="pfp-stack" title={(l.team || []).map((t) => t.name).join(', ')}>
+          {(l.team || []).slice(0, 5).map((t) => (
+            <Pfp key={t.id} name={t.name} url={imageSrc(t.avatarUrl)} size="xs" />
+          ))}
+          {(l.team || []).length > 5 && <span className="pfp pfp-xs pfp-more">+{l.team.length - 5}</span>}
+          <span className="muted" style={{ marginLeft: '0.45rem', fontSize: '0.78rem' }}>{l.filled || 1} on board</span>
+        </span>
+        {isMine ? (
+          <Badge tone="gold">Your listing</Badge>
+        ) : status === 'approved' ? (
+          <Badge tone="green">✓ Accepted</Badge>
+        ) : status === 'rejected' ? (
+          <Badge tone="red">Not selected</Badge>
+        ) : status === 'pending' ? (
+          <Badge tone="gray">Applied ✓</Badge>
+        ) : (
+          <Button className="btn-sm" onClick={onApply}>Apply</Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// Apply to a listing. Profile-only by default (a short message); if the Lead set
+// custom questions on the listing, those are required here too (ROLE_WORKFLOWS §5.4).
+function ApplyModal({ listing, onClose, onApplied }) {
+  const toast = useToast();
+  const { user } = useAuth();
+  const questions = Array.isArray(listing.customQuestions) ? listing.customQuestions : [];
+  const [message, setMessage] = useState('');
+  const [answers, setAnswers] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const setAns = (key) => (e) => setAnswers((a) => ({ ...a, [key]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.apply({
+        listingId: listing.id,
+        message: message.trim() || `Interested in ${listing.title}`,
+        answers: questions.length ? answers : undefined,
+      });
+      toast.success('Application sent');
+      onApplied();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Apply — ${listing.title}`} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="info-block" style={{ marginBottom: '0.85rem' }}>
+          <div style={{ fontWeight: 600 }}>{user?.name}</div>
+          <div className="muted" style={{ fontSize: '0.8rem' }}>
+            {user?.institution ? `${user.institution} · ` : ''}
+            {user?.resumeUrl
+              ? <>Your profile and résumé are sent with this application.</>
+              : <>Your profile is sent with this application. <Link to="/researcher/tools">Add a résumé</Link> to include one.</>}
+          </div>
+        </div>
+
+        {questions.length > 0 ? (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>This Lead asks a few questions:</p>
+            {questions.map((q, i) => {
+              const key = q.key || q.label || `q${i}`;
+              return (
+                <Field key={key} label={`${q.label || key}${q.required ? ' *' : ''}`}>
+                  {q.type === 'textarea'
+                    ? <textarea value={answers[key] || ''} onChange={setAns(key)} required={q.required} />
+                    : <input type="text" value={answers[key] || ''} onChange={setAns(key)} required={q.required} />}
+                </Field>
+              );
+            })}
+            <Field label="Anything else? (optional)">
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Add a short note for the Lead…" />
+            </Field>
+          </>
+        ) : (
+          <Field label="Add a short message (optional)">
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Why you'd like to join "${listing.title}"…`} />
+          </Field>
+        )}
+
+        {error && <div className="login-error" style={{ marginBottom: '0.6rem' }}>{error}</div>}
+        <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
+          <Button type="button" variant="ghost" className="btn-sm" onClick={onClose}>Cancel</Button>
+          <Button type="submit" className="btn-sm" disabled={busy}>{busy ? 'Sending…' : 'Submit application'}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -213,7 +320,7 @@ function BannerPreview({ url }) {
   const [bad, setBad] = useState(false);
   useEffect(() => setBad(false), [url]);
   if (!url?.trim()) return null;
-  if (bad) return <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.8rem' }}><span className="icon-label"><Icon name="alert" size={14} /> That image couldn't load — check the URL is a direct image link.</span></p>;
+  if (bad) return <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.8rem' }}>⚠️ That image couldn't load — check the URL is a direct image link.</p>;
   return <img src={imageSrc(url)} alt="Banner preview" onError={() => setBad(true)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 12, margin: '0 0 0.6rem', border: '1px solid var(--border)' }} />;
 }
 
@@ -238,7 +345,7 @@ function LeadTools({ onCreated }) {
           <div className="muted" style={{ fontSize: '0.78rem' }}>Recruit collaborators for one of your projects.</div>
         </div>
         <div className="seg">
-          <button type="button" className={`seg-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}><span className="icon-label"><Icon name="megaphone" size={16} /> Post listing</span></button>
+          <button type="button" className={`seg-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}>📣 Post listing</button>
         </div>
       </div>
       {open && (
