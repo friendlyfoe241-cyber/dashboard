@@ -850,6 +850,25 @@ export function editorWorkload() {
     .sort((a, b) => b.load - a.load);
 }
 
+// Reassignment board: review-stage papers with their two assigned Reviews
+// editors and the other eligible (same-category) reviewers the Director could
+// swap in. Drives the "Reassign a reviews editor" panel on the Director desk.
+export function directorReassignBoard() {
+  return db.submissions
+    .filter((s) => s.stage === STAGE.REVIEW)
+    .map((s) => {
+      const assigned = s.assignedReviewers.map((id) => {
+        const e = getEditorById(id);
+        return { id, name: e?.name || 'Unknown editor', reviewed: s.reviews.some((r) => r.editorId === id), load: loadOf(id) };
+      });
+      const candidates = db.editors
+        .filter((e) => e.role === EDITOR_ROLES.REVIEWS && e.category === s.category && !s.assignedReviewers.includes(e.id))
+        .map((e) => ({ id: e.id, name: e.name, load: loadOf(e.id) }))
+        .sort((a, b) => a.load - b.load);
+      return { paperId: s.id, title: s.title, category: s.category, assigned, candidates };
+    });
+}
+
 // Papers visible to a given editor, scoped by role + category + assignment.
 export function papersForEditor(editorId) {
   const editor = getEditorById(editorId);
@@ -972,11 +991,15 @@ function buildFeed(sub) {
   return entries.sort((a, b) => new Date(a.at) - new Date(b.at));
 }
 
-// Director dashboard: every decision generates an email task; finished papers
-// land in the publish queue.
+// Director dashboard: every decision generates an email task; Chief-approved
+// papers wait in the publish queue until the Director mints a DOI.
+//   toEmail   — every approve/reject decision across all stages (mirror queue)
+//   toPublish — READY_TO_PUBLISH: Chief-approved, not yet published by Director
+//   published — already published (DOI minted, in the Archive) — for reference
 export function directorView() {
   const toEmail = [];
   const toPublish = [];
+  const published = [];
   for (const raw of db.submissions) {
     const s = decorate(raw);
     // "Papers to email": anything that has reached a notify-worthy decision point.
@@ -986,15 +1009,27 @@ export function directorView() {
         title: raw.title,
         authorName: raw.authorName,
         authorEmail: raw.authorEmail,
+        category: raw.category,
         state: note.label,
         decision: note.decision,
         at: note.at,
         emailed: note.emailed || false,
+        emailedAt: note.emailedAt || null,
       });
     }
-    if (raw.stage === STAGE.PUBLISHED) toPublish.push(s);
+    if (raw.stage === STAGE.PUBLISHED) {
+      if (raw.published) {
+        const pub = db.publications.find((p) => p.doi === raw.doi || p.title === raw.title);
+        published.push({ ...s, doi: raw.doi || pub?.doi || null, publishedAt: raw.publishedAt || pub?.publishedAt || null });
+      } else {
+        toPublish.push(s);
+      }
+    }
   }
-  return { toEmail, toPublish };
+  // Newest decisions first so the Director acts on the freshest items up top.
+  toEmail.sort((a, b) => new Date(b.at) - new Date(a.at));
+  published.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+  return { toEmail, toPublish, published };
 }
 
 // --- write API: the workflow engine ---------------------------------------
@@ -1097,21 +1132,29 @@ export function chiefDecision({ paperId, editorId, decision, comments }) {
   return decorate(sub);
 }
 
-// Director marks an email as sent.
+// Director marks an author email as sent — timestamps the decision row.
 export function markEmailed({ paperId, at }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   const note = sub.history.find((h) => h.notifyDirector && h.at === at);
-  if (note) note.emailed = true;
+  if (!note) throw httpError(404, 'No matching decision to mark emailed');
+  if (!note.emailed) {
+    note.emailed = true;
+    note.emailedAt = now();
+  }
   schedulePersist();
-  return true;
+  return { emailedAt: note.emailedAt };
 }
 
 // Director publishes a finished paper into the journal DOI registry (Track 2).
+// Chief approval parks the paper at STAGE.PUBLISHED (READY_TO_PUBLISH); this is
+// the Director's act that mints the DOI, creates the public Publication, and
+// notifies the author + reviewers that the paper is live.
 export function publishToJournal({ paperId, doiSuffix, volume, issue, pages }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   if (sub.stage !== STAGE.PUBLISHED) throw httpError(409, 'Paper is not ready to publish');
+  if (sub.published) throw httpError(409, 'This paper has already been published');
 
   const today = now().slice(0, 10);
   const pub = {
@@ -1148,9 +1191,22 @@ export function publishToJournal({ paperId, doiSuffix, volume, issue, pages }) {
   pub.source = 'editorial';
   pub.verified = true;
   db.publications.push(pub);
+  // Mark the submission published so it leaves the "Papers to publish" queue and
+  // remember the DOI/date for the Director's "Published" reference list.
+  sub.published = true;
+  sub.doi = pub.doi;
+  sub.publishedAt = pub.publishedAt;
   sub.history.push({ at: now(), type: 'published_to_journal', doi: pub.doi });
   recordAudit({ name: 'Director' }, 'publish', `${sub.title} (${pub.doi})`);
   registerDoi(pub); // optional Crossref deposit (no-op unless configured)
+  // The paper is now live in the Archive: tell the author + reviewers and post
+  // to the Discord queue. (Chief approval only announced acceptance.)
+  emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'published' });
+  notifyReviewers(sub, 'A paper you reviewed is now published', `"${sub.title}" · DOI ${pub.doi}`);
+  notifyMove({ title: sub.title, paperId: sub.id, category: sub.category, label: `Published · DOI ${pub.doi}`, decision: 'published' });
+  if (sub.submittedBy) {
+    recordActivity(sub.submittedBy, 'published', `published “${sub.title}” in the Synthica Journal`, '/archive');
+  }
   schedulePersist();
   return pub;
 }
@@ -1472,6 +1528,11 @@ function advance(sub, nextStage, note) {
     sub.assignee = null;
   }
   log(sub, { type: 'advance', to: nextStage, notifyDirector: true, label: note.label, decision: note.decision });
+  // Reaching STAGE.PUBLISHED here means the Chief approved — the paper is
+  // ACCEPTED and now waits on the Director's desk. It only enters the Archive
+  // once the Director mints a DOI in publishToJournal(), which sends the final
+  // "now published" announcement. Keep this step to an acceptance notice.
+  const accepted = nextStage === STAGE.PUBLISHED;
   // Followers see the author's paper move to a later round of publishing.
   const ROUND_NAME = {
     [STAGE.SENIOR_SCREEN]: 'senior editor screening',
@@ -1483,9 +1544,9 @@ function advance(sub, nextStage, note) {
   if (sub.submittedBy) {
     recordActivity(
       sub.submittedBy,
-      nextStage === STAGE.PUBLISHED ? 'published' : 'paper_advance',
+      'paper_advance',
       `advanced their paper “${sub.title}” to ${ROUND_NAME[nextStage] || 'the next round'}`,
-      nextStage === STAGE.PUBLISHED ? '/archive' : `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
+      `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
     );
   }
   notifyMove({
@@ -1493,9 +1554,9 @@ function advance(sub, nextStage, note) {
     paperId: sub.id,
     category: sub.category,
     label: note.label,
-    decision: nextStage === STAGE.PUBLISHED ? 'published' : 'approved',
+    decision: 'approved',
   });
-  if (nextStage === STAGE.PUBLISHED) {
+  if (accepted) {
     emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'published' });
     notifyReviewers(sub, 'A paper you reviewed was approved for publication', `"${sub.title}" · by ${sub.authorName}`);
   } else {
