@@ -11,6 +11,7 @@ import ApplicationHub from './ApplicationHub.jsx';
 import Opportunities from './Opportunities.jsx';
 import Explore from './Explore.jsx';
 import MyProjects from './MyProjects.jsx';
+import IndependentHome from './dashboards/IndependentHome.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
 import Community from './Community.jsx';
@@ -54,10 +55,14 @@ export default function ResearcherApp() {
   // Newly-registered members can't use the app until an auditor assigns a role.
   if (user && user.approved === false) return <PendingApproval />;
 
+  const isIndependent = (user?.tags || []).includes('independent_researcher');
+
   // Grouped, icon-led nav — fewer destinations, related pages folded into hubs
   // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
   const nav = [
     { to: '/researcher', label: 'Home', icon: '🏠', end: true },
+    // Independent Researchers get a dedicated workspace (propose → approval → Pathways).
+    ...(isIndependent ? [{ to: '/researcher/independent', label: 'Independent', icon: '🧭' }] : []),
     { section: 'Community' },
     { to: '/researcher/community', label: 'Community', icon: '📣' },
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
@@ -79,6 +84,7 @@ export default function ResearcherApp() {
       <RoleCongrats />
       <Routes>
         <Route index element={<Dashboard />} />
+        <Route path="independent" element={<IndependentHome />} />
         <Route path="community" element={<Community />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />
