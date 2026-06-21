@@ -6,7 +6,15 @@ import { useAuth } from '../../auth.jsx';
 import { api } from '../../api.js';
 import OnboardingWizard from '../../components/OnboardingWizard.jsx';
 import RolePicker from '../../components/RolePicker.jsx';
-import Dashboard from './Dashboard.jsx';
+
+// Dedicated per-role home dashboards (ROLE_WORKFLOWS §4–8).
+import AssociateHome from './dashboards/AssociateHome.jsx';
+import LeadHome from './dashboards/LeadHome.jsx';
+import IndependentHome from './dashboards/IndependentHome.jsx';
+import ChapterHome from './dashboards/ChapterHome.jsx';
+import MentorHome from './dashboards/MentorHome.jsx';
+
+import Mentors from './Mentors.jsx';
 import ProjectDetail from './ProjectDetail.jsx';
 import ResearchHub from './ResearchHub.jsx';
 import ApplicationHub from './ApplicationHub.jsx';
@@ -48,41 +56,76 @@ function RoleCongrats() {
   );
 }
 
-// Researcher shell — sidebar adapts to the active role view (member, lead, chapter).
+// Researcher shell — every member gets the Member portal; the sidebar grows a
+// dedicated workspace (Lead / Independent / Chapter / Mentor) per researcher
+// tag, scoped via the active view so users always know which hat they're wearing.
 export default function ResearcherApp() {
   const { user } = useAuth();
 
   const demo = user?.allViewsDemo;
   const tags = demo
-    ? ['lead_researcher', 'chapter_leader', 'associate_researcher']
+    ? ['lead_researcher', 'chapter_leader', 'associate_researcher', 'independent_researcher', 'expertise_mentor']
     : (user?.tags || []);
   const isLead = demo || tags.includes('lead_researcher');
+  const isIndependent = demo || tags.includes('independent_researcher');
+  const isChapter = demo || tags.includes('chapter_leader');
+  const isMentor = demo || tags.includes('expertise_mentor');
 
   const nav = [
-    { to: '/researcher', label: 'Home', icon: 'home', end: true, views: ['*'] },
+    // ---- Member portal (every researcher) -------------------------------
+    { to: '/researcher', label: 'Home', icon: 'home', end: true, views: ['researcher'] },
+    { section: 'Community', views: ['researcher'] },
+    { to: '/researcher/community', label: 'Feed', icon: 'megaphone', views: ['researcher'] },
+    { to: '/researcher/messages', label: 'Messages', icon: 'message', views: ['researcher'] },
+    { to: '/researcher/people', label: 'People', icon: 'users', views: ['researcher'] },
+    { to: '/researcher/mentors', label: 'Mentors', icon: 'graduation-cap', views: ['researcher'] },
+    { section: 'Research', views: ['researcher'] },
+    { to: '/researcher/hub', label: 'Research Hub', icon: 'compass', views: ['researcher'] },
+    { to: '/researcher/projects', label: 'My Projects', icon: 'folder', views: ['researcher'] },
+    { to: '/researcher/groups', label: 'Groups', icon: 'flask', views: ['researcher'] },
+    { to: '/researcher/journal', label: 'Journal', icon: 'book-open', views: ['researcher'] },
+    { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['researcher'] },
+    { to: '/researcher/drive', label: 'Drive', icon: 'folder-open', views: ['researcher'] },
+    { section: 'Discover', views: ['researcher'] },
+    { to: '/researcher/apply', label: 'Apply for a role', icon: 'rocket', views: ['researcher'] },
+    { to: '/researcher/programs', label: 'Programs', icon: 'graduation-cap', views: ['researcher'] },
+    { to: '/researcher/competitions', label: 'Competitions', icon: 'party', views: ['researcher'] },
 
+    // ---- Lead workspace -------------------------------------------------
     ...(isLead ? [
+      { to: '/researcher/lead', label: 'Lead hub', icon: 'rocket', end: true, views: ['lead'] },
       { section: 'Lead workspace', views: ['lead'] },
-      { to: '/researcher/hub', label: 'Lead hub', icon: 'rocket', views: ['lead'] },
+      { to: '/researcher/hub', label: 'Listings', icon: 'compass', views: ['lead'] },
       { to: '/researcher/projects', label: 'Projects', icon: 'folder', views: ['lead'] },
       { to: '/researcher/groups', label: 'Groups', icon: 'flask', views: ['lead'] },
-      { to: '/researcher/explore', label: 'Explore', icon: 'globe', views: ['lead'] },
+      { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['lead'] },
     ] : []),
 
-    { section: 'Community', views: ['researcher', 'chapter'] },
-    { to: '/researcher/community', label: 'Feed', icon: 'megaphone', views: ['researcher', 'chapter'] },
-    { to: '/researcher/messages', label: 'Messages', icon: 'message', views: ['researcher', 'chapter'] },
-    { to: '/researcher/people', label: 'People', icon: 'users', views: ['researcher', 'chapter'] },
+    // ---- Independent workspace ------------------------------------------
+    ...(isIndependent ? [
+      { to: '/researcher/independent', label: 'Independent', icon: 'compass', end: true, views: ['independent'] },
+      { section: 'Independent', views: ['independent'] },
+      { to: '/researcher/projects', label: 'My Projects', icon: 'folder', views: ['independent'] },
+      { to: '/researcher/journal', label: 'Journal', icon: 'book-open', views: ['independent'] },
+      { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['independent'] },
+    ] : []),
 
-    { section: 'Research', views: ['researcher', 'chapter'] },
-    { to: '/researcher/projects', label: 'Projects', icon: 'folder', views: ['researcher', 'chapter'] },
-    { to: '/researcher/groups', label: 'Groups', icon: 'flask', views: ['researcher', 'chapter'] },
-    { to: '/researcher/journal', label: 'Journal', icon: 'book-open', views: ['researcher'] },
-    { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['researcher', 'chapter'] },
-    { to: '/researcher/drive', label: 'Drive', icon: 'folder-open', views: ['researcher'] },
+    // ---- Chapter workspace ----------------------------------------------
+    ...(isChapter ? [
+      { to: '/researcher/chapter', label: 'Chapter', icon: 'globe', end: true, views: ['chapter'] },
+      { section: 'Chapter', views: ['chapter'] },
+      { to: '/researcher/community', label: 'Feed', icon: 'megaphone', views: ['chapter'] },
+      { to: '/researcher/people', label: 'People', icon: 'users', views: ['chapter'] },
+      { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['chapter'] },
+    ] : []),
 
-    { section: 'Discover', views: ['researcher'] },
-    { to: '/researcher/explore', label: 'Explore', icon: 'rocket', views: ['researcher'] },
+    // ---- Mentor workspace -----------------------------------------------
+    ...(isMentor ? [
+      { to: '/researcher/mentor', label: 'Mentor desk', icon: 'graduation-cap', end: true, views: ['mentor'] },
+      { section: 'Mentor', views: ['mentor'] },
+      { to: '/researcher/messages', label: 'Messages', icon: 'message', views: ['mentor'] },
+      { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['mentor'] },
+    ] : []),
 
     { spacer: true, views: ['*'] },
     { to: '/archive', label: 'Archive', icon: 'archive', views: ['*'] },
@@ -95,7 +138,15 @@ export default function ResearcherApp() {
       <OnboardingWizard />
       <RolePicker />
       <Routes>
-        <Route index element={<Dashboard />} />
+        {/* Per-role home dashboards */}
+        <Route index element={<AssociateHome />} />
+        <Route path="lead" element={<LeadHome />} />
+        <Route path="independent" element={<IndependentHome />} />
+        <Route path="chapter" element={<ChapterHome />} />
+        <Route path="mentor" element={<MentorHome />} />
+        <Route path="mentors" element={<Mentors />} />
+
+        {/* Shared researcher pages */}
         <Route path="community" element={<Community />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />

@@ -15,6 +15,7 @@ const TAG_LABELS = {
   associate_researcher: 'Associate researcher',
   chapter_leader: 'Chapter leader',
   independent_researcher: 'Independent researcher',
+  expertise_mentor: 'Expertise mentor',
 };
 
 const VIEW_KEY = 'synthica.activeViewId';
@@ -55,6 +56,14 @@ const ALL_DEMO_VIEWS = [
     icon: 'folder-open',
   },
   {
+    id: 'editor-moderator',
+    label: 'Moderator console',
+    description: 'Approve members, roles & proposals',
+    path: '/moderator',
+    kind: 'editor',
+    icon: 'shield',
+  },
+  {
     id: 'editor-admin',
     label: 'Admin',
     description: 'Platform settings',
@@ -65,7 +74,7 @@ const ALL_DEMO_VIEWS = [
   {
     id: 'researcher',
     label: 'Member portal',
-    description: 'Community & research hub',
+    description: 'Find projects, join a team, connect',
     path: '/researcher',
     kind: 'researcher',
     icon: 'home',
@@ -73,18 +82,34 @@ const ALL_DEMO_VIEWS = [
   {
     id: 'lead',
     label: 'Lead researcher',
-    description: 'Projects, listings & team tools',
-    path: '/researcher/hub',
+    description: 'Run your team, recruit & publish',
+    path: '/researcher/lead',
     kind: 'researcher',
     icon: 'rocket',
+  },
+  {
+    id: 'independent',
+    label: 'Independent researcher',
+    description: 'Propose & run solo projects',
+    path: '/researcher/independent',
+    kind: 'researcher',
+    icon: 'compass',
   },
   {
     id: 'chapter',
     label: 'Chapter leader',
     description: 'Your chapter & members',
-    path: '/researcher',
+    path: '/researcher/chapter',
     kind: 'researcher',
     icon: 'globe',
+  },
+  {
+    id: 'mentor',
+    label: 'Expertise mentor',
+    description: 'Advise researchers 1:1',
+    path: '/researcher/mentor',
+    kind: 'researcher',
+    icon: 'graduation-cap',
   },
   {
     id: 'archive',
@@ -142,11 +167,21 @@ export function getAvailableViews(user) {
         icon: 'folder-open',
       });
     }
-    if (isAdmin) {
+    if (isAuditor || isDirector) {
+      views.push({
+        id: 'editor-moderator',
+        label: 'Moderator console',
+        description: 'Approve members, roles & proposals',
+        path: '/moderator',
+        kind: 'editor',
+        icon: 'shield',
+      });
+    }
+    if (isDirector) {
       views.push({
         id: 'editor-admin',
-        label: isAuditor ? 'Auditor console' : 'Admin',
-        description: isAuditor ? 'Applications & moderation' : 'Platform settings',
+        label: 'Admin',
+        description: 'Platform settings',
         path: '/editor/admin',
         kind: 'editor',
         icon: 'settings',
@@ -167,10 +202,20 @@ export function getAvailableViews(user) {
       views.push({
         id: 'lead',
         label: 'Lead researcher',
-        description: 'Projects, listings & team tools',
-        path: '/researcher/hub',
+        description: 'Run your team, recruit & publish',
+        path: '/researcher/lead',
         kind: 'researcher',
         icon: 'rocket',
+      });
+    }
+    if (tags.includes('independent_researcher')) {
+      views.push({
+        id: 'independent',
+        label: 'Independent researcher',
+        description: 'Propose & run solo projects',
+        path: '/researcher/independent',
+        kind: 'researcher',
+        icon: 'compass',
       });
     }
     if (tags.includes('chapter_leader')) {
@@ -178,9 +223,19 @@ export function getAvailableViews(user) {
         id: 'chapter',
         label: 'Chapter leader',
         description: 'Your chapter & members',
-        path: '/researcher',
+        path: '/researcher/chapter',
         kind: 'researcher',
         icon: 'globe',
+      });
+    }
+    if (tags.includes('expertise_mentor')) {
+      views.push({
+        id: 'mentor',
+        label: 'Expertise mentor',
+        description: 'Advise researchers 1:1',
+        path: '/researcher/mentor',
+        kind: 'researcher',
+        icon: 'graduation-cap',
       });
     }
   }
@@ -231,9 +286,20 @@ export function resolveActiveView(views, pathname, userId) {
     return editorMatch || savedView || views.find((v) => v.kind === 'editor') || views[0];
   }
 
+  if (pathname.startsWith('/moderator')) {
+    return views.find((v) => v.id === 'editor-moderator') || savedView
+      || views.find((v) => v.kind === 'editor') || views[0];
+  }
+
   if (pathname.startsWith('/researcher')) {
+    // An exact workspace home (e.g. /researcher/lead) selects that workspace.
+    const exact = views
+      .filter((v) => v.kind === 'researcher' && v.path !== '/researcher')
+      .find((v) => pathname === v.path || pathname.startsWith(`${v.path}/`));
+    if (exact) return exact;
+    // Shared sub-pages (projects, community, calendar…) keep the chosen workspace.
     if (savedView?.kind === 'researcher') return savedView;
-    return views.find((v) => v.id === 'researcher') || savedView || views[0];
+    return views.find((v) => v.id === 'researcher') || views[0];
   }
 
   return savedView || views.find((v) => v.kind !== 'shared') || views[0];

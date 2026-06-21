@@ -2168,10 +2168,6 @@ const APPLICABLE_ROLES = new Set(['Lead Researcher', 'Independent Researcher', '
 
 export function addApplication(app) {
   let answers = null;
-  // Associate researchers join instantly — no application form.
-  if (app.role === 'Associate Researcher') {
-    throw httpError(400, 'Associate Researcher is instant — use “Join as Associate” instead of applying.');
-  }
   // You can't apply to a listing you lead.
   if (app.listingId) {
     const listing = db.listings.find((l) => l.id === app.listingId);
@@ -2800,7 +2796,8 @@ export function registerResearcher({ name, email, discord, password, username, r
     password: hashPassword(password),
     kind: 'researcher',
     tags: [],
-    approved: true,
+    // New members are pending until a Moderator approves them (ROLE_WORKFLOWS §3.1).
+    approved: false,
     onboarded: false,
     rolesIntroSeen: false,
     email: emailTrim,
@@ -2835,6 +2832,18 @@ export function registerResearcher({ name, email, discord, password, username, r
   }
   db.researchers.push(user);
   claimProjectInvites(user);
+  // Surface every new member in the Moderator's onboarding queue (ROLE_WORKFLOWS §3.1).
+  db.applications.push({
+    id: `app_${db.applications.length + 1}`,
+    kind: 'onboarding',
+    userId: user.id,
+    userName: user.name,
+    listingId: null,
+    role: null,
+    message: 'New member sign-up — assign a role',
+    status: 'pending',
+    at: now(),
+  });
   notifyEvent({ title: 'New member', body: `${user.name} joined Synthica.` });
   schedulePersist();
   const { password: _pw, ...safe } = user;
