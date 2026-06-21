@@ -626,6 +626,11 @@ app.get('/api/editor/director/workload', requireAuth, editorOnly, directorOnly, 
   res.json(store.editorWorkload());
 }));
 
+// Review-stage papers + swap candidates that power the reassignment panel.
+app.get('/api/editor/director/reassign', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
+  res.json(store.directorReassignBoard());
+}));
+
 app.post('/api/editor/director/reassign', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
   const { paperId, fromEditorId, toEditorId } = req.body || {};
   res.json(store.reassignReviewer({ paperId, fromEditorId, toEditorId }));
