@@ -3062,6 +3062,31 @@ export function calendarFor(userId) {
   return items.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// Calendar items scoped to a single project: lead-set deadlines on this project
+// plus any dated task due-dates. Powers the project page's Calendar section, so
+// the team sees its own deadlines without the whole-platform feed.
+export function projectEvents(projectId, userId) {
+  const p = getProject(projectId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (!memberOf(p, userId)) throw httpError(403, 'Only team members can view this calendar');
+  const items = [];
+  for (const ev of db.events || []) {
+    if (ev.projectId !== p.id) continue;
+    items.push({
+      id: ev.id, date: ev.dueAt, title: ev.title, kind: ev.type,
+      byName: ev.createdByName, canDelete: ev.createdBy === userId,
+      eventId: ev.id,
+      rsvpable: ['event', 'workshop', 'meetup'].includes(ev.type),
+      rsvpCount: (ev.rsvps || []).length,
+      going: (ev.rsvps || []).includes(userId),
+    });
+  }
+  for (const t of p.tasks || [])
+    if (t.dueAt && !t.done)
+      items.push({ id: `${p.id}:${t.id}`, date: String(t.dueAt).slice(0, 10), title: t.title, kind: 'task', byName: '', canDelete: false });
+  return items.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
 // --- audit log + backup export ---------------------------------------------
 
 export const listAudit = () => [...(db.audit || [])].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 500);

@@ -842,6 +842,11 @@ app.get('/api/researcher/projects/:id/stats', requireAuth, researcherOnly, wrap(
   res.json(store.projectStats(req.params.id));
 }));
 
+// Project-scoped calendar: this project's deadlines + dated task due-dates.
+app.get('/api/researcher/projects/:id/events', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.projectEvents(req.params.id, req.user.id));
+}));
+
 // Project idea board (brainstorm + vote; lead chooses).
 app.post('/api/researcher/projects/:id/ideas', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.addIdea({ projectId: req.params.id, userId: req.user.id, text: (req.body || {}).text }));
