@@ -1906,12 +1906,25 @@ export function digestData() {
 }
 
 export function addApplication(app) {
+  let answers = null;
   // You can't apply to a listing you lead.
   if (app.listingId) {
     const listing = db.listings.find((l) => l.id === app.listingId);
     if (listing && listing.leadId === app.userId) throw httpError(400, "You can't apply to your own listing");
+    // Custom application mode (§5.4): collect the lead's questions and require
+    // an answer to each one marked required, keyed by question id.
+    if (listing && listing.customApplication && (listing.customQuestions || []).length) {
+      answers = {};
+      const given = (app.answers && typeof app.answers === 'object') ? app.answers : {};
+      for (const q of listing.customQuestions) {
+        const a = String(given[q.id] ?? '').trim().slice(0, 1000);
+        if (q.required && !a) throw httpError(400, `Please answer: ${q.label}`);
+        answers[q.id] = a;
+      }
+    }
   }
-  const record = { id: `app_${db.applications.length + 1}`, status: 'pending', at: now(), ...app };
+  const { answers: _rawAnswers, ...rest } = app;
+  const record = { id: `app_${db.applications.length + 1}`, status: 'pending', at: now(), ...rest, answers };
   db.applications.push(record);
   notifyEvent({ title: '📝 New application', body: `${record.userName} applied${record.role ? ` for ${record.role}` : ''}.` });
   schedulePersist();
@@ -3390,15 +3403,48 @@ export function groupsForUser(userId) {
     .map((g) => ({ id: g.id, name: g.name, category: g.category || '', isLeader: g.leaderId === userId }));
 }
 
-export function createListing({ userId, title, category, spots, description, bannerUrl, lookingFor }) {
+// Normalize a lead-defined custom-question list into stable {id,label,required}
+// records. Free-text questions only (the simplest structured field) — capped so
+// a listing can't carry an unbounded form. Empty labels are dropped.
+function cleanCustomQuestions(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((q) => {
+      const label = String((q && (q.label ?? q.question ?? q.text)) || '').trim().slice(0, 200);
+      if (!label) return null;
+      return {
+        id: (q && q.id) || uid('q'),
+        label,
+        required: !(q && q.required === false),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+export function createListing({ userId, title, category, spots, description, bannerUrl, lookingFor, projectId, customApplication, customQuestions }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can post listings');
   if (!title?.trim()) throw httpError(400, 'A title is required');
+  // Custom application mode (§5.4): when on, the lead's extra questions are
+  // stored on the listing and applicants must answer them. The toggle only
+  // sticks if at least one question exists.
+  const questions = cleanCustomQuestions(customQuestions);
+  const customOn = !!customApplication && questions.length > 0;
+  // If the listing names a project this lead owns, accepted applicants join it.
+  let linkedProjectId = null;
+  if (projectId) {
+    const p = db.projects.find((x) => x.id === projectId && x.leadId === userId);
+    if (p) linkedProjectId = p.id;
+  }
   const listing = {
     id: `list_${Date.now()}`, title: title.trim(), category: category || '',
     spots: Number(spots) || 1, leadName: u.name, leadId: userId,
     description: (description || '').trim(), bannerUrl: safeUrl(bannerUrl, 400),
     lookingFor: String(lookingFor || '').trim().slice(0, 200),
+    projectId: linkedProjectId,
+    customApplication: customOn,
+    customQuestions: questions,
   };
   db.listings.push(listing);
   recordAudit({ id: userId, name: u.name }, 'create_listing', listing.title);
@@ -3406,7 +3452,7 @@ export function createListing({ userId, title, category, spots, description, ban
   return listing;
 }
 
-export function createProject({ userId, title, category, description }) {
+export function createProject({ userId, title, category, description, customApplication, customQuestions, spots, publishListing = true }) {
   const u = getResearcherById(userId);
   if (!isLead(u)) throw httpError(403, 'Only lead researchers can create projects');
   if (!title?.trim()) throw httpError(400, 'A title is required');
@@ -3414,12 +3460,21 @@ export function createProject({ userId, title, category, description }) {
   db.projects.push(p);
   recordAudit({ id: userId, name: u.name }, 'create_project', p.title);
   recordActivity(userId, 'project_started', `started the project ${p.title}`, `/researcher/project/${p.id}`);
+  // §5.2/§5.6: creating a project auto-publishes a recruiting listing on the
+  // Research Hub, linked back to the project so accepted applicants join its team.
+  let listing = null;
+  if (publishListing) {
+    listing = createListing({
+      userId, title: p.title, category: p.category, spots,
+      description: p.description, projectId: p.id, customApplication, customQuestions,
+    });
+  }
   schedulePersist();
-  return p;
+  return { ...p, listing };
 }
 
 // Edit your own listing (recruiting posts evolve as spots fill).
-export function updateListing({ listingId, leadId, title, category, spots, description, bannerUrl, lookingFor }) {
+export function updateListing({ listingId, leadId, title, category, spots, description, bannerUrl, lookingFor, customApplication, customQuestions }) {
   const l = db.listings.find((x) => x.id === listingId);
   if (!l) throw httpError(404, 'Listing not found');
   if (l.leadId !== leadId) throw httpError(403, 'Not your listing');
@@ -3429,6 +3484,12 @@ export function updateListing({ listingId, leadId, title, category, spots, descr
   if (typeof description === 'string') l.description = description.trim().slice(0, 1000);
   if (typeof bannerUrl === 'string') l.bannerUrl = safeUrl(bannerUrl, 400);
   if (typeof lookingFor === 'string') l.lookingFor = lookingFor.trim().slice(0, 200);
+  // Custom-question editing (§5.4): questions are replaced wholesale when
+  // provided; the toggle only sticks if at least one question exists.
+  if (customQuestions !== undefined) l.customQuestions = cleanCustomQuestions(customQuestions);
+  if (customApplication !== undefined || customQuestions !== undefined) {
+    l.customApplication = !!(customApplication ?? l.customApplication) && (l.customQuestions || []).length > 0;
+  }
   recordAudit({ id: leadId }, 'edit_listing', l.title);
   schedulePersist();
   return l;
@@ -3457,14 +3518,22 @@ export function myListings(userId) {
     .filter((l) => l.leadId === userId)
     .map((l) => {
       const apps = db.applications.filter((a) => a.listingId === l.id);
+      const questions = l.customQuestions || [];
       const applicants = apps.map((a) => {
         const u = getUserById(a.userId);
+        // Pair each custom answer with its question label so the lead sees the
+        // Q&A directly on the review card (§5.4).
+        const answers = (a.answers && questions.length)
+          ? questions.map((q) => ({ id: q.id, label: q.label, answer: a.answers[q.id] || '' }))
+          : [];
         return {
           id: a.id, userId: a.userId, name: a.userName, status: a.status,
           message: a.message || '', resumeUrl: a.resumeUrl || u?.resumeUrl || '', at: a.at,
           researchExperience: u?.researchExperience ?? null,
           leadershipExperience: u?.leadershipExperience ?? null,
           blurb: u?.blurb || '', slug: u?.slug || a.userId,
+          institution: u?.institution || '', avatarUrl: u?.avatarUrl || '',
+          answers,
         };
       }).sort((a, b) => new Date(b.at) - new Date(a.at));
       const stats = {
@@ -3484,6 +3553,8 @@ export function myListingApplications(userId) {
 }
 
 // A lead accepts/rejects an applicant to one of their own listings.
+// On accept, the applicant joins the listing's linked project team (§5.6); the
+// accepted-applicant count is what the Hub renders as filled spots.
 export function reviewListingApplication({ leadId, appId, status }) {
   const a = db.applications.find((x) => x.id === appId);
   if (!a) throw httpError(404, 'Application not found');
@@ -3493,7 +3564,16 @@ export function reviewListingApplication({ leadId, appId, status }) {
   a.status = status;
   a.reviewedBy = leadId;
   a.reviewedAt = now();
-  pushNotif(a.userId, { type: 'application', title: `Your application was ${status}`, body: listing.title, link: '/researcher/opportunities' });
+  // Accepting adds them to the project team (if the listing is linked to one).
+  if (status === 'approved' && listing.projectId) {
+    const p = db.projects.find((x) => x.id === listing.projectId);
+    if (p && !p.members.includes(a.userId)) {
+      p.members.push(a.userId);
+      recordActivity(a.userId, 'joined_project', `joined ${p.title}`, `/researcher/project/${p.id}`);
+    }
+  }
+  const link = (status === 'approved' && listing.projectId) ? `/researcher/project/${listing.projectId}` : '/researcher/opportunities';
+  pushNotif(a.userId, { type: 'application', title: `Your application was ${status}`, body: listing.title, link });
   schedulePersist();
   return a;
 }

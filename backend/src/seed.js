@@ -514,6 +514,13 @@ const assocId = researchers[1].id;
 const taylorId = researchers[2].id;
 const caseyId = researchers[4].id;
 
+// Stable IDs shared between the coral project, its custom-question listing, and
+// the seeded applicant so the demo wires together on a fresh boot.
+const coralProjectId = id('proj');
+const coralListingId = id('list');
+const coralQ1 = id('q');
+const coralQ2 = id('q');
+
 // task(title, type, assignedTo, status, opts)
 function task(title, type, assignedTo, status, opts = {}) {
   return {
@@ -572,6 +579,22 @@ export const projects = [
     links: [],
     ideas: [],
   },
+  // Sam's recruiting project — its Hub listing uses custom application questions
+  // (§5.4) and ships with a pending applicant so the lead's review view is
+  // populated on first load.
+  {
+    id: coralProjectId,
+    title: 'Modeling Coral Bleaching under Warming Scenarios',
+    category: 'Biology',
+    description: 'Use public reef datasets to model bleaching thresholds and recovery windows.',
+    leadId,
+    members: [leadId],
+    announcements: [],
+    tasks: [],
+    links: [],
+    ideas: [],
+    roles: [],
+  },
 ];
 
 // Demo: seed a couple personal "Pathway" to-dos + a follow edge.
@@ -609,13 +632,45 @@ export const chapters = [
 
 // Open project listings for the Research Hub.
 export const listings = [
-  { id: id('list'), title: 'Modeling Coral Bleaching under Warming Scenarios', category: 'Biology', spots: 3, leadName: 'Sam Rivera', leadId: leadId, description: 'Use public reef datasets to model bleaching thresholds.' },
-  { id: id('list'), title: 'Fairness Audits of Public Recommender Datasets', category: 'Computer Science', spots: 2, leadName: 'Sam Rivera', leadId: leadId, description: 'Measure demographic skew in open recommender benchmarks.' },
-  { id: id('list'), title: 'Behavioral Economics of Classroom Incentives', category: 'Economics', spots: 4, leadName: 'Open', leadId: null, description: 'Design a small RCT on study incentives.' },
+  // Custom application mode ON (§5.4): applicants must answer Sam's questions,
+  // and accepted applicants join the linked coral project.
+  {
+    id: coralListingId,
+    title: 'Modeling Coral Bleaching under Warming Scenarios',
+    category: 'Biology', spots: 3, leadName: 'Sam Rivera', leadId: leadId,
+    description: 'Use public reef datasets to model bleaching thresholds. We want collaborators comfortable with Python and curious about climate.',
+    lookingFor: 'data analyst, modeler',
+    projectId: coralProjectId,
+    customApplication: true,
+    customQuestions: [
+      { id: coralQ1, label: 'Which programming languages or tools are you comfortable with?', required: true },
+      { id: coralQ2, label: 'Why are you interested in coral-reef research specifically?', required: true },
+    ],
+  },
+  { id: id('list'), title: 'Fairness Audits of Public Recommender Datasets', category: 'Computer Science', spots: 2, leadName: 'Sam Rivera', leadId: leadId, description: 'Measure demographic skew in open recommender benchmarks.', customApplication: false, customQuestions: [] },
+  { id: id('list'), title: 'Behavioral Economics of Classroom Incentives', category: 'Economics', spots: 4, leadName: 'Open', leadId: null, description: 'Design a small RCT on study incentives.', customApplication: false, customQuestions: [] },
 ];
 
 // Role/project applications submitted from the Application Hub.
-export const applications = [];
+// One pending applicant (Jordan) on the coral listing, with answers to Sam's
+// custom questions, so the lead's review view is populated out of the box.
+export const applications = [
+  {
+    id: id('app'),
+    status: 'pending',
+    userId: assocId,
+    userName: 'Jordan Kim',
+    listingId: coralListingId,
+    role: null,
+    message: 'I would love to help model bleaching thresholds.',
+    resumeUrl: '',
+    answers: {
+      [coralQ1]: 'Python (pandas, scikit-learn), some R, and Git.',
+      [coralQ2]: 'I grew up near the coast and want my first project to tackle a real climate problem.',
+    },
+    at: new Date(Date.now() - 2 * 864e5).toISOString(),
+  },
+];
 
 // Global news / announcements (Track-wide).
 export const news = [

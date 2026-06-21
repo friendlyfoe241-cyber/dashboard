@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import { api } from '../../api.js';
 import PendingApproval from './PendingApproval.jsx';
 import Dashboard from './Dashboard.jsx';
+import LeadHome from './dashboards/LeadHome.jsx';
 import ProjectDetail from './ProjectDetail.jsx';
 import ResearchHub from './ResearchHub.jsx';
 import ApplicationHub from './ApplicationHub.jsx';
@@ -54,10 +55,17 @@ export default function ResearcherApp() {
   // Newly-registered members can't use the app until an auditor assigns a role.
   if (user && user.approved === false) return <PendingApproval />;
 
+  const isLead = (user?.tags || []).includes('lead_researcher');
+
   // Grouped, icon-led nav — fewer destinations, related pages folded into hubs
   // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
+  // Lead researchers get a dedicated workspace section at the top.
   const nav = [
     { to: '/researcher', label: 'Home', icon: '🏠', end: true },
+    ...(isLead ? [
+      { section: 'Lead workspace' },
+      { to: '/researcher/lead', label: 'Lead hub', icon: '🚀' },
+    ] : []),
     { section: 'Community' },
     { to: '/researcher/community', label: 'Community', icon: '📣' },
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
@@ -79,6 +87,7 @@ export default function ResearcherApp() {
       <RoleCongrats />
       <Routes>
         <Route index element={<Dashboard />} />
+        <Route path="lead" element={<LeadHome />} />
         <Route path="community" element={<Community />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />
