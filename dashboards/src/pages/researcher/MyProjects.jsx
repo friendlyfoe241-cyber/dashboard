@@ -5,65 +5,104 @@ import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 
-// Projects the researcher is part of (also surfaced on Home). Leads also see
-// applicants to their listings here. As a member you see the projects you've
-// joined with their status and task progress (ROLE_WORKFLOWS §6.1).
+// Derive a friendly status + progress from a project's tasks (there's no
+// persisted status field on a project).
+function progressOf(p) {
+  const tasks = p.tasks || [];
+  const total = tasks.length;
+  const done = tasks.filter((t) => t.status === 'done' || t.done).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const status = total === 0 ? { label: 'Getting started', tone: 'gray' }
+    : pct === 100 ? { label: 'Complete', tone: 'green' }
+      : done > 0 ? { label: 'In progress', tone: 'blue' }
+        : { label: 'Just kicked off', tone: 'gold' };
+  return { total, done, pct, status };
+}
+
+// My Projects (ROLE_WORKFLOWS §6.1): projects the user leads and projects they're
+// a member of, each with status, member count, and task progress. Leads also see
+// applicants to their listings here.
 export default function MyProjects() {
   const { user } = useAuth();
-  const isLead = (user?.tags || []).includes('lead_researcher');
-  const [projects, setProjects] = useState([]);
-  useEffect(() => { api.myProjects().then(setProjects).catch(() => {}); }, []);
+  const [projects, setProjects] = useState(null);
+  useEffect(() => { api.myProjects().then(setProjects).catch(() => setProjects([])); }, []);
+
+  const led = (projects || []).filter((p) => p.leadId === user?.id);
+  const member = (projects || []).filter((p) => p.leadId !== user?.id);
+
   return (
     <div>
       <h1 className="page-title">My Projects</h1>
-      <p className="page-sub">Research projects you're part of.</p>
+      <p className="page-sub">Projects you lead and projects you've joined — all in one place.</p>
 
-      {isLead && <Applicants />}
-      {projects.length === 0 ? (
-        <EmptyState>You're not on any projects yet — find one in the <Link to="/researcher/hub">Research Hub</Link> and apply to join a team.</EmptyState>
+      <Applicants />
+
+      {projects === null ? (
+        <p className="muted">Loading…</p>
+      ) : projects.length === 0 ? (
+        <EmptyState>You're not on any projects yet — find one in <Link to="/researcher/opportunities">Opportunities</Link>.</EmptyState>
       ) : (
-        <div className="grid grid-3">
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} leadId={user?.id} />
-          ))}
-        </div>
+        <>
+          <ProjectSection
+            title="Projects you lead"
+            count={led.length}
+            projects={led}
+            empty={<>You don't lead any projects yet. Leads can start one from <Link to="/researcher/opportunities">Opportunities</Link>.</>}
+          />
+          <ProjectSection
+            title="Projects you're a member of"
+            count={member.length}
+            projects={member}
+            empty="You haven't joined anyone else's project yet."
+          />
+        </>
       )}
     </div>
   );
 }
 
-// A project the member is on: status, members, and live task progress.
-function ProjectCard({ project: p, leadId }) {
-  const tasks = p.tasks || [];
-  const done = tasks.filter((t) => t.done || t.status === 'done').length;
-  const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
-  const isLead = p.leadId === leadId;
-  const status = p.status || 'Active';
+function ProjectSection({ title, count, projects, empty }) {
   return (
-    <Link to={`/researcher/project/${p.id}`} style={{ color: 'inherit' }}>
-      <Card className="paper-card">
-        <div className="card-row" style={{ marginBottom: '0.4rem' }}>
-          <Badge>{p.category}</Badge>
-          <span className="row" style={{ gap: '0.3rem' }}>
-            {isLead ? <Badge tone="gold">Lead</Badge> : <Badge tone="gray">Member</Badge>}
-            <span className="muted" style={{ fontSize: '0.72rem' }}>{status}</span>
-          </span>
+    <section style={{ marginTop: '1.75rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        {title} <Badge tone="gray">{count}</Badge>
+      </h2>
+      {projects.length === 0 ? (
+        <p className="muted" style={{ margin: 0 }}>{empty}</p>
+      ) : (
+        <div className="grid grid-3">
+          {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
         </div>
-        <h3>{p.title}</h3>
-        <p className="paper-meta">{(p.members?.length ?? 0)} members · {tasks.length} task{tasks.length === 1 ? '' : 's'}</p>
-        {tasks.length > 0 && (
-          <div style={{ margin: '0.5rem 0' }}>
-            <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.2rem' }}>{done}/{tasks.length} tasks done</div>
-            <div className="progress"><span style={{ width: `${pct}%` }} /></div>
-          </div>
-        )}
-        <span className="label-up">Open project →</span>
+      )}
+    </section>
+  );
+}
+
+function ProjectCard({ project }) {
+  const { total, done, pct, status } = progressOf(project);
+  return (
+    <Link to={`/researcher/project/${project.id}`} style={{ color: 'inherit' }}>
+      <Card className="paper-card">
+        <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+          <Badge>{project.category || 'Uncategorized'}</Badge>
+          <Badge tone={status.tone}>{status.label}</Badge>
+        </div>
+        <h3 style={{ margin: '0.6rem 0 0.3rem' }}>{project.title}</h3>
+        <p className="paper-meta" style={{ margin: 0 }}>
+          {(project.members || []).length} member{(project.members || []).length === 1 ? '' : 's'} · {total} task{total === 1 ? '' : 's'}
+        </p>
+        <div className="progress" style={{ margin: '0.6rem 0 0.3rem' }}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+        <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>{done}/{total} tasks complete ({pct}%)</p>
+        <span className="label-up" style={{ display: 'inline-block', marginTop: '0.6rem' }}>Open project →</span>
       </Card>
     </Link>
   );
 }
 
-// Applicants to the lead's own listings — accept or reject.
+// Applicants to the lead's own listings — accept or reject. Renders nothing for
+// non-leads or when there are no applicants.
 function Applicants() {
   const toast = useToast();
   const [apps, setApps] = useState([]);
@@ -72,7 +111,7 @@ function Applicants() {
   const review = (a, status) => api.reviewListingApplication(a.id, status).then(() => { toast.success(`Applicant ${status}`); load(); }).catch((e) => toast.error(e.message));
   if (!apps.length) return null;
   return (
-    <section style={{ marginBottom: '1.5rem' }}>
+    <section style={{ marginTop: '1.5rem' }}>
       <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Applicants to your listings <Badge tone="gray">{apps.filter((a) => a.status === 'pending').length} pending</Badge></h2>
       <div className="stack">
         {apps.map((a) => (
@@ -86,8 +125,8 @@ function Applicants() {
               <div className="row">
                 {a.status === 'pending' ? (
                   <>
-                    <Button variant="approve" className="btn-sm" onClick={() => review(a, 'approved')}>Accept</Button>
-                    <Button variant="reject" className="btn-sm" onClick={() => review(a, 'rejected')}>Reject</Button>
+                    <Button variant="approve" size="btn-sm" onClick={() => review(a, 'approved')}>Accept</Button>
+                    <Button variant="reject" size="btn-sm" onClick={() => review(a, 'rejected')}>Reject</Button>
                   </>
                 ) : <Badge tone={a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>}
               </div>

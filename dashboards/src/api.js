@@ -172,6 +172,7 @@ export const api = {
   setProjectRole: (id, userId, title) => request(`/researcher/projects/${id}/roles`, { method: 'POST', body: { userId, title } }),
   suggestedForProject: (id) => request(`/researcher/projects/${id}/suggested`),
   projectStats: (id) => request(`/researcher/projects/${id}/stats`),
+  projectEvents: (id) => request(`/researcher/projects/${id}/events`),
   addIdea: (id, text) => request(`/researcher/projects/${id}/ideas`, { method: 'POST', body: { text } }),
   voteIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/vote`, { method: 'POST' }),
   chooseIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/choose`, { method: 'POST' }),
