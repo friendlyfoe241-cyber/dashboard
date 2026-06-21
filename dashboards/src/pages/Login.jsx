@@ -7,11 +7,13 @@ import GoogleButton from '../components/GoogleButton.jsx';
 import AuthShell from '../components/AuthShell.jsx';
 import { getDefaultHomePath } from '../views.js';
 
+// Emails match the seeded demo accounts (backend/src/seed.js). "Moderator" is the
+// member-facing name for the Auditor role (ROLE_WORKFLOWS §9).
 const DEMO_ACCOUNTS = [
   { label: 'All views (demo)', email: 'testall@synthica.org' },
   { label: 'Admin', email: 'admin@synthica.org' },
   { label: 'Director', email: 'director@synthica.org' },
-  { label: 'Auditor', email: 'auditor@synthica.org' },
+  { label: 'Moderator', email: 'auditor@synthica.org' },
   { label: 'Lead researcher', email: 'sam@example.com' },
   { label: 'Associate researcher', email: 'jordan@example.com' },
   { label: 'Independent researcher', email: 'testindependent@synthica.org' },

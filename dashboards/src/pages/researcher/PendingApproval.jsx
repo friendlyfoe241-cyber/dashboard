@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { EXP_ANCHORS, LEAD_ANCHORS, anchorFor } from '../../onboardingScales.js';
-import Icon from '../../components/Icon.jsx';
 
 const INTERESTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Economics', 'Psychology', 'Humanities', 'Machine Learning', 'Neuroscience'];
 const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
-// Holding screen for a newly-registered researcher until an auditor assigns
-// their role. First visit: a short intake form. After submitting: a clean
-// status view (the form stays reachable behind "Edit details").
+// Holding screen for a newly-registered researcher until a Moderator assigns
+// their role (ROLE_WORKFLOWS §3.1). First visit: a short intake form. After
+// submitting: a clear status view (the form stays reachable behind "Edit
+// details"). If a Moderator declines, a rejected view lets them revise and
+// resubmit instead of hitting a dead end.
 export default function PendingApproval() {
   const { user, logout, refreshUser } = useAuth();
   // Saving the intake sets researchExperience — use that as "submitted".
@@ -27,26 +28,29 @@ export default function PendingApproval() {
 
   const checkNow = async () => {
     await refreshUser();
-    setChecked(`Still under review — checked ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    setChecked(`Still under review — last checked ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
   };
 
-  // The auditor declined this sign-up: say so instead of an endless spinner.
-  if (user?.onboardingRejected) {
+  // The Moderator declined this sign-up: say so, and give a way forward.
+  if (user?.onboardingRejected && !editing) {
     return (
       <div className="login-wrap">
         <div className="login-card" style={{ maxWidth: 480 }}>
-          <div style={{ fontSize: '2.5rem' }}><Icon name="inbox" size={40} /></div>
+          <div style={{ fontSize: '2.5rem' }}>📪</div>
           <h1 style={{ marginBottom: '0.25rem' }}>Your application wasn't approved</h1>
           <p className="sub">
-            Thanks for your interest in Synthica. Our auditors couldn't approve your membership this time.
-            If you think this was a mistake, reach out on Discord or email — or strengthen your profile and
-            we'll take another look.
+            Thanks for your interest in Synthica. Our Moderators couldn't approve your membership this time.
+            You can strengthen your profile below and ask us to take another look, or reach out on Discord or
+            email if you think this was a mistake.
           </p>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <button className="link-btn" onClick={checkNow}>Check again</button>
+          <div className="row" style={{ justifyContent: 'center', gap: '0.6rem' }}>
+            <button className="btn btn-primary btn-sm" onClick={() => setEditing(true)}>Revise &amp; resubmit</button>
+            <button className="btn btn-ghost btn-sm" onClick={checkNow}>Check again</button>
+          </div>
+          <div style={{ marginTop: '1rem' }}>
             <button className="link-btn" onClick={logout}>Sign out</button>
           </div>
-          {checked && <p className="muted" style={{ marginTop: '0.6rem' }}>{checked.replace('Still under review', 'No change yet')}</p>}
+          {checked && <p className="muted" style={{ marginTop: '0.6rem' }}>{checked.replace('Still under review — last checked', 'No change yet — checked')}</p>}
         </div>
       </div>
     );
@@ -57,23 +61,33 @@ export default function PendingApproval() {
     return (
       <div className="login-wrap">
         <div className="login-card" style={{ maxWidth: 480 }}>
-          <div style={{ fontSize: '2.5rem' }}><Icon name="alert" size={40} /></div>
+          <div style={{ fontSize: '2.5rem' }}>⏳</div>
           <h1 style={{ marginBottom: '0.25rem' }}>Application under review</h1>
           <p className="sub">
-            Thanks, {user?.name?.split(' ')[0]} — an auditor is assigning your role. You'll get access
-            automatically the moment it's done (this page checks on its own).
+            Thanks, {user?.name?.split(' ')[0]} — a Moderator is reviewing your profile and assigning your
+            starting role (usually Associate Researcher). You'll get access automatically the moment it's done.
           </p>
 
-          <div className="row" style={{ justifyContent: 'center', gap: '0.4rem', marginBottom: '1.2rem' }}>
+          <div className="info-block" style={{ textAlign: 'left', marginBottom: '1rem' }}>
+            <strong style={{ display: 'block', marginBottom: '0.45rem' }}>What happens next</strong>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.4rem', fontSize: '0.85rem' }}>
+              <li>✅ You created your account and submitted your profile.</li>
+              <li>⏳ A Moderator reviews it and assigns your starting role.</li>
+              <li>🚀 You're dropped into your dashboard — no need to refresh.</li>
+            </ul>
+          </div>
+
+          <div className="row" style={{ justifyContent: 'center', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <span className="badge badge-blue">Research {user.researchExperience}/10</span>
             <span className="badge badge-blue">Leadership {user.leadershipExperience ?? '—'}/10</span>
             {user.wantsChapterLead && <span className="badge badge-gold">Chapter lead candidate</span>}
-            <span className={`badge ${user.resumeUrl ? 'badge-green' : 'badge-gray'}`}>{user.resumeUrl ? <span className="icon-label"><Icon name="check" size={12} /> Résumé added</span> : 'No résumé yet'}</span>
+            <span className={`badge ${user.resumeUrl ? 'badge-green' : 'badge-gray'}`}>{user.resumeUrl ? 'Résumé added ✓' : 'No résumé yet'}</span>
           </div>
 
           {!user.resumeUrl && (
-            <p className="muted" style={{ marginBottom: '1rem' }}>Tip: adding a résumé helps the auditor place you faster.</p>
+            <p className="muted" style={{ marginBottom: '1rem' }}>Tip: adding a résumé helps the Moderator place you faster.</p>
           )}
+          <p className="muted" style={{ marginBottom: '0.8rem', fontSize: '0.8rem' }}>This page checks for a decision on its own every few seconds.</p>
           {checked && <p className="muted" style={{ marginBottom: '0.8rem' }}>{checked}</p>}
 
           <div className="row" style={{ justifyContent: 'center', gap: '0.6rem' }}>
@@ -88,11 +102,19 @@ export default function PendingApproval() {
     );
   }
 
-  return <IntakeForm user={user} refreshUser={refreshUser} logout={logout} onDone={() => setEditing(false)} />;
+  return (
+    <IntakeForm
+      user={user}
+      refreshUser={refreshUser}
+      logout={logout}
+      rejected={!!user?.onboardingRejected}
+      onDone={() => setEditing(false)}
+    />
+  );
 }
 
-// The intake form, shown once (and again behind "Edit details").
-function IntakeForm({ user, refreshUser, logout, onDone }) {
+// The intake form, shown once (and again behind "Edit details" / "Revise").
+function IntakeForm({ user, refreshUser, logout, onDone, rejected }) {
   const [f, setF] = useState({
     resumeUrl: user?.resumeUrl || '',
     institution: user?.institution || '',
@@ -107,10 +129,12 @@ function IntakeForm({ user, refreshUser, logout, onDone }) {
   });
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const toggle = (i) => set({ interests: f.interests.includes(i) ? f.interests.filter((x) => x !== i) : [...f.interests, i] });
   const save = async () => {
     setBusy(true);
+    setError('');
     try {
       await api.updateProfile({
         resumeUrl: f.resumeUrl, institution: f.institution, gpa: f.gpa, interests: f.interests,
@@ -120,18 +144,31 @@ function IntakeForm({ user, refreshUser, logout, onDone }) {
         priorLead: f.priorLead,
         legacyProject: f.priorLead && f.legacyProject.title.trim() ? f.legacyProject : null,
       });
+      // A previously-rejected member is asking for another review: re-queue them.
+      if (rejected) await api.resubmitOnboarding().catch(() => {});
       await refreshUser();
       onDone();
-    } catch { /* ignore */ } finally { setBusy(false); }
+    } catch (err) {
+      setError(err?.message || 'Could not save — please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520, textAlign: 'left' }}>
-        <h1 style={{ marginBottom: '0.25rem' }}>One last step, {user?.name?.split(' ')[0]} <Icon name="id-card" size={24} /></h1>
-        <p className="sub">Tell us a little about yourself so our auditors can assign you the right role.</p>
+        <h1 style={{ marginBottom: '0.25rem' }}>
+          {rejected ? 'Update your profile 🪪' : `One last step, ${user?.name?.split(' ')[0]} 🪪`}
+        </h1>
+        <p className="sub">
+          {rejected
+            ? 'Strengthen your profile and resubmit — a Moderator will take another look.'
+            : 'Tell us a little about yourself so our Moderators can assign you the right starting role.'}
+        </p>
+        {error && <div className="login-error">{error}</div>}
 
-        <label className="label-up">Resume / CV link <span className="muted">(recommended <Icon name="star" size={12} />)</span></label>
+        <label className="label-up">Resume / CV link <span className="muted">(recommended ⭐)</span></label>
         <input value={f.resumeUrl} onChange={(e) => set({ resumeUrl: e.target.value })} placeholder="https://drive.google.com/…" style={{ marginBottom: '0.7rem' }} />
 
         <div className="grid grid-2" style={{ marginBottom: '0.7rem' }}>
@@ -183,7 +220,7 @@ function IntakeForm({ user, refreshUser, logout, onDone }) {
         {f.priorLead && (
           <div className="info-block" style={{ marginBottom: '0.7rem' }}>
             <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
-              Tell us about it — if an auditor confirms you as a Lead, your project is restored automatically and you can re-invite your team.
+              Tell us about it — if a Moderator confirms you as a Lead, your project is restored automatically and you can re-invite your team.
             </p>
             <input value={f.legacyProject.title} onChange={(e) => set({ legacyProject: { ...f.legacyProject, title: e.target.value } })} placeholder="Project title" style={{ marginBottom: '0.5rem' }} />
             <div className="row" style={{ gap: '0.4rem', marginBottom: '0.5rem' }}>
@@ -196,14 +233,14 @@ function IntakeForm({ user, refreshUser, logout, onDone }) {
         )}
 
         <label className="label-up">Interests</label>
-        <div className="row" style={{ gap: '0.35rem', margin: '0.3rem 0 1rem' }}>
+        <div className="row" style={{ gap: '0.35rem', margin: '0.3rem 0 1rem', flexWrap: 'wrap' }}>
           {INTERESTS.map((i) => (
             <button key={i} type="button" className={`badge ${f.interests.includes(i) ? 'badge-blue' : 'badge-gray'}`} style={{ cursor: 'pointer', border: 'none' }} onClick={() => toggle(i)}>{i}</button>
           ))}
         </div>
 
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Submitting…' : 'Submit for review'}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Submitting…' : rejected ? 'Resubmit for review' : 'Submit for review'}</button>
           <button className="link-btn" onClick={logout}>Sign out</button>
         </div>
       </div>
