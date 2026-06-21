@@ -650,10 +650,12 @@ export const chapters = [
     location: 'San Francisco, USA',
     leaderId: taylorId,
     handbookUrl: 'https://example.com/synthica-chapter-handbook',
+    // Fixed 8-char demo code so the join flow is reproducible. New chapters get
+    // a random unique code (see genJoinCode in store.js).
+    joinCode: 'BAYAREA7',
     members: [
       member(taylorId, ['discord', 'profile', 'handbook', 'project', 'intro']),
       member(caseyId, ['discord', 'profile', 'handbook']),
-      member(assocId, ['discord', 'profile']),
     ],
   },
   ...(testallId ? [{
