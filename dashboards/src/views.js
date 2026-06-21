@@ -337,6 +337,9 @@ export function filterNavForView(nav, activeViewId) {
       continue;
     }
     if (item.spacer) {
+      // A spacer is a section boundary: drop any section header that had no
+      // visible items in this view (otherwise it would attach to later items).
+      pendingSection = null;
       if (out.some((x) => x.to)) out.push(item);
       continue;
     }

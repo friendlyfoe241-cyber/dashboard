@@ -61,6 +61,14 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/moderator/*"
+          element={
+            <RequireAuth kind="editor">
+              <ModeratorApp />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
