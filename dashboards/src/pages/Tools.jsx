@@ -4,21 +4,18 @@ import { useAuth } from '../auth.jsx';
 import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import UploadButton from '../components/UploadButton.jsx';
-import Icon from '../components/Icon.jsx';
 
-// A shared "Tools" space — résumé editor + my stats for researchers, activity
-// stats for editors, plus scaffold cards for future additions.
+// "Résumé & tools" — the researcher's résumé (used to auto-apply to listings),
+// editor activity stats, and a few scaffolded resources. Account-level security
+// (2FA) lives in the separate <Security /> tab, exported below.
 export default function Tools() {
   const { user } = useAuth();
   return (
     <div>
-      <h1 className="page-title">Tools</h1>
-      <p className="page-sub">Shared resources and settings. More coming soon.</p>
-
       {user.kind === 'editor' && <EditorStats />}
       {user.kind === 'researcher' && <ResumeCard user={user} />}
-      <SecurityCard user={user} />
 
+      <h2 className="section-title" style={{ margin: '0.25rem 0 0.75rem' }}>Resources</h2>
       <div className="grid grid-3">
         <Placeholder title="Templates" desc="Proposal, methods, and review templates to reuse." />
         <Placeholder title="Branding" desc="Logos, colors, and slide decks." />
@@ -28,61 +25,88 @@ export default function Tools() {
   );
 }
 
-// Two-factor authentication enrollment.
+// Two-factor authentication enrollment + account security. Its own Account tab.
+export function Security() {
+  const { user } = useAuth();
+  return (
+    <div className="stack" style={{ gap: '1.25rem', maxWidth: 720 }}>
+      <SecurityCard user={user} />
+      <Card>
+        <h3 style={{ marginTop: 0 }}>Password</h3>
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+          Forgot your password or want to change it? Use the reset link — we’ll email you a secure link to set a new one.
+        </p>
+        <a className="btn btn-ghost btn-sm" href="/forgot">Send a password reset link</a>
+      </Card>
+    </div>
+  );
+}
+
 function SecurityCard({ user }) {
   const toast = useToast();
   const [enabled, setEnabled] = useState(user.twoFactorEnabled);
   const [setup, setSetup] = useState(null); // { secret, otpauthUrl }
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const begin = async () => {
     setError('');
-    try { setSetup(await api.setup2fa()); } catch (e) { setError(e.message); }
+    setBusy(true);
+    try { setSetup(await api.setup2fa()); } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   const enable = async () => {
     setError('');
+    setBusy(true);
     try { await api.enable2fa(code); setEnabled(true); setSetup(null); setCode(''); toast.success('Two-factor enabled'); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   const disable = async () => {
     setError('');
+    setBusy(true);
     try { await api.disable2fa(code); setEnabled(false); setCode(''); toast.success('Two-factor disabled'); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
   return (
-    <Card style={{ marginBottom: '1.25rem' }}>
+    <Card>
       <div className="card-row">
-        <h3>Two-factor authentication</h3>
+        <h3 style={{ margin: 0 }}>Two-factor authentication</h3>
         <Badge tone={enabled ? 'green' : 'gray'}>{enabled ? 'on' : 'off'}</Badge>
       </div>
-      <p className="muted" style={{ margin: '0.25rem 0 0.75rem' }}>
-        Add a 6-digit code from an authenticator app (recommended for editors).
+      <p className="muted" style={{ margin: '0.25rem 0 0.75rem', fontSize: '0.85rem' }}>
+        Add a second step at sign-in with a 6-digit code from an authenticator app (Google Authenticator, 1Password, Authy).
+        Strongly recommended — especially for editors and chapter leaders.
       </p>
       {error && <div className="login-error">{error}</div>}
 
       {enabled ? (
-        <div className="row">
-          <input placeholder="Code to disable" value={code} onChange={(e) => setCode(e.target.value)} style={{ maxWidth: 160 }} />
-          <Button variant="reject" onClick={disable}>Disable</Button>
-        </div>
+        <>
+          <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>Enter a current code from your authenticator to turn 2FA off.</p>
+          <div className="row">
+            <input placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" style={{ maxWidth: 160 }} />
+            <Button variant="reject" disabled={busy || code.length < 6} onClick={disable}>{busy ? 'Disabling…' : 'Disable'}</Button>
+          </div>
+        </>
       ) : setup ? (
         <div>
-          <p className="muted">Scan with your authenticator, then enter a code to confirm.</p>
+          <p className="muted" style={{ fontSize: '0.85rem' }}>1. Scan this QR code with your authenticator app. 2. Enter the code it shows to confirm.</p>
           <img
-            alt="2FA QR code"
+            alt="Scan this QR code with your authenticator app"
             src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(setup.otpauthUrl)}`}
-            style={{ margin: '0.5rem 0', borderRadius: 8 }}
+            width={160}
+            height={160}
+            style={{ margin: '0.5rem 0', borderRadius: 8, background: '#fff' }}
           />
-          <p className="muted" style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>Manual key: <code>{setup.secret}</code></p>
+          <p className="muted" style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>Can’t scan? Enter this key manually: <code>{setup.secret}</code></p>
           <div className="row">
-            <input placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} style={{ maxWidth: 160 }} />
-            <Button onClick={enable}>Enable</Button>
+            <input placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" style={{ maxWidth: 160 }} />
+            <Button disabled={busy || code.length < 6} onClick={enable}>{busy ? 'Enabling…' : 'Enable'}</Button>
+            <Button variant="ghost" onClick={() => { setSetup(null); setCode(''); setError(''); }}>Cancel</Button>
           </div>
         </div>
       ) : (
-        <Button onClick={begin}>Set up 2FA</Button>
+        <Button onClick={begin} disabled={busy}>{busy ? 'Setting up…' : 'Set up 2FA'}</Button>
       )}
     </Card>
   );
@@ -153,8 +177,8 @@ function ResumeCard({ user }) {
 
   return (
     <Card style={{ marginBottom: '1.25rem' }}>
-      <h3>My résumé</h3>
-      <p className="muted" style={{ margin: '0.25rem 0 0.75rem' }}>
+      <h3 style={{ marginTop: 0 }}>My résumé</h3>
+      <p className="muted" style={{ margin: '0.25rem 0 0.75rem', fontSize: '0.85rem' }}>
         Link your résumé so you can auto-apply to project listings. Update it any time.
       </p>
       {error && <div className="login-error">{error}</div>}
@@ -168,10 +192,13 @@ function ResumeCard({ user }) {
           <UploadButton kind="resume" label="Upload PDF" onUploaded={(r) => { setUrl(r.url); setSaved(false); }} />
         </div>
       </Field>
-      <Button onClick={save} disabled={busy}>
-        {busy ? 'Saving…' : 'Save résumé'}
-      </Button>
-      {saved && <span className="muted" style={{ marginLeft: '0.6rem' }}><span className="icon-label"><Icon name="check" size={14} /> Saved</span></span>}
+      <div className="row" style={{ alignItems: 'center' }}>
+        <Button onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save résumé'}
+        </Button>
+        {url && <a className="muted" href={url} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem' }}>Preview →</a>}
+        {saved && <span className="muted" style={{ fontSize: '0.85rem' }}>Saved ✓</span>}
+      </div>
     </Card>
   );
 }

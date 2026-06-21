@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { Card, Button, Field, Badge } from '../components/ui.jsx';
 import { useToast } from '../components/toast.jsx';
 import { imageSrc } from '../files.js';
+import { safeHref } from '../url.js';
 import UploadButton from '../components/UploadButton.jsx';
 import Icon from '../components/Icon.jsx';
 
@@ -64,8 +65,31 @@ export default function Profile() {
     }
   };
 
+  // Light client-side validation: catch the obvious mistakes with a friendly
+  // message before the round-trip. The backend still sanitizes on write.
+  const validate = () => {
+    if (!form.name.trim()) return 'Please enter a display name.';
+    if (form.contactEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail.trim())) {
+      return 'That contact email doesn’t look right.';
+    }
+    if (form.orcid.trim() && !form.orcid.trim().startsWith('http') && !/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/.test(form.orcid.trim())) {
+      return 'ORCID iD should look like 0000-0002-1825-0097.';
+    }
+    const urlFields = [
+      ['LinkedIn', form.linkedinUrl], ['Website', form.websiteUrl], ['GitHub', form.githubUrl],
+      ['X / Twitter', form.twitterUrl], ['Google Scholar', form.scholarUrl], ['Research group link', form.researchGroupUrl],
+      ...form.links.map((l) => [l.label || 'Social link', l.url]),
+    ];
+    for (const [label, value] of urlFields) {
+      if (value && value.trim() && !safeHref(value)) return `The ${label} link isn’t a valid URL.`;
+    }
+    return '';
+  };
+
   const save = async (e) => {
     e.preventDefault();
+    const problem = validate();
+    if (problem) { setError(problem); return; }
     setBusy(true);
     setError('');
     try {
@@ -106,8 +130,13 @@ export default function Profile() {
 
   return (
     <div>
-      <h1 className="page-title">My Profile</h1>
-      <p className="page-sub">This is your public researcher page — keep it sharp; it's what people see on synthica.org.</p>
+      <div className="card-row" style={{ marginBottom: '1rem', alignItems: 'baseline' }}>
+        <div>
+          <h2 className="section-title" style={{ margin: 0 }}>My profile</h2>
+          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>Your public researcher page — it’s what people see on synthica.org and across the dashboard.</p>
+        </div>
+        <a className="btn btn-ghost btn-sm" href={publicUrl} target="_blank" rel="noreferrer">View public page →</a>
+      </div>
 
       <div className="grid grid-2" style={{ alignItems: 'start' }}>
         <Card>

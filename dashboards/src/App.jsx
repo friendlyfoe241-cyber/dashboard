@@ -18,6 +18,7 @@ const ModeratorApp = lazy(() => import('./pages/moderator/ModeratorApp.jsx'));
 const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
 const Archive = lazy(() => import('./pages/Archive.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
+const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
 const PageFallback = () => <PageLoader label="Loading workspace" />;
 
@@ -42,6 +43,7 @@ export default function App() {
         {/* Public, no login required: the archive + member profiles. */}
         <Route path="/archive" element={<Archive />} />
         <Route path="/p/:key" element={<PublicProfile />} />
+        <Route path="/verify-certificate" element={<VerifyCertificate />} />
         <Route path="/" element={<HomeRedirect />} />
         <Route
           path="/editor/*"
