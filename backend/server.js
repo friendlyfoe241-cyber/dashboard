@@ -902,6 +902,17 @@ app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, w
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
 }));
 
+// Member joins a private chapter by entering its 8-character code.
+app.post('/api/researcher/chapter/join', requireAuth, researcherOnly, wrap((req, res) => {
+  const { code } = req.body || {};
+  res.json(store.joinChapterByCode({ userId: req.user.id, code }));
+}));
+
+// Leader rotates their chapter's join code.
+app.post('/api/researcher/chapter/regenerate-code', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.regenerateJoinCode(req.user.id));
+}));
+
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive
 // on the memory provider — Director/Admin only, never anonymous.
 app.post('/api/dev/reset', requireAuth, requireDirector, async (_req, res) => {

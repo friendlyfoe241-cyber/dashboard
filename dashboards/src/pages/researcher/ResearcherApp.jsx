@@ -11,6 +11,7 @@ import ApplicationHub from './ApplicationHub.jsx';
 import Opportunities from './Opportunities.jsx';
 import Explore from './Explore.jsx';
 import MyProjects from './MyProjects.jsx';
+import ChapterHome from './dashboards/ChapterHome.jsx';
 import People from './People.jsx';
 import MyJournal from './MyJournal.jsx';
 import Community from './Community.jsx';
@@ -65,6 +66,7 @@ export default function ResearcherApp() {
     { section: 'Research' },
     { to: '/researcher/projects', label: 'Projects', icon: '📂' },
     { to: '/researcher/groups', label: 'Groups', icon: '🔬' },
+    { to: '/researcher/chapter', label: (user?.tags || []).includes('chapter_leader') ? 'My chapter' : 'Join a chapter', icon: '🌐' },
     { to: '/researcher/calendar', label: 'Calendar', icon: '📅' },
     { to: '/researcher/drive', label: 'Drive', icon: '🗂️' },
     { section: 'Explore' },
@@ -83,6 +85,7 @@ export default function ResearcherApp() {
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />
         <Route path="projects" element={<MyProjects />} />
+        <Route path="chapter" element={<ChapterHome />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="drive" element={<Drive />} />
         <Route path="people" element={<People />} />

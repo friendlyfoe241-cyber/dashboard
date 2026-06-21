@@ -3081,6 +3081,60 @@ const projectsForUser = (userId) => db.projects.filter((p) => p.members.includes
 export const getChapterLedBy = (userId) => db.chapters.find((c) => c.leaderId === userId) || null;
 const chaptersOf = (userId) => db.chapters.filter((c) => c.leaderId === userId || (c.members || []).some((m) => m.userId === userId));
 
+// --- chapter join codes (Google-Classroom-style private entry) --------------
+// Codes are 8 characters from an unambiguous alphabet (no 0/O/1/I/L) so they're
+// easy to read aloud and type. Generation loops until the code is unique across
+// all chapters.
+const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const joinCodeTaken = (code) => db.chapters.some((c) => (c.joinCode || '').toUpperCase() === code);
+function genJoinCode() {
+  let code;
+  do {
+    code = Array.from(randomBytes(8)).map((b) => JOIN_CODE_ALPHABET[b % JOIN_CODE_ALPHABET.length]).join('');
+  } while (joinCodeTaken(code));
+  return code;
+}
+
+// Lazily ensure a chapter has a join code (so seed/persisted chapters created
+// before codes existed still get one on first read). Returns the code.
+function ensureJoinCode(chapter) {
+  if (!chapter.joinCode) { chapter.joinCode = genJoinCode(); schedulePersist(); }
+  return chapter.joinCode;
+}
+
+// Leader rotates the join code (e.g. an old code leaked). Invalidates the old.
+export function regenerateJoinCode(leaderId) {
+  const chapter = getChapterLedBy(leaderId);
+  if (!chapter) throw httpError(403, 'Only a chapter leader can regenerate the join code');
+  chapter.joinCode = genJoinCode();
+  recordAudit(getUserById(leaderId), 'chapter_regenerate_code', chapter.name);
+  schedulePersist();
+  return { joinCode: chapter.joinCode };
+}
+
+// A member joins a chapter by entering its 8-character code. Adds them to the
+// roster with a fresh onboarding checklist (tagged as an associate) and
+// notifies the chapter leader. Mirrors addChapterMember's side effects so a
+// code-join and a leader-add land a member in the same shape.
+export function joinChapterByCode({ userId, code }) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'Researcher not found');
+  const norm = String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!norm) throw httpError(400, 'Enter a join code');
+  const chapter = db.chapters.find((c) => (c.joinCode || '').toUpperCase() === norm);
+  if (!chapter) throw httpError(404, "That join code didn't match any chapter. Double-check it with your chapter leader.");
+  if (chapter.members.some((m) => m.userId === userId)) throw httpError(409, "You're already a member of this chapter");
+
+  if (!Array.isArray(u.tags)) u.tags = [];
+  if (!u.tags.includes('associate_researcher')) u.tags.push('associate_researcher');
+  chapter.members.push({ userId, joinedAt: now(), onboarding: freshOnboarding() });
+  pushNotif(chapter.leaderId, { type: 'chapter', title: `${u.name} joined ${chapter.name}`, body: 'A new member joined with your chapter code.', link: '/researcher/chapter' });
+  notifyEvent({ title: 'Chapter member joined', body: `${u.name} joined ${chapter.name} with a join code.` });
+  recordAudit(u, 'chapter_join_code', chapter.name);
+  schedulePersist();
+  return { chapterId: chapter.id, chapterName: chapter.name, location: chapter.location || '' };
+}
+
 // Chapter leader broadcasts to their chapter: stored on the chapter, shown in
 // members' feeds, and pushed as a notification.
 export function addChapterAnnouncement({ leaderId, title, body }) {
@@ -3154,7 +3208,7 @@ export function chapterView(leaderId) {
     activeProjects: new Set(members.flatMap((m) => m.projects)).size,
   };
   const announcements = chapter.announcements || [];
-  return { id: chapter.id, name: chapter.name, location: chapter.location, handbookUrl: chapter.handbookUrl, members, stats, announcements };
+  return { id: chapter.id, name: chapter.name, location: chapter.location, handbookUrl: chapter.handbookUrl, joinCode: ensureJoinCode(chapter), members, stats, announcements };
 }
 
 // Leader adds a member by email: links an EXISTING account (look-up) or creates

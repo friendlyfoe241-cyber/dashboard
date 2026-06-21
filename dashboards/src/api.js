@@ -240,6 +240,8 @@ export const api = {
   chapter: () => request('/researcher/chapter'),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  joinChapterByCode: (code) => request('/researcher/chapter/join', { method: 'POST', body: { code } }),
+  regenerateChapterCode: () => request('/researcher/chapter/regenerate-code', { method: 'POST' }),
   // programs (apply → cohort → milestones)
   programs: () => request('/researcher/programs'),
   applyProgram: (id, message) => request(`/researcher/programs/${id}/apply`, { method: 'POST', body: { message } }),
