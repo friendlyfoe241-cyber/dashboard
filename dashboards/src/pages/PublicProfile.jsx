@@ -17,6 +17,15 @@ const TAG_LABEL = {
   expertise_mentor: 'Expertise Mentor',
 };
 
+// Researcher tags → human labels for the role badges on the public profile.
+const TAG_LABEL = {
+  associate_researcher: 'Associate Researcher',
+  lead_researcher: 'Lead Researcher',
+  independent_researcher: 'Independent Researcher',
+  chapter_leader: 'Chapter Leader',
+  expertise_mentor: 'Expertise Mentor',
+};
+
 // Public member profile — works without login, resolves by id or slug.
 export default function PublicProfile() {
   const { key } = useParams();

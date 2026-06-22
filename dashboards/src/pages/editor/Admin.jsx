@@ -22,7 +22,6 @@ export default function Admin() {
       <People isDirector={isDirector} />
       <Applications />
       <ProgramsPanel isDirector={isDirector} />
-      {isDirector && <BroadcastEmail />}
       <Moderation />
       <CompetitionsAdmin />
       <GlobalEvents />
@@ -1012,8 +1011,6 @@ function BroadcastEmail() {
     </div>
   );
 }
-
-// Community moderation: review and remove recent posts.
 // The reports queue: content members have flagged, with one-click resolution.
 function ReportsQueue() {
   const toast = useToast();

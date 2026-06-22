@@ -35,6 +35,7 @@ import Drive from './Drive.jsx';
 import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
+import Sandbox, { SandboxProject } from './Sandbox.jsx';
 
 function RoleCongrats() {
   const { user, refreshUser } = useAuth();
@@ -105,6 +106,7 @@ export default function ResearcherApp() {
     ...(isIndependent ? [
       { to: '/researcher/independent', label: 'Independent', icon: 'compass', end: true, views: ['independent'] },
       { section: 'Independent', views: ['independent'] },
+      { to: '/researcher/sandbox', label: 'Sandbox', icon: 'flask', views: ['independent'] },
       { to: '/researcher/projects', label: 'My Projects', icon: 'folder', views: ['independent'] },
       { to: '/researcher/journal', label: 'Journal', icon: 'book-open', views: ['independent'] },
       { to: '/researcher/calendar', label: 'Calendar', icon: 'calendar', views: ['independent'] },
@@ -161,6 +163,8 @@ export default function ResearcherApp() {
         <Route path="programs" element={<Programs />} />
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />
+        <Route path="sandbox" element={<Sandbox />} />
+        <Route path="sandbox/:projectId" element={<SandboxProject />} />
         <Route path="competitions" element={<Competitions />} />
         <Route path="news" element={<News />} />
         <Route path="account" element={<Account />} />

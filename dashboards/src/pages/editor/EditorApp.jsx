@@ -4,6 +4,7 @@ import { useAuth } from '../../auth.jsx';
 import EditorDashboard from './EditorDashboard.jsx';
 import DirectorDashboard from './DirectorDashboard.jsx';
 import Admin from './Admin.jsx';
+import Email from './Email.jsx';
 import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
@@ -33,6 +34,7 @@ export default function EditorApp() {
   if (hasQueue) nav.push({ to: '/editor', label: queue.label, icon: queue.icon, end: true });
   if (isDirector) nav.push({ to: '/editor/director', label: 'Director Desk', icon: 'folder-open' });
   if (isAdmin) nav.push({ to: '/editor/admin', label: 'Admin', icon: 'settings' });
+  nav.push({ to: '/editor/email', label: 'Send Email', icon: 'mail' });
   nav.push({ to: '/archive', label: 'Archive', icon: 'archive' });
   nav.push({ to: '/editor/account', label: 'Account', icon: 'user' });
 
@@ -42,6 +44,7 @@ export default function EditorApp() {
         <Route index element={hasQueue ? <EditorDashboard /> : <Navigate to={isSuperAdmin ? '/editor/director' : '/editor/admin'} replace />} />
         {isDirector && <Route path="director" element={<DirectorDashboard />} />}
         {isAdmin && <Route path="admin" element={<Admin />} />}
+        <Route path="email" element={<Email />} />
         <Route path="account" element={<Account />} />
         <Route path="profile" element={<Profile />} />
         <Route path="tools" element={<Tools />} />
