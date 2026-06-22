@@ -1,10 +1,8 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useAuth, RequireAuth } from './auth.jsx';
-import { getDefaultHomePath } from './views.js';
 import Login from './pages/Login.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import PageLoader from './components/PageLoader.jsx';
 
 // Route-level code splitting: the two dashboards (and heavier public pages)
 // load on demand, so a researcher never downloads the editor app and first
@@ -20,14 +18,19 @@ const Archive = lazy(() => import('./pages/Archive.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
-const PageFallback = () => <PageLoader label="Loading workspace" />;
+const PageFallback = () => <div className="page-loading"><div className="spinner" /></div>;
 
 // Send a logged-in user to the right dashboard based on their account kind.
 function HomeRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <PageLoader label="Signing you in" />;
+  if (loading) return (
+    <div className="page-loading">
+      <div className="spinner" />
+      <p className="home-link"><Link to="/">go home</Link></p>
+    </div>
+  );
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={getDefaultHomePath(user)} replace />;
+  return <Navigate to={user.kind === 'editor' ? '/editor' : '/researcher'} replace />;
 }
 
 export default function App() {
@@ -58,14 +61,6 @@ export default function App() {
           element={
             <RequireAuth kind="researcher">
               <ResearcherApp />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/moderator/*"
-          element={
-            <RequireAuth kind="editor">
-              <ModeratorApp />
             </RequireAuth>
           }
         />
