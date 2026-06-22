@@ -7,6 +7,15 @@ import { imageSrc } from '../files.js';
 import { safeHref } from '../url.js';
 import { useReloadOnFocus } from '../useReload.js';
 
+// Researcher tags → human labels for the role badges on the public profile.
+const TAG_LABEL = {
+  associate_researcher: 'Associate Researcher',
+  lead_researcher: 'Lead Researcher',
+  independent_researcher: 'Independent Researcher',
+  chapter_leader: 'Chapter Leader',
+  expertise_mentor: 'Expertise Mentor',
+};
+
 // Public member profile — works without login, resolves by id or slug.
 export default function PublicProfile() {
   const { key } = useParams();
@@ -56,6 +65,11 @@ export default function PublicProfile() {
               <div className="muted">{p.role}{p.username ? ` · @${p.username}` : ''}</div>
               {(p.affiliations || []).length > 0 && <div className="muted">{p.affiliations.join(' · ')}</div>}
               {p.blurb && <p style={{ margin: '0.35rem 0 0', color: 'var(--slate)' }}>{p.blurb}</p>}
+              {(p.tags || []).length > 0 && (
+                <div className="row" style={{ marginTop: '0.45rem', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {p.tags.map((t) => <Badge key={t} tone="blue">{TAG_LABEL[t] || t}</Badge>)}
+                </div>
+              )}
             </div>
           </div>
 

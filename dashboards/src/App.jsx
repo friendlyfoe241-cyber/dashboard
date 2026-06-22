@@ -15,6 +15,7 @@ const EditorApp = lazy(() => import('./pages/editor/EditorApp.jsx'));
 const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
 const Archive = lazy(() => import('./pages/Archive.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
+const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
 const PageFallback = () => <div className="page-loading"><div className="spinner" /></div>;
 
@@ -44,6 +45,7 @@ export default function App() {
         {/* Public, no login required: the archive + member profiles. */}
         <Route path="/archive" element={<Archive />} />
         <Route path="/p/:key" element={<PublicProfile />} />
+        <Route path="/verify-certificate" element={<VerifyCertificate />} />
         <Route path="/" element={<HomeRedirect />} />
         <Route
           path="/editor/*"

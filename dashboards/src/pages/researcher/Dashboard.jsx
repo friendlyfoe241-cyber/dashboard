@@ -5,7 +5,6 @@ import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import OnboardingWizard from '../../components/OnboardingWizard.jsx';
-import CertificateGenerator from '../../components/CertificateGenerator.jsx';
 import { imageSrc } from '../../files.js';
 
 const TAG_LABEL = {
@@ -50,8 +49,32 @@ export default function Dashboard() {
       {tags.includes('chapter_leader') && <ChapterPanel />}
       {tags.includes('independent_researcher') && <IndependentPanel />}
 
-      <CertificateGenerator user={user} />
+      <CertificatesCallout tags={tags} />
     </div>
+  );
+}
+
+// Nudge toward the Account → Certificates tab whenever a researcher holds a tag
+// that earns a downloadable certificate. The full gallery lives in Account so
+// there's a single renderer; this is just discovery from the home page.
+const CERT_TAGS = ['associate_researcher', 'independent_researcher', 'lead_researcher', 'chapter_leader'];
+function CertificatesCallout({ tags }) {
+  if (!tags.some((t) => CERT_TAGS.includes(t))) return null;
+  return (
+    <section style={{ marginBottom: '2rem' }}>
+      <div className="section-head">
+        <div className="section-badge">Certificates</div>
+        <h2 className="section-title">Your role certificates</h2>
+      </div>
+      <Card>
+        <div className="card-row">
+          <p className="muted" style={{ margin: 0 }}>
+            Download an official, verifiable certificate for each Synthica role you hold — great for college apps and résumés.
+          </p>
+          <Link className="btn btn-primary btn-sm" to="/researcher/account?tab=certs">View certificates →</Link>
+        </div>
+      </Card>
+    </section>
   );
 }
 
