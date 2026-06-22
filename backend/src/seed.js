@@ -176,6 +176,33 @@ export const editors = [
     twoFactorEnabled: false,
     following: [],
   },
+  // Demo account with every view-switcher workspace unlocked (dev only).
+  {
+    id: id('usr'),
+    name: 'Test All Views',
+    username: 'testall',
+    password: DEMO_PASSWORD,
+    kind: 'editor',
+    role: EDITOR_ROLES.DIRECTOR,
+    category: null,
+    email: 'testall@synthica.org',
+    discord: 'testall',
+    slug: 'testall',
+    institution: 'Synthica',
+    bio: 'Demo account for testing every dashboard view.',
+    avatarUrl: '',
+    interests: [],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+    allViewsDemo: true,
+    tags: [RESEARCHER_TAGS.LEAD_RESEARCHER, RESEARCHER_TAGS.CHAPTER_LEADER],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -287,7 +314,7 @@ function publication(title, authors, category, doiSuffix, year, abstract, extra 
       'Patel, R. (2024). A related method. Proceedings of the Annual Conference, 110–118.',
     ],
     metrics: {
-      accesses: extra.accesses ?? 200 + Math.floor(Math.random() * 4000),
+      accesses: extra.accesses ?? 0,
       citations: extra.citations ?? Math.floor(Math.random() * 8),
       altmetric: extra.altmetric ?? Math.floor(Math.random() * 30),
     },
@@ -303,7 +330,7 @@ export const publications = [
     '2025.0001',
     2025,
     'A controlled exposure study measuring microplastic accumulation in Daphnia magna over a 14-day window.',
-    { keywords: ['microplastics', 'Daphnia magna', 'freshwater ecology'], articleType: 'Article', accesses: 3120, citations: 4, altmetric: 18 }
+    { keywords: ['microplastics', 'Daphnia magna', 'freshwater ecology'], articleType: 'Article', citations: 4, altmetric: 18 }
   ),
   publication(
     'Benchmarking Small Language Models for Math Word Problems',
@@ -315,7 +342,7 @@ export const publications = [
     '2025.0002',
     2025,
     'We evaluate sub-3B parameter models on GSM8K-style problems and analyze failure modes.',
-    { keywords: ['language models', 'mathematical reasoning', 'benchmarking'], articleType: 'Analysis', accesses: 5400, citations: 6, altmetric: 27 }
+    { keywords: ['language models', 'mathematical reasoning', 'benchmarking'], articleType: 'Analysis', citations: 6, altmetric: 27 }
   ),
 ];
 
@@ -371,7 +398,7 @@ export const researchers = [
     affiliations: ['Phillips Exeter Academy', 'Synthica Research Group'],
     institution: 'Phillips Exeter Academy',
     pronouns: 'she/her',
-    blurb: 'Lead researcher studying coral-reef genetics 🌊',
+    blurb: 'Lead researcher studying coral-reef genetics',
     bio: 'High-school researcher leading a team on reef resilience. I love turning messy field data into models that say something real about a warming ocean.',
     interests: ['marine biology', 'genomics', 'climate modeling'],
     researchGroup: 'Reef Genomics Group',
@@ -507,12 +534,71 @@ export const researchers = [
     twoFactorEnabled: false,
     following: [],
   },
+  // --- Expertise mentors (ROLE_WORKFLOWS §7) -------------------------------
+  // Subject-matter advisors researchers can book 1:1 calls with. Each carries
+  // specialties + a mentor bio + future availability slots (built below).
+  researcher('Dr. Maya Chen', 'maya', [RESEARCHER_TAGS.EXPERTISE_MENTOR], {
+    affiliations: ['Stanford University'],
+    institution: 'Stanford University',
+    pronouns: 'she/her',
+    blurb: 'Computational biologist — happy to talk stats & study design 🧬',
+    bio: 'PhD in computational biology. I mentor students on experimental design and getting real signal out of noisy biological data.',
+    specialties: ['Biology', 'Statistics', 'Python'],
+    mentorBio: 'I help early researchers turn a vague hypothesis into a tractable study, and demystify the statistics so your results actually hold up. Bring your data — or just your questions.',
+    interests: ['computational biology', 'statistics'],
+  }),
+  researcher('Prof. Omar Haddad', 'omar', [RESEARCHER_TAGS.EXPERTISE_MENTOR], {
+    affiliations: ['MIT'],
+    institution: 'MIT',
+    pronouns: 'he/him',
+    blurb: 'ML researcher — model design, papers, and getting unstuck 🤖',
+    bio: 'I work on machine learning systems and love helping students scope an ML project that finishes.',
+    specialties: ['Computer Science', 'Machine Learning', 'Mathematics'],
+    mentorBio: 'Stuck on a model that won’t train, or unsure how to frame your CS project for a paper? Book a call and we’ll work through it together.',
+    interests: ['machine learning', 'optimization'],
+  }),
+  // A demo mentor account with @synthica.org credentials for easy sign-in, and
+  // a researcher who ALSO mentors (Casey already holds two tags) is set below.
+  {
+    id: id('usr'),
+    name: 'Test Expertise Mentor',
+    username: 'testmentor',
+    password: DEMO_PASSWORD,
+    kind: 'researcher',
+    tags: [RESEARCHER_TAGS.EXPERTISE_MENTOR],
+    email: 'testmentor@synthica.org',
+    discord: 'testmentor',
+    resumeUrl: '',
+    gpa: '',
+    researchExperience: 9,
+    leadRecommended: false,
+    pathway: [],
+    slug: 'testmentor',
+    institution: 'UC Berkeley',
+    affiliations: ['UC Berkeley'],
+    bio: 'Psychology researcher mentoring on study design and writing.',
+    blurb: 'Psych researcher — study design, surveys, and academic writing ✍️',
+    specialties: ['Psychology', 'Statistics', 'Academic Writing'],
+    mentorBio: 'I mentor on survey design, research ethics, and turning a messy first draft into a paper editors take seriously.',
+    avatarUrl: '',
+    interests: ['psychology', 'writing'],
+    linkedinUrl: '',
+    websiteUrl: '',
+    links: [],
+    public: true,
+    emailVerified: true,
+    twoFactorSecret: '',
+    twoFactorEnabled: false,
+    following: [],
+  },
 ];
 
 const leadId = researchers[0].id;
 const assocId = researchers[1].id;
 const taylorId = researchers[2].id;
+const robinId = researchers[3].id; // Robin Diaz — demo Independent Researcher
 const caseyId = researchers[4].id;
+const testallId = editors.find((e) => e.username === 'testall')?.id;
 
 // Stable IDs shared between the coral project, its custom-question listing, and
 // the seeded applicant so the demo wires together on a fresh boot.
@@ -520,6 +606,31 @@ const coralProjectId = id('proj');
 const coralListingId = id('list');
 const coralQ1 = id('q');
 const coralQ2 = id('q');
+
+// Casey already leads a chapter + is an associate researcher — give them the
+// mentor tag too, so a multi-tag account also reaches the mentor dashboard.
+researchers[4].tags = [...new Set([...researchers[4].tags, RESEARCHER_TAGS.EXPERTISE_MENTOR])];
+researchers[4].specialties = ['Chemistry', 'Lab Safety', 'Data Analysis'];
+researchers[4].mentorBio = 'Chapter leader and lab veteran — ask me about running safe experiments and presenting your data clearly.';
+
+// Build future-dated availability slots for the mentors so the directory always
+// shows bookable times. Slots are at 16:00 UTC on the next several weekdays.
+function mentorSlots(dayOffsets, hour = 16) {
+  return dayOffsets.map((d) => {
+    const dt = new Date();
+    dt.setUTCHours(hour, 0, 0, 0);
+    dt.setUTCDate(dt.getUTCDate() + d);
+    return { id: id('slot'), slot: dt.toISOString(), booked: false };
+  });
+}
+researchers.find((r) => r.username === 'maya').availability = mentorSlots([2, 3, 5, 7], 15);
+researchers.find((r) => r.username === 'omar').availability = mentorSlots([1, 4, 6], 18);
+researchers.find((r) => r.username === 'testmentor').availability = mentorSlots([2, 4, 8], 17);
+researchers[4].availability = mentorSlots([3, 6], 14); // Casey
+
+// In-app mentor bookings (researcher ↔ mentor 1:1 calls). Seeded empty; created
+// at runtime when a researcher books a slot.
+export const mentorBookings = [];
 
 // task(title, type, assignedTo, status, opts)
 function task(title, type, assignedTo, status, opts = {}) {
@@ -595,7 +706,30 @@ export const projects = [
     ideas: [],
     roles: [],
   },
+  // Robin's solo project — created when their Independent proposal was approved.
+  {
+    id: id('proj'),
+    title: 'Backyard Pollinator Diversity Census',
+    category: 'Biology',
+    description: 'Track native bee and butterfly diversity across urban gardens over a season.',
+    methodology: 'Weekly 15-minute pollinator counts at 6 garden sites; photo-log species; analyze diversity vs. plant cover.',
+    leadId: robinId,
+    members: [robinId],
+    origin: 'proposal',
+    announcements: [],
+    tasks: [
+      task('Pick 6 garden survey sites', 'task', [robinId], 'done', { createdBy: robinId }),
+      task('Run week 1 pollinator counts', 'task', [robinId], 'in_progress', { createdBy: robinId, dueAt: '2026-06-30' }),
+    ],
+    links: [],
+    ideas: [],
+    roles: [],
+  },
 ];
+
+// The approved-proposal project above (Robin's) — keep its id to link from the
+// seeded proposal record below.
+const robinProjectId = projects[projects.length - 1].id;
 
 // Demo: seed a couple personal "Pathway" to-dos + a follow edge.
 researchers[1].pathway = [
@@ -604,6 +738,52 @@ researchers[1].pathway = [
 ];
 researchers[1].following = [researchers[0].id]; // Jordan follows Sam
 researchers[1].interests = ['air quality', 'sensors'];
+
+// Demo: give Robin (Independent Researcher) a started Pathway so the home page
+// shows progress, plus interests for the feed.
+researchers[3].pathway = [
+  { id: id('pw'), title: 'Pick a research question', deliverable: 'A one-sentence question + why it matters', dueAt: null, done: true, track: 'own' },
+  { id: id('pw'), title: 'Write a short literature scan', deliverable: '5–8 sources with one-line takeaways', dueAt: null, done: true, track: 'own' },
+  { id: id('pw'), title: 'Find a mentor or advisor', deliverable: 'One person who agreed to advise', dueAt: null, done: false, track: 'own' },
+  { id: id('pw'), title: 'Draft a project proposal', deliverable: '1-page outline: question, method, timeline', dueAt: null, done: false, track: 'own' },
+];
+researchers[3].interests = ['ecology', 'pollinators', 'citizen science'];
+
+// Independent project proposals (Track 4). Modeled like applications so the
+// Moderator console can review them. Robin has one approved (its project lives
+// in `projects` above) and one still pending.
+export const proposals = [
+  {
+    id: id('prop'),
+    userId: robinId,
+    userName: 'Robin Diaz',
+    title: 'Backyard Pollinator Diversity Census',
+    category: 'Biology',
+    description: 'Track native bee and butterfly diversity across urban gardens over a season.',
+    methodology: 'Weekly 15-minute pollinator counts at 6 garden sites; photo-log species; analyze diversity vs. plant cover.',
+    status: 'approved',
+    feedback: 'Great scope for a solo project — approved. Log your sites in the project links.',
+    projectId: robinProjectId,
+    at: new Date(Date.now() - 9 * 864e5).toISOString(),
+    reviewedBy: null,
+    reviewedAt: new Date(Date.now() - 7 * 864e5).toISOString(),
+  },
+  {
+    id: id('prop'),
+    userId: robinId,
+    userName: 'Robin Diaz',
+    title: 'Soil Microplastics in Community Gardens',
+    category: 'Chemistry',
+    description: 'Survey microplastic concentration in topsoil across community garden plots.',
+    methodology: 'Collect topsoil cores, density-separate, count microplastics under a microscope; compare by plot age.',
+    status: 'pending',
+    feedback: '',
+    projectId: null,
+    at: new Date(Date.now() - 1 * 864e5).toISOString(),
+    reviewedBy: null,
+    reviewedAt: null,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Chapters + onboarding (Track 4)
@@ -622,12 +802,22 @@ export const chapters = [
     location: 'San Francisco, USA',
     leaderId: taylorId,
     handbookUrl: 'https://example.com/synthica-chapter-handbook',
+    // Fixed 8-char demo code so the join flow is reproducible. New chapters get
+    // a random unique code (see genJoinCode in store.js).
+    joinCode: 'BAYAREA7',
     members: [
       member(taylorId, ['discord', 'profile', 'handbook', 'project', 'intro']),
       member(caseyId, ['discord', 'profile', 'handbook']),
-      member(assocId, ['discord', 'profile']),
     ],
   },
+  ...(testallId ? [{
+    id: id('chap'),
+    name: 'Demo Test Chapter',
+    location: 'Global (demo)',
+    leaderId: testallId,
+    handbookUrl: 'https://example.com/synthica-chapter-handbook',
+    members: [member(testallId, ['discord', 'profile', 'handbook'])],
+  }] : []),
 ];
 
 // Open project listings for the Research Hub.
@@ -770,7 +960,7 @@ export const posts = [
   {
     id: id('post'),
     authorId: leadId,
-    text: 'Kicking off our reef-genomics project this summer! 🌊 If anyone has experience with R for ecology data, I’d love to collaborate — drop a comment.',
+    text: 'Kicking off our reef-genomics project this summer! If anyone has experience with R for ecology data, I’d love to collaborate — drop a comment.',
     linkUrl: '', imageUrl: '',
     likes: [assocId, caseyId],
     comments: [

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../api.js';
 import { useAuth } from '../../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../../components/ui.jsx';
+import Icon from '../../../components/Icon.jsx';
 import { useToast } from '../../../components/toast.jsx';
 import { imageSrc } from '../../../files.js';
 
@@ -78,9 +79,9 @@ function DashboardHero({ firstName, stats, onCreateProject, onCreateListing }) {
           <p className="page-sub" style={{ margin: 0 }}>Lead researcher — run your team, recruit collaborators, and publish.</p>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
-          <Button className="btn-sm" onClick={onCreateProject}>＋ New project</Button>
-          <Button className="btn-sm" variant="ghost" onClick={onCreateListing}>📣 Post listing</Button>
-          <Link className="btn btn-ghost btn-sm" to="/researcher/people">👥 Invite</Link>
+          <Button className="btn-sm" onClick={onCreateProject}><Icon name="plus" size={15} /> New project</Button>
+          <Button className="btn-sm" variant="ghost" onClick={onCreateListing}><Icon name="megaphone" size={15} /> Post listing</Button>
+          <Link className="btn btn-ghost btn-sm" to="/researcher/people"><Icon name="users" size={15} /> Invite</Link>
         </div>
       </div>
       <div className="lead-hero-stats">
@@ -209,10 +210,10 @@ function CustomQuestions({ on, questions, onToggle, onChange }) {
                 <input type="checkbox" checked={q.required !== false} onChange={(e) => setQ(i, { required: e.target.checked })} style={{ width: 'auto' }} />
                 required
               </label>
-              <button type="button" className="link-btn" onClick={() => remove(i)} aria-label="Remove question" style={{ flexShrink: 0 }}>✕</button>
+              <button type="button" className="link-btn" onClick={() => remove(i)} aria-label="Remove question" style={{ flexShrink: 0 }}><Icon name="x" size={15} /></button>
             </div>
           ))}
-          <div><Button type="button" variant="ghost" className="btn-sm" onClick={add}>＋ Add question</Button></div>
+          <div><Button type="button" variant="ghost" className="btn-sm" onClick={add}><Icon name="plus" size={15} /> Add question</Button></div>
         </div>
       )}
     </div>
@@ -459,12 +460,12 @@ function MyTeams({ projects }) {
 // --- What a lead can do (orientation) ---------------------------------------
 function RoleGuide() {
   const items = [
-    ['🧪', 'Create projects', 'Spin up a team workspace with tasks, links, announcements, and a roster.'],
-    ['📣', 'Recruit on the Hub', 'Every project can publish a listing so associates discover and apply.'],
-    ['📝', 'Custom applications', 'Add your own questions to a listing and review answers before accepting.'],
-    ['✅', 'Accept or pass', 'Accepting adds the applicant to your project team and fills a spot.'],
-    ['👥', 'Invite directly', 'Add collaborators by name or email straight into a project.'],
-    ['🔬', 'Group your work', 'Bundle related projects under a research group identity.'],
+    ['flask', 'Create projects', 'Spin up a team workspace with tasks, links, announcements, and a roster.'],
+    ['megaphone', 'Recruit on the Hub', 'Every project can publish a listing so associates discover and apply.'],
+    ['file-text', 'Custom applications', 'Add your own questions to a listing and review answers before accepting.'],
+    ['check-circle', 'Accept or pass', 'Accepting adds the applicant to your project team and fills a spot.'],
+    ['users', 'Invite directly', 'Add collaborators by name or email straight into a project.'],
+    ['microscope', 'Group your work', 'Bundle related projects under a research group identity.'],
   ];
   return (
     <section style={{ marginBottom: '1rem' }}>
@@ -475,7 +476,7 @@ function RoleGuide() {
       <div className="grid grid-3">
         {items.map(([icon, title, body]) => (
           <Card key={title}>
-            <div style={{ fontSize: '1.4rem' }}>{icon}</div>
+            <span className="guide-ico" aria-hidden="true"><Icon name={icon} size={20} /></span>
             <h3 style={{ margin: '0.3rem 0 0.2rem', fontSize: '1rem' }}>{title}</h3>
             <p className="muted" style={{ margin: 0 }}>{body}</p>
           </Card>
