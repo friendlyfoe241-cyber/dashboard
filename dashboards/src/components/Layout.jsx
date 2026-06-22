@@ -52,7 +52,16 @@ export default function Layout({ children, nav = [] }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sent, setSent] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const rev = useTabRevalidate();
+
+  // Mobile nav drawer: close on navigation and on Escape.
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const views = useMemo(() => getAvailableViews(user), [user]);
   const activeView = useMemo(
@@ -76,7 +85,7 @@ export default function Layout({ children, nav = [] }) {
   const resend = () => api.resendVerification().then(() => setSent(true)).catch(() => setSent(true));
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
       {user && user.emailVerified === false && (
         <div className="verify-banner">
           Please verify your email to secure your account.{' '}
@@ -84,6 +93,14 @@ export default function Layout({ children, nav = [] }) {
         </div>
       )}
       <header className="topbar">
+        <button
+          className="nav-toggle"
+          onClick={() => setNavOpen((v) => !v)}
+          aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={navOpen}
+        >
+          <Icon name={navOpen ? 'x' : 'menu'} size={20} />
+        </button>
         <div className="topbar-brand"><BrandMark size={22} />Synthica</div>
         <div className="topbar-right">
           <button className="cmdk-trigger" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))} aria-label="Search">
@@ -95,6 +112,7 @@ export default function Layout({ children, nav = [] }) {
         </div>
       </header>
       <div className="app-body">
+        <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />
         <aside className="sidebar" aria-label="Main navigation">
           {filteredNav.map((item, i) => (
             item.spacer ? (
@@ -106,6 +124,7 @@ export default function Layout({ children, nav = [] }) {
                 key={item.to}
                 to={item.to}
                 end={item.end}
+                onClick={() => setNavOpen(false)}
                 className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
               >
                 {item.icon && <span className="sidebar-ico" aria-hidden="true"><Icon name={item.icon} size={18} /></span>}
