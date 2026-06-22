@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../api.js';
 import { useAuth } from '../../../auth.jsx';
 import { Card, Badge, EmptyState } from '../../../components/ui.jsx';
+import Icon from '../../../components/Icon.jsx';
 import { imageSrc } from '../../../files.js';
 
 // The baseline Member portal home. Every Synthica member is an Associate
@@ -18,12 +19,12 @@ const STATUS_TONE = { pending: 'gray', approved: 'green', rejected: 'red' };
 
 // What an Associate Researcher can do on the platform — the "you are here" guide.
 const GUIDE = [
-  { icon: '🧭', label: 'Browse the Research Hub', desc: 'Open project listings posted by Lead Researchers.', to: '/researcher/hub' },
-  { icon: '🔬', label: 'Browse Research Groups', desc: 'Branded teams running related projects.', to: '/researcher/groups' },
-  { icon: '📎', label: 'Apply to projects & groups', desc: 'Your profile is sent automatically; some ask a few questions.', to: '/researcher/hub' },
-  { icon: '📂', label: 'See My Projects', desc: 'Everything you have joined, in one place.', to: '/researcher/projects' },
-  { icon: '📣', label: 'Join the community', desc: 'Feed, messages, and the people directory.', to: '/researcher/community' },
-  { icon: '📅', label: 'Track your calendar', desc: 'Deadlines and events across your projects.', to: '/researcher/calendar' },
+  { icon: 'compass', label: 'Browse the Research Hub', desc: 'Open project listings posted by Lead Researchers.', to: '/researcher/hub' },
+  { icon: 'microscope', label: 'Browse Research Groups', desc: 'Branded teams running related projects.', to: '/researcher/groups' },
+  { icon: 'paperclip', label: 'Apply to projects & groups', desc: 'Your profile is sent automatically; some ask a few questions.', to: '/researcher/hub' },
+  { icon: 'folder', label: 'See My Projects', desc: 'Everything you have joined, in one place.', to: '/researcher/projects' },
+  { icon: 'megaphone', label: 'Join the community', desc: 'Feed, messages, and the people directory.', to: '/researcher/community' },
+  { icon: 'calendar', label: 'Track your calendar', desc: 'Deadlines and events across your projects.', to: '/researcher/calendar' },
 ];
 
 export default function AssociateHome() {
@@ -63,7 +64,7 @@ function DashboardHero({ firstName }) {
     >
       <div style={{ minWidth: 0 }}>
         <div className="label-up" style={{ color: 'rgba(255,255,255,0.85)', letterSpacing: '0.08em' }}>
-          🧭 Member portal
+          <Icon name="compass" size={13} /> Member portal
         </div>
         <h1 className="page-title" style={{ color: '#fff', margin: '0.35rem 0 0.4rem' }}>
           Welcome, {firstName}
@@ -75,7 +76,7 @@ function DashboardHero({ firstName }) {
         </p>
         <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
           <Link to="/researcher/hub" className="btn btn-sm" style={{ background: '#fff', color: 'var(--brand-deep)', fontWeight: 700 }}>
-            🧭 Browse Research Hub
+            <Icon name="compass" size={15} /> Browse Research Hub
           </Link>
           <Link to="/researcher/groups" className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.55)' }}>
             Browse Groups
@@ -100,7 +101,7 @@ function RoleGuide() {
           <Link key={g.label} to={g.to} style={{ color: 'inherit' }}>
             <Card className="paper-card" style={{ height: '100%' }}>
               <div className="row" style={{ gap: '0.55rem', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <span style={{ fontSize: '1.3rem' }} aria-hidden="true">{g.icon}</span>
+                <span className="guide-ico" aria-hidden="true"><Icon name={g.icon} size={20} /></span>
                 <strong>{g.label}</strong>
               </div>
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>{g.desc}</p>
@@ -133,9 +134,9 @@ function QuickStats() {
   const openListings = listings.filter((l) => l.leadId !== user.id).length;
 
   const stats = [
-    { icon: '📂', label: 'Projects joined', value: projects.length, to: '/researcher/projects' },
-    { icon: '📨', label: 'Applications pending', value: pendingApps, to: '/researcher/hub' },
-    { icon: '🧭', label: 'Open listings', value: openListings, to: '/researcher/hub' },
+    { icon: 'folder', label: 'Projects joined', value: projects.length, to: '/researcher/projects' },
+    { icon: 'mail', label: 'Applications pending', value: pendingApps, to: '/researcher/hub' },
+    { icon: 'compass', label: 'Open listings', value: openListings, to: '/researcher/hub' },
   ];
 
   return (
@@ -144,7 +145,7 @@ function QuickStats() {
         <Link key={s.label} to={s.to} style={{ color: 'inherit' }}>
           <Card>
             <div className="row" style={{ gap: '0.6rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '1.6rem' }} aria-hidden="true">{s.icon}</span>
+              <span className="guide-ico guide-ico-lg" aria-hidden="true"><Icon name={s.icon} size={22} /></span>
               <div>
                 <div style={{ fontSize: '1.7rem', fontWeight: 800, color: 'var(--brand-deep)', lineHeight: 1.1 }}>{s.value}</div>
                 <div className="muted" style={{ fontSize: '0.78rem' }}>{s.label}</div>
@@ -169,7 +170,7 @@ function OpenListings() {
     <Card>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
         <div className="section-head" style={{ margin: 0 }}>
-          <div className="section-badge">🧭 Research Hub</div>
+          <div className="section-badge"><Icon name="compass" size={12} /> Research Hub</div>
         </div>
         <Link to="/researcher/hub" className="muted" style={{ fontSize: '0.82rem' }}>Browse all →</Link>
       </div>
@@ -221,7 +222,7 @@ function MyApplications() {
     <Card>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
         <div className="section-head" style={{ margin: 0 }}>
-          <div className="section-badge">📨 My applications</div>
+          <div className="section-badge"><Icon name="mail" size={12} /> My applications</div>
         </div>
       </div>
       {!apps ? (
@@ -301,7 +302,7 @@ function LatestNews() {
     <Card>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
         <div className="section-head" style={{ margin: 0 }}>
-          <div className="section-badge">📣 Latest news</div>
+          <div className="section-badge"><Icon name="megaphone" size={12} /> Latest news</div>
         </div>
         <Link to="/researcher/news" className="muted" style={{ fontSize: '0.82rem' }}>View all →</Link>
       </div>
@@ -334,14 +335,14 @@ function UpcomingItems() {
 
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = (items || []).filter((i) => i.date >= today).slice(0, 4);
-  const icons = { paper: '📄', task: '✅', event: '📅', workshop: '📅', meetup: '📅', pathway: '🧭' };
+  const icons = { paper: 'file-text', task: 'check-circle', event: 'calendar', workshop: 'calendar', meetup: 'calendar', pathway: 'compass' };
   const fmt = (d) => d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
   return (
     <Card>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
         <div className="section-head" style={{ margin: 0 }}>
-          <div className="section-badge">📅 Coming up</div>
+          <div className="section-badge"><Icon name="calendar" size={12} /> Coming up</div>
         </div>
         <Link to="/researcher/calendar" className="muted" style={{ fontSize: '0.82rem' }}>Open calendar →</Link>
       </div>
@@ -353,7 +354,7 @@ function UpcomingItems() {
         <div className="stack">
           {upcoming.map((it) => (
             <div key={it.id} className="info-block" style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '1.1rem' }} aria-hidden="true">{icons[it.kind] || '📅'}</span>
+              <span className="guide-ico" aria-hidden="true"><Icon name={icons[it.kind] || 'calendar'} size={18} /></span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</div>
                 <div className="muted" style={{ fontSize: '0.74rem' }}>{fmt(it.date)} · {it.context}</div>

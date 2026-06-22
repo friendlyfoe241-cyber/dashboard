@@ -2162,3 +2162,15 @@ html[data-theme='dark'] .dash-hero { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0
   .sidebar-ico { width: 32px; height: 32px; }
   .sidebar-section { padding-top: 0.7rem; }
 }
+
+/* Icon chips that replace inline emoji on role homes (brand-tinted square). */
+.guide-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex: none;
+  background: var(--accent-subtle, rgba(37, 137, 237, 0.12));
+  color: var(--brand-deep, #1a6bb5);
+}
+.guide-ico-lg { width: 40px; height: 40px; border-radius: 11px; }
+/* Section badges + the hero label can now hold a leading icon inline. */
+.section-badge { display: inline-flex; align-items: center; gap: 0.35rem; }
+.hero-card .label-up { display: inline-flex; align-items: center; gap: 0.4rem; }
