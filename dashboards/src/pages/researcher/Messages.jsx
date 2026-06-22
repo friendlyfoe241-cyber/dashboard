@@ -15,8 +15,65 @@ const ago = (iso) => {
   return new Date(iso).toLocaleDateString();
 };
 
-// Direct messages — a conversation list beside the open thread, updating live
-// over SSE as new messages arrive.
+const EMOJI_OPTIONS = ['❤️', '👍', '😂', '😮', '😢', '😡', '🔥', '👏'];
+
+// SVG Icons (monochrome, matching lucide style)
+const IconReply = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+  </svg>
+);
+
+const IconEdit = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+
+const IconDelete = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+  </svg>
+);
+
+const IconForward = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+  </svg>
+);
+
+const IconClose = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+);
+
+const IconCheck = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+);
+
+const IconCheckDouble = () => (
+  <svg width="16" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="18 6 9 17 4 12"/><polyline points="22 6 13 17"/>
+  </svg>
+);
+
+// Render text with clickable links
+const renderText = (text) => {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^\[\]`]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => 
+    urlRegex.test(part) 
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="msg-link">{part}</a>
+      : part
+  );
+};
+
+// Direct messages — enhanced with reactions, replies, edit, delete, forward
 export default function Messages() {
   const { userId } = useParams();
   const navigate = useNavigate();
@@ -24,7 +81,7 @@ export default function Messages() {
 
   const loadConvos = useCallback(() => api.conversations().then(setConvos).catch(() => setConvos([])), []);
   useEffect(() => { loadConvos(); }, [loadConvos]);
-  useRealtime('message', loadConvos); // new message anywhere → refresh the list
+  useRealtime('message', loadConvos);
 
   if (!convos) return <div className="page-loading">Loading…</div>;
 
@@ -66,27 +123,139 @@ function Thread({ userId, onSent }) {
   const [data, setData] = useState(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [showReactionPicker, setShowReactionPicker] = useState(null);
+  const [showForwardModal, setShowForwardModal] = useState(null);
+  const [forwardTargets, setForwardTargets] = useState([]);
   const toast = useToast();
   const endRef = useRef(null);
+  const reactionPickerRef = useRef(null);
 
   const navigate = useNavigate();
   const load = useCallback(() => api.thread(userId).then(setData).catch(() => setData(null)), [userId]);
   useEffect(() => { setData(null); load(); }, [load]);
 
-  // Live: when a message arrives from the person we're chatting with, reload.
+  // Live updates
   useRealtime('message', useCallback((d) => { if (d.from === userId) load(); }, [userId, load]));
+  useRealtime('message_edited', useCallback((d) => {
+    setData(prev => prev ? {
+      ...prev,
+      messages: prev.messages.map(m => m.id === d.messageId ? { ...m, text: d.text, isEdited: true } : m)
+    } : prev);
+  }, []));
+  useRealtime('message_deleted', useCallback((d) => {
+    setData(prev => prev ? {
+      ...prev,
+      messages: prev.messages.map(m => m.id === d.messageId ? { ...m, text: '[deleted]', isDeleted: true } : m)
+    } : prev);
+  }, []));
+  useRealtime('message_reaction', useCallback((d) => {
+    setData(prev => prev ? {
+      ...prev,
+      messages: prev.messages.map(m => m.id === d.messageId ? { ...m, reactions: d.reactions } : m)
+    } : prev);
+  }, []));
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [data]);
+
+  // Close reaction picker on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (reactionPickerRef.current && !reactionPickerRef.current.contains(e.target)) {
+        setShowReactionPicker(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Load forward targets
+  useEffect(() => {
+    if (showForwardModal) {
+      api.forwardTargets().then(setForwardTargets).catch(() => setForwardTargets([]));
+    }
+  }, [showForwardModal]);
 
   const send = async () => {
     if (!text.trim()) return;
     setBusy(true);
     try {
-      const msg = await api.sendMessage(userId, text);
+      const opts = {};
+      if (replyingTo) {
+        opts.replyTo = replyingTo.id;
+        opts.replyToContent = replyingTo.text;
+        opts.replyToSender = replyingTo.mine ? 'You' : data.user.name;
+        opts.replyToType = 'text';
+      }
+      const msg = await api.sendMessage(userId, text, opts);
       setData((d) => (d ? { ...d, messages: [...d.messages, msg] } : d));
       setText('');
+      setReplyingTo(null);
       onSent?.();
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+
+  const startEdit = (msg) => {
+    setEditingId(msg.id);
+    setEditText(msg.text);
+  };
+
+  const saveEdit = async (msgId) => {
+    if (!editText.trim()) return;
+    try {
+      await api.editMessage(msgId, editText);
+      setData(prev => prev ? {
+        ...prev,
+        messages: prev.messages.map(m => m.id === msgId ? { ...m, text: editText, isEdited: true } : m)
+      } : prev);
+      setEditingId(null);
+      setEditText('');
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const handleDelete = async (msgId) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      await api.deleteMessage(msgId);
+      setData(prev => prev ? {
+        ...prev,
+        messages: prev.messages.map(m => m.id === msgId ? { ...m, text: '[deleted]', isDeleted: true } : m)
+      } : prev);
+      toast.success('Message deleted');
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const handleReaction = async (msgId, emoji) => {
+    try {
+      const reactions = await api.toggleReaction(msgId, emoji);
+      setData(prev => prev ? {
+        ...prev,
+        messages: prev.messages.map(m => m.id === msgId ? { ...m, reactions } : m)
+      } : prev);
+      setShowReactionPicker(null);
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const handleForward = async (msgId, toUserId) => {
+    try {
+      await api.forwardMessage(msgId, toUserId);
+      setShowForwardModal(null);
+      toast.success('Message forwarded');
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
   };
 
   if (!data) return <div className="page-loading" style={{ minHeight: 200 }}>Loading…</div>;
@@ -101,20 +270,134 @@ function Thread({ userId, onSent }) {
           <SafetyMenu kind="profile" targetId={data.user.id} authorId={data.user.id} authorName={data.user.name} onBlocked={() => navigate('/researcher/messages')} />
         </span>
       </div>
+
       <div className="dm-messages">
         {data.messages.length === 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '1rem' }}>No messages yet — say hello 👋</p>}
         {data.messages.map((m) => (
-          <div key={m.id} className={`dm-bubble ${m.mine ? 'mine' : ''}`}>
-            <span>{m.text}</span>
-            <span className="dm-bubble-time">{ago(m.at)}</span>
+          <div key={m.id} className={`dm-bubble-wrap ${m.mine ? 'mine' : ''}`}>
+            {m.replyToId && (
+              <div className="dm-reply-preview">
+                <span className="dm-reply-sender">{m.replyToSender}:</span>
+                <span className="dm-reply-text">{m.replyToContent || 'Media'}</span>
+              </div>
+            )}
+            <div className={`dm-bubble ${m.mine ? 'mine' : ''} ${m.isDeleted ? 'deleted' : ''}`}>
+              {m.isForwarded && <span className="dm-forwarded-badge">Forwarded</span>}
+              
+              {m.isDeleted ? (
+                <span className="dm-deleted-text">{m.text}</span>
+              ) : editingId === m.id ? (
+                <div className="dm-edit-form">
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    className="dm-edit-input"
+                    autoFocus
+                  />
+                  <div className="dm-edit-actions">
+                    <button onClick={() => saveEdit(m.id)} className="dm-btn-save">Save</button>
+                    <button onClick={cancelEdit} className="dm-btn-cancel">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="dm-bubble-content">
+                    <span className="dm-bubble-text">{renderText(m.text)}</span>
+                    {m.isEdited && <span className="dm-edited-mark">(edited)</span>}
+                  </div>
+                  
+                  {/* Message status */}
+                  <div className="dm-bubble-status">
+                    <span className="dm-bubble-time">{ago(m.at)}</span>
+                    {m.mine && (
+                      <span className="dm-status-icons">
+                        {m.read ? <IconCheckDouble /> : m.delivered ? <IconCheckDouble /> : <IconCheck />}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Reactions */}
+                  {Object.keys(m.reactions || {}).length > 0 && (
+                    <div className="dm-reactions">
+                      {Object.entries(m.reactions).map(([emoji, users]) => (
+                        <button key={emoji} className="dm-reaction" onClick={() => handleReaction(m.id, emoji)}>
+                          {emoji} <span>{users.length}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Message actions */}
+                  <div className="dm-bubble-actions">
+                    <button onClick={() => setReplyingTo(m)} title="Reply"><IconReply /></button>
+                    <button onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)} title="React">+</button>
+                    {m.mine && <button onClick={() => startEdit(m)} title="Edit"><IconEdit /></button>}
+                    {m.mine && <button onClick={() => handleDelete(m.id)} title="Delete"><IconDelete /></button>}
+                    <button onClick={() => setShowForwardModal(m)} title="Forward"><IconForward /></button>
+                  </div>
+                  
+                  {/* Reaction picker */}
+                  {showReactionPicker === m.id && (
+                    <div className="dm-reaction-picker" ref={reactionPickerRef}>
+                      {EMOJI_OPTIONS.map(emoji => (
+                        <button key={emoji} onClick={() => handleReaction(m.id, emoji)}>{emoji}</button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         ))}
         <div ref={endRef} />
       </div>
+
+      {/* Reply indicator */}
+      {replyingTo && (
+        <div className="dm-reply-indicator">
+          <div className="dm-reply-info">
+            <span>Replying to {replyingTo.mine ? 'yourself' : data.user.name}</span>
+            <span className="dm-reply-content">{replyingTo.text?.slice(0, 50)}{replyingTo.text?.length > 50 ? '...' : ''}</span>
+          </div>
+          <button onClick={() => setReplyingTo(null)} className="dm-reply-close"><IconClose /></button>
+        </div>
+      )}
+
       <div className="dm-compose">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Write a message…" onKeyDown={(e) => e.key === 'Enter' && send()} />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Write a message… (Enter to send, Shift+Enter for new line)"
+          className="dm-compose-input"
+          rows={1}
+        />
         <Button disabled={busy || !text.trim()} onClick={send}>Send</Button>
       </div>
+
+      {/* Forward Modal */}
+      {showForwardModal && (
+        <div className="dm-modal-overlay" onClick={() => setShowForwardModal(null)}>
+          <div className="dm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Forward Message</h3>
+            <input
+              type="text"
+              placeholder="Search contacts..."
+              className="dm-modal-search"
+              autoFocus
+            />
+            <div className="dm-modal-list">
+              {forwardTargets.map(u => (
+                <button key={u.id} className="dm-modal-item" onClick={() => handleForward(showForwardModal.id, u.id)}>
+                  <Pfp name={u.name} size="xs" />
+                  <span>{u.name}</span>
+                </button>
+              ))}
+            </div>
+            <button className="dm-modal-close" onClick={() => setShowForwardModal(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
