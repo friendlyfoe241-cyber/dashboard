@@ -132,6 +132,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/journal/publications${qs ? `?${qs}` : ''}`);
   },
+  recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),
@@ -173,6 +174,7 @@ export const api = {
   setProjectRole: (id, userId, title) => request(`/researcher/projects/${id}/roles`, { method: 'POST', body: { userId, title } }),
   suggestedForProject: (id) => request(`/researcher/projects/${id}/suggested`),
   projectStats: (id) => request(`/researcher/projects/${id}/stats`),
+  projectEvents: (id) => request(`/researcher/projects/${id}/events`),
   addIdea: (id, text) => request(`/researcher/projects/${id}/ideas`, { method: 'POST', body: { text } }),
   voteIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/vote`, { method: 'POST' }),
   chooseIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/choose`, { method: 'POST' }),
@@ -272,11 +274,14 @@ export const api = {
   requestRevision: (id, note) => request(`/editor/papers/${id}/request-revision`, { method: 'POST', body: { note } }),
   onboarding: () => request('/researcher/onboarding'),
   onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
+  claimAssociateRole: () => request('/researcher/roles/associate', { method: 'POST' }),
   resubmitOnboarding: () => request('/researcher/onboarding/resubmit', { method: 'POST' }),
   chapter: () => request('/researcher/chapter'),
   createChapter: (body) => request('/researcher/chapter', { method: 'POST', body }),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  joinChapterByCode: (code) => request('/researcher/chapter/join', { method: 'POST', body: { code } }),
+  regenerateChapterCode: () => request('/researcher/chapter/regenerate-code', { method: 'POST' }),
   chapterProgress: () => request('/researcher/chapter/progress'),
   addChapterProgress: (body) => request('/researcher/chapter/progress', { method: 'POST', body }),
   // programs (apply → cohort → milestones)

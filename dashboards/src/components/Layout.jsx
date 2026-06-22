@@ -1,20 +1,15 @@
-import { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { api } from '../api.js';
 import Bell from './Bell.jsx';
 import CommandPalette from './CommandPalette.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
+import ViewSwitcher from './ViewSwitcher.jsx';
+import Icon, { BrandMark } from './Icon.jsx';
+import { filterNavForView, getAvailableViews, resolveActiveView } from '../views.js';
 
-// SPAs keep stale state when you leave the browser tab and come back, so the
-// page looks blank/old until a manual refresh. This remounts the routed content
-// when the tab regains focus after being hidden a moment — every page's load
-// effect re-runs, so data is fresh without a full reload. Only fires after a
-// real away-and-back (not on quick alt-tabs) to avoid disrupting active use.
-// Disabled for now as it was causing errors when switching tabs.
 function useTabRevalidate() {
-  // Temporarily disabled - was causing blank screens when users switch tabs
-  // return 0;
-  
   const [rev, setRev] = useState(0);
   useEffect(() => {
     let hiddenAt = 0;
@@ -25,7 +20,6 @@ function useTabRevalidate() {
         setRev((r) => r + 1);
       }
     };
-    // pageshow with persisted=true => restored from the back/forward cache.
     const onPageShow = (e) => { if (e.persisted) setRev((r) => r + 1); };
     document.addEventListener('visibilitychange', onHide);
     document.addEventListener('visibilitychange', onShow);
@@ -39,28 +33,49 @@ function useTabRevalidate() {
   return rev;
 }
 
-// Light/dark toggle — persisted, applied on <html data-theme>.
-function ThemeToggle() {
-  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark');
-  const flip = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.dataset.theme = next ? 'dark' : 'light';
-    try { localStorage.setItem('synthica.theme', next ? 'dark' : 'light'); } catch { /* ignore */ }
-  };
-  return (
-    <button className="theme-toggle" onClick={flip} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
-      {dark ? '☀️' : '🌙'}
-    </button>
-  );
+function ThemeToggleSlot() {
+  return <ThemeToggle />;
+}
+
+function navLabelForPath(nav, pathname) {
+  const links = nav.filter((n) => n.to);
+  const exact = links.find((n) => n.end && pathname === n.to);
+  if (exact) return exact.label;
+  const sorted = [...links].sort((a, b) => b.to.length - a.to.length);
+  const match = sorted.find((n) => pathname === n.to || pathname.startsWith(`${n.to}/`));
+  return match?.label;
 }
 
 // App shell: top bar + role-aware sidebar navigation.
 export default function Layout({ children, nav = [] }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sent, setSent] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const rev = useTabRevalidate();
+
+  // Mobile nav drawer: close on navigation and on Escape.
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const views = useMemo(() => getAvailableViews(user), [user]);
+  const activeView = useMemo(
+    () => resolveActiveView(views, location.pathname, user?.id),
+    [views, location.pathname, user?.id],
+  );
+  const filteredNav = useMemo(
+    () => filterNavForView(nav, activeView?.id),
+    [nav, activeView?.id],
+  );
+  const pageLabel = useMemo(
+    () => navLabelForPath(filteredNav, location.pathname),
+    [filteredNav, location.pathname],
+  );
 
   const onLogout = () => {
     logout();
@@ -70,7 +85,7 @@ export default function Layout({ children, nav = [] }) {
   const resend = () => api.resendVerification().then(() => setSent(true)).catch(() => setSent(true));
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
       {user && user.emailVerified === false && (
         <div className="verify-banner">
           Please verify your email to secure your account.{' '}
@@ -78,26 +93,28 @@ export default function Layout({ children, nav = [] }) {
         </div>
       )}
       <header className="topbar">
-        <div className="topbar-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
+        <button
+          className="nav-toggle"
+          onClick={() => setNavOpen((v) => !v)}
+          aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={navOpen}
+        >
+          <Icon name={navOpen ? 'x' : 'menu'} size={20} />
+        </button>
+        <div className="topbar-brand"><BrandMark size={22} />Synthica</div>
         <div className="topbar-right">
           <button className="cmdk-trigger" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))} aria-label="Search">
-            🔍 <span className="cmdk-hint">⌘K</span>
+            <Icon name="search" size={16} /> <span className="cmdk-hint">⌘K</span>
           </button>
-          <ThemeToggle />
+          <ThemeToggleSlot />
           <Bell />
-          <span className="topbar-user">
-            {user?.name}
-            {user?.role && <span className="topbar-role"> · {user.role}</span>}
-            {user?.category && <span className="topbar-role"> · {user.category}</span>}
-          </span>
-          <button className="btn btn-ghost" onClick={onLogout}>
-            Log out
-          </button>
+          <ViewSwitcher onLogout={onLogout} />
         </div>
       </header>
       <div className="app-body">
-        <aside className="sidebar">
-          {nav.map((item, i) => (
+        <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />
+        <aside className="sidebar" aria-label="Main navigation">
+          {filteredNav.map((item, i) => (
             item.spacer ? (
               <div key={`sp-${i}`} className="sidebar-spacer" />
             ) : item.section ? (
@@ -107,17 +124,27 @@ export default function Layout({ children, nav = [] }) {
                 key={item.to}
                 to={item.to}
                 end={item.end}
+                onClick={() => setNavOpen(false)}
                 className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
               >
-                {item.icon && <span className="sidebar-ico" aria-hidden="true">{item.icon}</span>}
+                {item.icon && <span className="sidebar-ico" aria-hidden="true"><Icon name={item.icon} size={18} /></span>}
                 <span className="sidebar-label">{item.label}</span>
               </NavLink>
             )
           ))}
         </aside>
-        <main className="content" key={rev}>{children}</main>
+        <main className="content" key={rev}>
+          {activeView && pageLabel && pageLabel !== activeView.label && (
+            <nav className="content-crumb" aria-label="Breadcrumb">
+              <span className="content-crumb-view">{activeView.label}</span>
+              <span className="content-crumb-sep" aria-hidden="true">/</span>
+              <span className="content-crumb-page">{pageLabel}</span>
+            </nav>
+          )}
+          {children}
+        </main>
       </div>
-      <CommandPalette nav={nav} />
+      <CommandPalette nav={filteredNav} />
     </div>
   );
 }

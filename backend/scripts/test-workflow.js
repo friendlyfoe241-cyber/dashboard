@@ -4,7 +4,7 @@ import * as store from '../src/store.js';
 import * as seed from '../src/seed.js';
 
 let pass = 0, fail = 0;
-const ok = (c, m) => (c ? (pass++, console.log(`  ✓ ${m}`)) : (fail++, console.error(`  ✗ ${m}`)));
+const ok = (c, m) => (c ? (pass++, console.log(`  [ok] ${m}`)) : (fail++, console.error(`  [fail] ${m}`)));
 
 const ed = (role, cat) => seed.editors.find((e) => e.role === role && (cat ? e.category === cat : true));
 const sam = seed.researchers[0];

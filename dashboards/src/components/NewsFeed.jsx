@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Card, Badge } from './ui.jsx';
+import Icon from './Icon.jsx';
 
 // Global announcements feed, shown on everyone's home. Compact by default.
 export default function NewsFeed({ limit = 3 }) {
@@ -12,7 +13,7 @@ export default function NewsFeed({ limit = 3 }) {
   return (
     <Card style={{ marginBottom: '1.5rem' }}>
       <div className="card-row">
-        <h3>📣 Announcements</h3>
+        <h3><span className="icon-label"><Icon name="megaphone" size={18} /> Announcements</span></h3>
         <Badge tone="gray">{news.length}</Badge>
       </div>
       <div className="stack" style={{ marginTop: '0.5rem' }}>

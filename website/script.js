@@ -19,7 +19,10 @@
   //   <script>window.SYNTHICA_API_BASE = 'https://synthica-backend.onrender.com';
   //           window.SYNTHICA_APP_URL  = 'https://app.synthica.org';</script>
   var API_BASE = (window.SYNTHICA_API_BASE || 'http://localhost:4000').replace(/\/$/, '');
-  var APP_URL = (window.SYNTHICA_APP_URL || 'https://app.synthica.org').replace(/\/$/, '');
+  var defaultAppUrl = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? 'http://localhost:5173'
+    : 'https://app.synthica.org';
+  var APP_URL = (window.SYNTHICA_APP_URL || defaultAppUrl).replace(/\/$/, '');
 
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
@@ -31,6 +34,7 @@
     initNewsletter();
     initThemeToggle();
     initAppLinks();
+    initFeatureIcons();
     initLiveStats();
     initFeaturedPapers();
   });
@@ -66,7 +70,21 @@
   function initFeaturedPapers() {
     var grid = document.getElementById('showcase-grid');
     if (!grid) return;
-    var STICKERS = { Biology: '\u{1F9EC}', Chemistry: '⚗️', Physics: '\u{1F52D}', Mathematics: '∑', 'Computer Science': '\u{1F916}', Humanities: '\u{1F4DC}', Economics: '\u{1F4C8}', Psychology: '\u{1F9E0}' };
+    var STICKERS = { Biology: 'dna', Chemistry: 'flask', Physics: 'microscope', Mathematics: '∑', 'Computer Science': 'bot', Humanities: 'scroll', Economics: 'trending-up', Psychology: 'lightbulb' };
+    var DEFAULT_STICKER = 'flask';
+    function stickerHtml(category, featured) {
+      var sticker = STICKERS[category] || DEFAULT_STICKER;
+      var html = '';
+      if (sticker === '∑') {
+        html = '<span class="showcase-sticker-text">∑</span>';
+      } else if (window.SynthicaIcons) {
+        html = window.SynthicaIcons.iconSvg(sticker, 28, 'showcase-sticker-icon');
+      }
+      if (featured && window.SynthicaIcons) {
+        html += window.SynthicaIcons.iconSvg('star', 16, 'showcase-featured-icon');
+      }
+      return html;
+    }
     fetch(API_BASE + '/api/journal/publications')
       .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(function (pubs) {
@@ -86,7 +104,7 @@
           a.href = 'article.html?id=' + encodeURIComponent(p.id);
           var authors = (p.authors || []).map(function (x) { return x.name; }).slice(0, 2).join(' & ') + ((p.authors || []).length > 2 ? ' et al.' : '');
           a.innerHTML =
-            '<span class="showcase-sticker" aria-hidden="true">' + (STICKERS[p.category] || '\u{1F52C}') + (p.featured ? ' ⭐' : '') + '</span>' +
+            '<span class="showcase-sticker" aria-hidden="true">' + stickerHtml(p.category, p.featured) + '</span>' +
             '<span class="badge-cat"></span><h3></h3><p></p>';
           a.querySelector('.badge-cat').textContent = p.category || 'Research';
           a.querySelector('h3').textContent = p.title;
@@ -120,6 +138,12 @@
     });
   }
 
+  function initFeatureIcons() {
+    if (window.SynthicaIcons && window.SynthicaIcons.initFeatureIcons) {
+      window.SynthicaIcons.initFeatureIcons();
+    }
+  }
+
   /* Dark mode: toggle data-theme="dark" on <html>, persist in localStorage.
      The saved theme is also applied pre-paint by an inline script in <head>. */
   function initThemeToggle() {
@@ -143,6 +167,14 @@
       else root.removeAttribute('data-theme');
       try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch (e) {}
       syncButtons();
+    }
+
+    if (!localStorage.getItem(THEME_KEY)) {
+      try {
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          root.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {}
     }
 
     syncButtons();
