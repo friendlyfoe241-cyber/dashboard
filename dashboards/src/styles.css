@@ -1465,8 +1465,14 @@ html[data-theme='dark'] .danger-zone { background: #2a1416; border-color: #7f1d1
 .dot-pathway { background: var(--success); }
 .dot-mentor { background: #14b8a6; }
 .cal-dots em { font-style: normal; font-size: 0.6rem; color: var(--body-alt); }
-.cal-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
-.cal-item-icon { font-size: 1.05rem; }
+.cal-item { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
+.cal-item-icon { font-size: 1.05rem; flex: none; }
+/* Text takes priority; if the row can't fit the actions beside a readable
+   title (≥150px), the actions wrap to their own line instead of crushing it. */
+.cal-item-body { flex: 1 1 150px; min-width: 0; }
+.cal-item-title { font-weight: 600; line-height: 1.3; }
+.cal-item-meta { font-size: 0.78rem; line-height: 1.45; }
+.cal-item-actions { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-left: auto; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid var(--border); }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--body-alt); }
 
