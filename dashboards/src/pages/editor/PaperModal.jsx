@@ -16,18 +16,6 @@ const ROLE_LABEL = {
 const decisionTone = (d) => (d === 'approve' || d === 'approved' ? 'green' : 'red');
 const decisionWord = (d) => (d === 'approve' || d === 'approved' ? 'approved' : 'declined');
 
-// Human-readable label for the role that left a decision, so the feedback chain
-// reads clearly (Reviews Editor / Senior Editor / Editor-in-Chief).
-const ROLE_LABEL = {
-  reviews: 'Reviews Editor',
-  senior: 'Senior Editor',
-  associate: 'Associate Editor',
-  chief: 'Editor-in-Chief',
-};
-
-const decisionTone = (d) => (d === 'approve' || d === 'approved' ? 'green' : 'red');
-const decisionWord = (d) => (d === 'approve' || d === 'approved' ? 'approved' : 'declined');
-
 // The "See more" detail view. Renders the paper's extracted info plus the
 // decision controls appropriate to the editor's role.
 export default function PaperModal({ paper, role, onClose, onActed }) {
