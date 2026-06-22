@@ -6,6 +6,7 @@ import { Card, Badge, Pfp } from '../components/ui.jsx';
 import { imageSrc } from '../files.js';
 import { safeHref } from '../url.js';
 import { useReloadOnFocus } from '../useReload.js';
+import Icon, { BrandMark } from '../components/Icon.jsx';
 
 // Researcher tags → human labels for the role badges on the public profile.
 const TAG_LABEL = {
@@ -46,9 +47,9 @@ export default function PublicProfile() {
   return (
     <div className="archive-page">
       <nav className="archive-topnav" style={{ padding: '1rem clamp(1rem,4vw,2.5rem)' }}>
-        <Link to="/" className="topbar-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</Link>
+        <Link to="/" className="topbar-brand"><BrandMark size={22} />Synthica</Link>
         <span className="row" style={{ gap: '0.8rem' }}>
-          {user && user.id !== p.id && <Link className="btn btn-primary btn-sm" to={`/researcher/messages/${p.id}`}>💬 Message</Link>}
+          {user && user.id !== p.id && <Link className="btn btn-primary btn-sm" to={`/researcher/messages/${p.id}`}><span className="icon-label"><Icon name="message" size={16} /> Message</span></Link>}
           <Link className="btn btn-ghost btn-sm" to="/archive">Archive</Link>
           {user ? <Link className="btn btn-ghost btn-sm" to="/">My dashboard</Link> : <Link className="btn btn-ghost btn-sm" to="/login">Sign in</Link>}
         </span>
@@ -76,10 +77,10 @@ export default function PublicProfile() {
           {(p.researchGroup || p.dob || p.contactEmail) && (
             <div className="stack" style={{ marginTop: '0.7rem', gap: '0.2rem' }}>
               {p.researchGroup && (
-                <div className="muted">🔬 {safeHref(p.researchGroupUrl) ? <a href={safeHref(p.researchGroupUrl)} target="_blank" rel="noreferrer">{p.researchGroup}</a> : p.researchGroup}</div>
+                <div className="muted"><span className="icon-label"><Icon name="flask" size={14} /> {safeHref(p.researchGroupUrl) ? <a href={safeHref(p.researchGroupUrl)} target="_blank" rel="noreferrer">{p.researchGroup}</a> : p.researchGroup}</span></div>
               )}
-              {p.contactEmail && <div className="muted">✉️ <a href={`mailto:${p.contactEmail}`}>{p.contactEmail}</a></div>}
-              {p.dob && <div className="muted">🎂 {p.dob}</div>}
+              {p.contactEmail && <div className="muted"><span className="icon-label"><Icon name="mail" size={14} /> <a href={`mailto:${p.contactEmail}`}>{p.contactEmail}</a></span></div>}
+              {p.dob && <div className="muted"><span className="icon-label"><Icon name="cake" size={14} /> {p.dob}</span></div>}
             </div>
           )}
 
@@ -93,8 +94,8 @@ export default function PublicProfile() {
 
           {(p.badges || []).length > 0 && (
             <div className="row" style={{ marginTop: '0.7rem', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              {p.reputation > 0 && <Badge tone="gold">⭐ {p.reputation} rep</Badge>}
-              {p.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}>{b.icon} {b.label}</Badge>)}
+              {p.reputation > 0 && <Badge tone="gold"><span className="icon-label"><Icon name="star" size={12} /> {p.reputation} rep</span></Badge>}
+              {p.badges.map((b) => <Badge key={b.id} tone="blue" title={b.label}><Icon name={b.icon} size={12} /> {b.label}</Badge>)}
             </div>
           )}
         </Card>
