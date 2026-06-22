@@ -1886,26 +1886,47 @@ export function auditorSetTags({ userId, addTags, removeTags, actor }) {
   return safe;
 }
 
+// Active journal submissions still in the editorial pipeline (not published to
+// archive, not declined).
+function pipelineSubmissions() {
+  return db.submissions.filter((s) => !s.published && s.stage !== STAGE.REJECTED);
+}
+
+// Count a verified article view (journal archive + static article pages).
+export function recordPublicationAccess(id) {
+  const pub = db.publications.find((p) => p.id === id || p.doi === id);
+  if (!pub || !isVerifiedPub(pub)) return null;
+  if (!pub.metrics) pub.metrics = { accesses: 0, citations: 0, altmetric: 0 };
+  pub.metrics.accesses = (pub.metrics.accesses || 0) + 1;
+  schedulePersist();
+  return pub.metrics.accesses;
+}
+
 // Platform analytics for the admin page.
 export function analytics() {
+  const active = pipelineSubmissions();
   const byStage = {};
-  for (const s of db.submissions) byStage[s.stage] = (byStage[s.stage] || 0) + 1;
+  for (const s of active) byStage[s.stage] = (byStage[s.stage] || 0) + 1;
   const byCategory = {};
-  for (const p of db.publications) if (p.verified !== false) byCategory[p.category] = (byCategory[p.category] || 0) + 1;
+  for (const p of db.publications) if (isVerifiedPub(p)) byCategory[p.category] = (byCategory[p.category] || 0) + 1;
+  const pendingApplications = allApplications().filter((a) => a.status === 'pending').length;
+  const pendingPapers = db.publications.filter((p) => p.source === 'self' && p.verified === false).length;
   return {
     users: db.editors.length + db.researchers.length,
     editors: db.editors.length,
     researchers: db.researchers.length,
-    submissions: db.submissions.length,
-    published: db.publications.filter((p) => p.verified !== false).length,
+    submissions: active.length,
+    pipelineSubmissions: active.length,
+    published: db.publications.filter(isVerifiedPub).length,
     byStage,
     byCategory,
     applications: db.applications.length,
-    pendingApplications: db.applications.filter((a) => a.status === 'pending').length,
-    pendingPapers: db.publications.filter((p) => p.source === 'self' && p.verified === false).length,
+    pendingApplications,
+    pendingPapers,
+    pendingReviews: pendingApplications + pendingPapers,
     chapters: db.chapters.length,
     projects: db.projects.length,
-    totalAccesses: db.publications.reduce((s, p) => s + (p.metrics?.accesses || 0), 0),
+    totalAccesses: db.publications.filter(isVerifiedPub).reduce((s, p) => s + (p.metrics?.accesses || 0), 0),
   };
 }
 

@@ -58,13 +58,8 @@ export default function AssociateHome() {
 function DashboardHero({ firstName }) {
   return (
     <section
-      className="card"
-      style={{
-        marginBottom: '1.5rem',
-        background: 'linear-gradient(135deg, var(--brand-deep), var(--brand-dark))',
-        color: '#fff',
-        border: 'none',
-      }}
+      className="hero-card"
+      style={{ marginBottom: '1.5rem' }}
     >
       <div style={{ minWidth: 0 }}>
         <div className="label-up" style={{ color: 'rgba(255,255,255,0.85)', letterSpacing: '0.08em' }}>

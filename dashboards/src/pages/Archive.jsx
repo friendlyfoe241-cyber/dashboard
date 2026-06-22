@@ -136,6 +136,11 @@ function PaperDetail({ p }) {
   const cites = useMemo(() => citations(p), [p]);
   const embed = embedSrc(p.pdfUrl);
 
+  useEffect(() => {
+    const id = p?.id || p?.doi;
+    if (id) api.recordPublicationAccess(id).catch(() => {});
+  }, [p?.id, p?.doi]);
+
   const copy = () => {
     navigator.clipboard?.writeText(cites[tab]).then(() => {
       setCopied(true);

@@ -132,6 +132,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/journal/publications${qs ? `?${qs}` : ''}`);
   },
+  recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),

@@ -19,7 +19,7 @@ import { useToast } from '../../../components/toast.jsx';
 // Hero banner that headlines the workspace and explains the role in one line.
 function DashboardHero({ badge, title, subtitle, children }) {
   return (
-    <div className="card" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, var(--brand-deep, #0b3d2e), var(--brand, #11633f))', color: '#fff' }}>
+    <div className="hero-card" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, var(--brand-deep, #0b3d2e), var(--brand, #11633f))' }}>
       <div className="section-badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>{badge}</div>
       <h1 className="page-title" style={{ color: '#fff', margin: '0.4rem 0 0.2rem' }}>{title}</h1>
       {subtitle && <p style={{ margin: 0, opacity: 0.9, maxWidth: '52ch' }}>{subtitle}</p>}

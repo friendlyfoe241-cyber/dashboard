@@ -123,7 +123,11 @@ async function loadPublication(doi) {
   if (doi) {
     try {
       const res = await fetch(`${API_BASE}/api/journal/publications/${encodeURIComponent(doi)}`);
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const pub = await res.json();
+        fetch(`${API_BASE}/api/journal/publications/${encodeURIComponent(pub.id || doi)}/access`, { method: 'POST' }).catch(() => {});
+        return pub;
+      }
     } catch {
       /* fall through to the cached list / samples */
     }

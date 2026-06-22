@@ -314,7 +314,7 @@ function publication(title, authors, category, doiSuffix, year, abstract, extra 
       'Patel, R. (2024). A related method. Proceedings of the Annual Conference, 110–118.',
     ],
     metrics: {
-      accesses: extra.accesses ?? 200 + Math.floor(Math.random() * 4000),
+      accesses: extra.accesses ?? 0,
       citations: extra.citations ?? Math.floor(Math.random() * 8),
       altmetric: extra.altmetric ?? Math.floor(Math.random() * 30),
     },
@@ -330,7 +330,7 @@ export const publications = [
     '2025.0001',
     2025,
     'A controlled exposure study measuring microplastic accumulation in Daphnia magna over a 14-day window.',
-    { keywords: ['microplastics', 'Daphnia magna', 'freshwater ecology'], articleType: 'Article', accesses: 3120, citations: 4, altmetric: 18 }
+    { keywords: ['microplastics', 'Daphnia magna', 'freshwater ecology'], articleType: 'Article', citations: 4, altmetric: 18 }
   ),
   publication(
     'Benchmarking Small Language Models for Math Word Problems',
@@ -342,7 +342,7 @@ export const publications = [
     '2025.0002',
     2025,
     'We evaluate sub-3B parameter models on GSM8K-style problems and analyze failure modes.',
-    { keywords: ['language models', 'mathematical reasoning', 'benchmarking'], articleType: 'Analysis', accesses: 5400, citations: 6, altmetric: 27 }
+    { keywords: ['language models', 'mathematical reasoning', 'benchmarking'], articleType: 'Analysis', citations: 6, altmetric: 27 }
   ),
 ];
 

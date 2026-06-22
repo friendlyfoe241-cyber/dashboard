@@ -5,6 +5,29 @@ beforeEach(async () => { await store.reset(); });
 
 const director = () => store.authenticate('director@synthica.org', 'demo1234');
 
+describe('admin: analytics', () => {
+  it('counts live members, pipeline papers, and pending reviews from the store', () => {
+    const a = store.analytics();
+    expect(a.users).toBe(a.editors + a.researchers);
+    expect(a.pipelineSubmissions).toBe(a.submissions);
+    expect(a.pipelineSubmissions).toBeGreaterThan(0);
+    expect(a.published).toBeGreaterThan(0);
+    // Seed has one pending listing application and one pending proposal.
+    expect(a.pendingApplications).toBeGreaterThanOrEqual(2);
+    expect(a.pendingReviews).toBe(a.pendingApplications + a.pendingPapers);
+    expect(Object.values(a.byStage).reduce((s, n) => s + n, 0)).toBe(a.pipelineSubmissions);
+  });
+
+  it('tracks article reads when a verified paper is opened', () => {
+    const pub = store.listPublications()[0];
+    expect(pub).toBeTruthy();
+    const start = pub.metrics?.accesses || 0;
+    const before = store.analytics().totalAccesses;
+    expect(store.recordPublicationAccess(pub.id)).toBe(start + 1);
+    expect(store.analytics().totalAccesses).toBe(before + 1);
+  });
+});
+
 describe('admin: suspension', () => {
   it('a suspended member cannot log in; reactivation restores access', () => {
     const u = store.registerResearcher({ name: 'Risky User', email: 'risky@example.com', discord: 'risky', password: 'hunter22' });

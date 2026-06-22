@@ -431,6 +431,27 @@ html[data-theme='dark'] .seg-btn.active { background: #1b2735; }
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   padding: 1.4rem 1.5rem;
 }
+/* Branded role hero. Deliberately NOT a .card: the monochrome
+   `.card { background: var(--bg) !important }` rule in design-system.css would
+   otherwise override the gradient and leave white text on a white surface in
+   light mode. This keeps the gradient + white text correct in both themes. */
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.3rem, 3vw, 1.6rem) clamp(1.3rem, 3.5vw, 1.75rem);
+  border-radius: 16px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-deep, #2589ed), var(--brand-dark, #5c9eeb));
+  box-shadow: 0 10px 30px rgba(37, 137, 237, 0.20);
+}
+.hero-card .page-title,
+.hero-card h1,
+.hero-card h2 { color: #fff; }
+.hero-card .label-up,
+.hero-card .page-eyebrow { color: rgba(255, 255, 255, 0.85); }
+.hero-card .page-sub,
+.hero-card p { color: rgba(255, 255, 255, 0.92); }
 .grid {
   display: grid;
   gap: 1.1rem;

@@ -349,14 +349,19 @@ function Bars({ data, labels = {}, tone = 'blue' }) {
 
 function AnalyticsCards() {
   const [a, setA] = useState(null);
-  useEffect(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
-  if (!a) return null;
+  const load = useCallback(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!a) return <Card><p className="muted" style={{ margin: 0 }}>Loading analytics…</p></Card>;
+  const pipeline = a.pipelineSubmissions ?? a.submissions ?? 0;
+  const pendingApps = a.pendingApplications ?? 0;
+  const pendingPapers = a.pendingPapers ?? 0;
+  const pendingTotal = a.pendingReviews ?? (pendingApps + pendingPapers);
   const kpis = [
     { icon: 'users', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
-    { icon: 'file-text', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
+    { icon: 'file-text', label: 'Published papers', value: a.published, sub: `${pipeline} in editorial pipeline` },
     { icon: 'flask', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
     { icon: 'eye', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
-    { icon: 'id-card', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
+    { icon: 'id-card', label: 'Pending reviews', value: pendingTotal, sub: `${pendingApps} applications · ${pendingPapers} papers`, hot: pendingTotal > 0 },
   ];
   return (
     <div style={{ marginBottom: '1.5rem' }}>

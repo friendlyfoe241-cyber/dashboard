@@ -545,6 +545,12 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   res.json(pub);
 }));
 
+app.post('/api/journal/publications/:id/access', wrap((req, res) => {
+  const accesses = store.recordPublicationAccess(req.params.id);
+  if (accesses === null) return res.status(404).json({ error: 'Publication not found' });
+  res.json({ ok: true, accesses });
+}));
+
 // Per-paper OG share card (1200×630 PNG) + a share page whose meta tags
 // crawlers can read (the static site can't serve per-paper tags).
 app.get('/api/journal/publications/:id/og.png', wrap((req, res) => {
