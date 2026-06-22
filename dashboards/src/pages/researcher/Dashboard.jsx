@@ -658,20 +658,24 @@ function Stat({ label, value }) {
   );
 }
 
-// Independent researchers: curated resources. Their progress lives in Pathways
-// above (the single tracker) — no duplicate checklist here.
+// Independent researchers: point them to their dedicated workspace (propose a
+// project → moderator approval → Pathways) and keep curated resources handy.
 function IndependentPanel() {
   return (
     <section style={{ marginBottom: '2rem' }}>
-      <div className="section-head">
-        <div className="section-badge">Independent Researcher</div>
-        <h2 className="section-title">Resources</h2>
+      <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div className="section-badge">Independent Researcher</div>
+          <h2 className="section-title">Your workspace</h2>
+        </div>
+        <Link className="btn btn-primary btn-sm" to="/researcher/independent">Open workspace →</Link>
       </div>
       <Card>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Track your progress in <strong>Pathways</strong> above. Here are resources to help along the way:
+        <p style={{ marginTop: 0 }}>
+          Propose and run solo projects from your <Link to="/researcher/independent">Independent workspace</Link> — submit a research proposal, get it approved by a moderator, and track your Pathway from research question to draft.
         </p>
-        <ul className="muted" style={{ lineHeight: 1.9, paddingLeft: '1.1rem' }}>
+        <p className="muted" style={{ marginBottom: '0.3rem' }}>Resources to help along the way:</p>
+        <ul className="muted" style={{ lineHeight: 1.9, paddingLeft: '1.1rem', marginTop: 0 }}>
           <li><a href="/free-course.html">Free research methods course</a></li>
           <li><a href="/resources.html">How to read a paper</a></li>
           <li><a href="/resources.html">Finding a dataset</a></li>

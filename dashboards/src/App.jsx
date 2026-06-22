@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useAuth, RequireAuth } from './auth.jsx';
 import Login from './pages/Login.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import UikitDemo from './pages/__UikitDemo.jsx';
 
 // Route-level code splitting: the two dashboards (and heavier public pages)
 // load on demand, so a researcher never downloads the editor app and first
@@ -39,7 +38,6 @@ export default function App() {
     <ErrorBoundary>
       <Suspense fallback={<PageFallback />}>
       <Routes>
-        <Route path="/uikit-demo" element={<UikitDemo />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify" element={<Verify />} />

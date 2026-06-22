@@ -221,8 +221,16 @@ app.get('/api/admin/analytics', requireAuth, requireAuditor, wrap((_req, res) =>
 app.get('/api/admin/applications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.allApplications())));
 
 app.post('/api/admin/applications/:id', requireAuth, requireAuditor, wrap((req, res) => {
-  const { status, assignTag } = req.body || {};
-  res.json(store.setApplicationStatus({ id: req.params.id, status, assignTag, reviewerId: req.user.id }));
+  const { status, assignTag, feedback } = req.body || {};
+  res.json(store.setApplicationStatus({ id: req.params.id, status, assignTag, feedback, reviewerId: req.user.id }));
+}));
+
+// Independent project proposals — Moderator queue (dedicated, in addition to the
+// shared /admin/applications view) so Unit 15 can list + approve/reject them.
+app.get('/api/admin/proposals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listProposals())));
+app.post('/api/admin/proposals/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  const { status, feedback } = req.body || {};
+  res.json(store.reviewProposal({ id: req.params.id, status, feedback, reviewerId: req.user.id }));
 }));
 
 // Auditors assign/remove researcher tags directly (role assignment).
@@ -971,6 +979,17 @@ app.post('/api/researcher/projects/:id/ideas/:ideaId/vote', requireAuth, researc
 }));
 app.post('/api/researcher/projects/:id/ideas/:ideaId/choose', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.chooseIdea({ projectId: req.params.id, userId: req.user.id, ideaId: req.params.ideaId }));
+}));
+
+// Independent research proposals — submit, list mine, revise & resubmit.
+app.get('/api/researcher/proposals', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listProposalsForUser(req.user.id))));
+app.post('/api/researcher/proposals', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description, methodology } = req.body || {};
+  res.json(store.addProposal({ userId: req.user.id, title, category, description, methodology }));
+}));
+app.post('/api/researcher/proposals/:id/revise', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description, methodology } = req.body || {};
+  res.json(store.reviseProposal({ id: req.params.id, userId: req.user.id, title, category, description, methodology }));
 }));
 
 // Pathway — personal guided research to-dos.

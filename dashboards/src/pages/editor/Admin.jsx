@@ -661,8 +661,9 @@ function Applications() {
   const load = useCallback(() => { api.adminApplications().then(setApps).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
 
-  const review = (id, status, assignTag) =>
-    api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+  // `extra` carries an optional rejection feedback note (used by project proposals).
+  const review = (id, status, assignTag, extra) =>
+    api.reviewApplication(id, status, assignTag, extra).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
 
   const onboarding = apps.filter((a) => a.kind === 'onboarding' && a.status === 'pending');
   const pendingOnboardingCount = onboarding.length;
@@ -688,7 +689,7 @@ function Applications() {
       {pendingOthersCount === 0 ? (
         <Card><p className="muted">0 pending</p></Card>
       ) : (
-        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
+        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role && a.kind !== 'proposal'} />)}</div>
       )}
     </div>
   );
@@ -698,11 +699,20 @@ function Applications() {
 // Onboarding rows default the picker to the system's recommended role.
 function AppRow({ a, review, assignable }) {
   const [tag, setTag] = useState(a.recommendation?.tag || 'independent_researcher');
+  const isProposal = a.kind === 'proposal';
+  // Project proposals get rejected with feedback so the member can revise (§6.2).
+  const reject = () => {
+    if (!isProposal) return review(a.id, 'rejected');
+    const note = window.prompt('Feedback for the researcher (what to revise):', '');
+    if (note === null) return; // cancelled
+    review(a.id, 'rejected', undefined, note);
+  };
   return (
     <Card>
       <div className="card-row">
         <div>
-          <strong>{a.userName}</strong> — {a.role || (a.kind === 'onboarding' ? 'new member' : 'project application')}
+          <strong>{a.userName}</strong> — {a.role || (isProposal ? 'project proposal' : a.kind === 'onboarding' ? 'new member' : 'project application')}
+          {isProposal && a.category && <> · <Badge tone="gray">{a.category}</Badge></>}
           {a.assignedTag && <> · <Badge tone="green">{a.assignedTag}</Badge></>}
           {a.resumeUrl ? <> · <a href={a.resumeUrl} target="_blank" rel="noreferrer">résumé</a></> : (a.kind === 'onboarding' && <> · <span className="muted" style={{ fontSize: '0.8rem' }}>no résumé</span></>)}
           {a.kind === 'onboarding' && (
@@ -730,6 +740,13 @@ function AppRow({ a, review, assignable }) {
               )}
             </div>
           )}
+          {isProposal && (
+            <div className="info-block" style={{ marginTop: '0.4rem' }}>
+              <div style={{ fontWeight: 700 }}>{a.title}</div>
+              {a.description && <div style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>{a.description}</div>}
+              {a.methodology && <div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}><strong>Methodology:</strong> {a.methodology}</div>}
+            </div>
+          )}
           {a.answers && (
             <details style={{ marginTop: '0.3rem' }}>
               <summary className="muted" style={{ cursor: 'pointer' }}>View application</summary>
@@ -752,7 +769,7 @@ function AppRow({ a, review, assignable }) {
                 </select>
               )}
               <Button variant="approve" className="btn-sm" onClick={() => review(a.id, 'approved', assignable ? tag : undefined)}>Approve</Button>
-              <Button variant="reject" className="btn-sm" onClick={() => review(a.id, 'rejected')}>Reject</Button>
+              <Button variant="reject" className="btn-sm" onClick={reject}>Reject</Button>
             </>
           ) : (
             <Badge tone={a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>

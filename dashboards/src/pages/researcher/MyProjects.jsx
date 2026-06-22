@@ -11,12 +11,19 @@ import { useToast } from '../../components/toast.jsx';
 export default function MyProjects() {
   const { user } = useAuth();
   const isLead = (user?.tags || []).includes('lead_researcher');
+  const isIndependent = (user?.tags || []).includes('independent_researcher');
   const [projects, setProjects] = useState([]);
   useEffect(() => { api.myProjects().then(setProjects).catch(() => {}); }, []);
   return (
     <div>
-      <h1 className="page-title">My Projects</h1>
-      <p className="page-sub">Research projects you're part of.</p>
+      <div className="card-row" style={{ alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="page-title">My Projects</h1>
+          <p className="page-sub">Research projects you're part of.</p>
+        </div>
+        {/* Independent Researchers start projects via a research proposal (§6.2). */}
+        {isIndependent && <Link className="btn btn-primary btn-sm" to="/researcher/independent" style={{ flex: 'none' }}>+ Add a project</Link>}
+      </div>
 
       {isLead && <Applicants />}
       {projects.length === 0 ? (
