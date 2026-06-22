@@ -936,6 +936,8 @@ textarea {
 .bell-btn { position: relative; display: inline-flex; align-items: center; background: none; border: none; font-size: 1.15rem; cursor: pointer; padding: 0.2rem; }
 .icon-label { display: inline-flex; align-items: center; gap: 0.35rem; vertical-align: middle; }
 .ob-emoji .icon { display: block; margin: 0 auto; }
+.ob-req { color: var(--danger); font-weight: 800; margin-left: 0.15rem; }
+.ob-optional { color: var(--body-alt); font-weight: 500; font-size: 0.7em; margin-left: 0.3rem; white-space: nowrap; }
 .kpi-icon .icon { display: block; }
 .drive-icon .icon { display: block; }
 .cal-item-icon .icon { display: block; }

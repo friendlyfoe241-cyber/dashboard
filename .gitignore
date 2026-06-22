@@ -9,3 +9,7 @@ dist/
 
 # Uploaded files (served at /uploads; use S3/persistent disk in prod)
 backend/uploads/
+
+# Private credential notes (demo/dud account passwords) — never commit
+*.secret.md
+DEMO_CREDENTIALS*.md

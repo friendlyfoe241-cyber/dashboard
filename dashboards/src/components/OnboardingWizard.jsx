@@ -11,6 +11,10 @@ const INTEREST_OPTIONS = [
 ];
 const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
+// Inline markers so each step says plainly whether an answer is needed.
+const Required = () => <span className="ob-req" title="Required" aria-label="required">*</span>;
+const Optional = () => <span className="ob-optional">(optional)</span>;
+
 // Profile setup after sign-up — collects personal info before role selection.
 export default function OnboardingWizard() {
   const { user, refreshUser } = useAuth();
@@ -138,7 +142,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'name' && (
             <>
-              <h2>What&apos;s your name?</h2>
+              <h2>What&apos;s your name? <Required /></h2>
               <p>How you&apos;d like to appear on Synthica.</p>
               <input className="ob-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" autoFocus />
               <div className="ob-actions">
@@ -150,8 +154,8 @@ export default function OnboardingWizard() {
 
           {cur.key === 'discord' && (
             <>
-              <h2>Discord username</h2>
-              <p>So teammates and auditors can reach you (optional but recommended).</p>
+              <h2>Discord username <Optional /></h2>
+              <p>So teammates and auditors can reach you — recommended.</p>
               <input className="ob-input" value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="yourname" autoFocus />
               <div className="ob-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => go(-1)}>Back</button>
@@ -162,7 +166,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'interests' && (
             <>
-              <h2>What are you into?</h2>
+              <h2>What are you into? <Required /></h2>
               <p>Pick a few topics — we&apos;ll personalize your feed.</p>
               <div className="ob-chips">
                 {INTEREST_OPTIONS.map((i) => (
@@ -178,8 +182,8 @@ export default function OnboardingWizard() {
 
           {cur.key === 'institution' && (
             <>
-              <h2>Where do you study?</h2>
-              <p>Your school or institution (optional).</p>
+              <h2>Where do you study? <Optional /></h2>
+              <p>Your school or institution.</p>
               <input className="ob-input" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="e.g. Lincoln High School" autoFocus />
               <div className="ob-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => go(-1)}>Back</button>
@@ -190,7 +194,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'gpa' && (
             <>
-              <h2>What&apos;s your GPA?</h2>
+              <h2>What&apos;s your GPA? <Optional /></h2>
               <p>Roughly is fine — optional.</p>
               <input className="ob-input" value={gpa} onChange={(e) => setGpa(e.target.value)} placeholder="e.g. 3.8" autoFocus />
               <div className="ob-actions">
@@ -202,8 +206,8 @@ export default function OnboardingWizard() {
 
           {cur.key === 'summary' && (
             <>
-              <h2>Your research so far</h2>
-              <p>Publications, fairs, programs — anything that helps us know you (optional).</p>
+              <h2>Your research so far <Optional /></h2>
+              <p>Publications, fairs, programs — anything that helps us know you.</p>
               <textarea
                 className="ob-input"
                 rows={4}
@@ -221,7 +225,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'experience' && (
             <>
-              <h2>How much research experience do you have?</h2>
+              <h2>How much research experience do you have? <Required /></h2>
               <p>Rate yourself 0–10.</p>
               <div className="ob-range">
                 <input type="range" min="0" max="10" step="1" value={experience} onChange={(e) => setExperience(Number(e.target.value))} autoFocus />
@@ -240,7 +244,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'leadership' && (
             <>
-              <h2>Interested in leading a chapter?</h2>
+              <h2>Interested in leading a chapter? <Optional /></h2>
               <p>Chapter leads run a local Synthica group where they live.</p>
               <div className="ob-actions" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
                 <button type="button" className={`btn ${wantsLead ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setWantsLead(true)}>Yes</button>
@@ -261,8 +265,8 @@ export default function OnboardingWizard() {
 
           {cur.key === 'resume' && (
             <>
-              <h2>Resume / CV link</h2>
-              <p>Google Drive, LinkedIn, or any public link (optional).</p>
+              <h2>Resume / CV link <Optional /></h2>
+              <p>Google Drive, LinkedIn, or any public link.</p>
               <input className="ob-input" value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} placeholder="https://drive.google.com/…" autoFocus />
               <div className="ob-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => go(-1)}>Back</button>
@@ -273,7 +277,7 @@ export default function OnboardingWizard() {
 
           {cur.key === 'papers' && (
             <>
-              <h2>Published anything already?</h2>
+              <h2>Published anything already? <Optional /></h2>
               <p>Add past papers now or skip — you can add more later.</p>
               {pastPapers.length > 0 && (
                 <div className="ob-paper-list">

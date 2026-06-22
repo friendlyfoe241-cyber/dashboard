@@ -393,6 +393,28 @@ function researcher(name, username, tags, extra = {}) {
   };
 }
 
+// A ready-to-use, pre-approved demo researcher for a given level. Distinct from
+// the `researcher()` factory: unique password, already onboarded + approved, so
+// it drops straight into the dashboard. backfillSeedAccounts() injects these
+// into an existing DB on boot, so they appear in prod without a reseed.
+function demoLevelAccount(name, username, tags, passwordHash, researchExperience) {
+  return {
+    id: id('usr'),
+    name,
+    username,
+    password: passwordHash,
+    kind: 'researcher',
+    tags,
+    email: `${username}@synthica.org`,
+    discord: username,
+    resumeUrl: '', gpa: '', researchExperience, leadRecommended: false,
+    pathway: [], slug: username, institution: '', bio: '', avatarUrl: '',
+    interests: [], linkedinUrl: '', websiteUrl: '', links: [], following: [],
+    public: true, emailVerified: true, approved: true, onboarded: true,
+    twoFactorSecret: '', twoFactorEnabled: false,
+  };
+}
+
 export const researchers = [
   researcher('Sam Rivera', 'sam', [RESEARCHER_TAGS.LEAD_RESEARCHER], {
     affiliations: ['Phillips Exeter Academy', 'Synthica Research Group'],
@@ -443,6 +465,8 @@ export const researchers = [
     links: [],
     public: true,
     emailVerified: true,
+    approved: true,
+    onboarded: true,
     twoFactorSecret: '',
     twoFactorEnabled: false,
     following: [],
@@ -472,6 +496,8 @@ export const researchers = [
     links: [],
     public: true,
     emailVerified: true,
+    approved: true,
+    onboarded: true,
     twoFactorSecret: '',
     twoFactorEnabled: false,
     following: [],
@@ -501,6 +527,8 @@ export const researchers = [
     links: [],
     public: true,
     emailVerified: true,
+    approved: true,
+    onboarded: true,
     twoFactorSecret: '',
     twoFactorEnabled: false,
     following: [],
@@ -530,6 +558,8 @@ export const researchers = [
     links: [],
     public: true,
     emailVerified: true,
+    approved: true,
+    onboarded: true,
     twoFactorSecret: '',
     twoFactorEnabled: false,
     following: [],
@@ -591,6 +621,17 @@ export const researchers = [
     twoFactorEnabled: false,
     following: [],
   },
+  // --- Ready-to-use demo accounts, one per researcher level -------------------
+  // Clearly named, pre-approved + onboarded, each with a unique password (so they
+  // work in production). Credentials live in the git-ignored DEMO_CREDENTIALS note.
+  demoLevelAccount('Lead Researcher', 'leadresearcher', [RESEARCHER_TAGS.LEAD_RESEARCHER],
+    'scrypt:eb221667348e6f260b2ad70922871e5b:e4cb44ebb1712a5d802ab1c6aee32ab192206b76f0cc0c4d2cd3902f9a2804ae', 8),
+  demoLevelAccount('Associate Researcher', 'associateresearcher', [RESEARCHER_TAGS.ASSOCIATE_RESEARCHER],
+    'scrypt:d781150fb1eb725ef2b3be255e84cee2:3b4d4e7a20780a55263267e0db1d102bd0b1ade3d60f2a70ecff96133a349466', 5),
+  demoLevelAccount('Chapter Leader', 'chapterleader', [RESEARCHER_TAGS.CHAPTER_LEADER],
+    'scrypt:502069d7180b4d4d100c5123588eb9e8:e49748fa51a50bc33b637e2e094c466e8f392a148448d22100b2947e67a490f0', 6),
+  demoLevelAccount('Independent Researcher', 'independentresearcher', [RESEARCHER_TAGS.INDEPENDENT_RESEARCHER],
+    'scrypt:1d96a04546a18ad3a5e217f9fcb897e8:e5bb216431ea8e1600592be3607f11187bdbe2b49f7fadc29293a80bc7e94844', 4),
 ];
 
 const leadId = researchers[0].id;

@@ -113,6 +113,7 @@ If the client id is unset, the button simply doesn't render — everything else 
 | backend | `ALLOW_DEMO_LOGINS` | leave unset | in production the shared demo password (`demo1234`) is refused at login; set `true` only on a staging demo |
 | backend | `ADMIN_EMAIL` | **strongly recommended (prod)** | guaranteed owner login; this account is created/password-reset as a platform admin on every boot |
 | backend | `ADMIN_PASSWORD` | with `ADMIN_EMAIL` | the password for that account (use a long random string) |
+| backend | `DEMO_ACCOUNTS` | optional | create demo logins on boot (works on an already-seeded DB; idempotent). One per line or `;`-separated, fields split by `\|`: `email\|password\|level[\|Name]` where level ∈ `lead\|associate\|chapter\|independent`. Pre-approved + onboarded. Example: `leadx@synthica.org\|S0me-Pass\|lead\|Lead Researcher` |
 | dashboards (build) | `VITE_API_BASE` | **yes** | `https://<backend>` (no trailing slash) |
 | dashboards (build) | `VITE_GOOGLE_CLIENT_ID` | for Google login | same client id |
 | website (inline) | `window.SYNTHICA_API_BASE` | recommended | `https://<backend>` — powers the live impact counters, featured papers, and the mentor directory on the marketing site |

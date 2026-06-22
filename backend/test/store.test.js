@@ -146,6 +146,38 @@ describe('no duplicate accounts per email', () => {
   });
 });
 
+describe('demo accounts from env (DEMO_ACCOUNTS)', () => {
+  it('creates per-level accounts on boot, idempotently', async () => {
+    const prev = process.env.DEMO_ACCOUNTS;
+    process.env.DEMO_ACCOUNTS = 'leadr@synthica.org|Lead-Pass-1|lead|Lead Demo;assocr@synthica.org|Assoc-Pass-2|associate';
+    try {
+      await store.reset();
+      const lead = store.authenticate('leadr@synthica.org', 'Lead-Pass-1');
+      expect(lead).toBeTruthy();
+      expect(lead.name).toBe('Lead Demo');
+      expect(lead.tags).toContain('lead_researcher');
+      expect(lead.approved).toBe(true);
+      expect(lead.onboarded).toBe(true);
+      expect(store.authenticate('assocr@synthica.org', 'Assoc-Pass-2')).toBeTruthy();
+      await store.reset(); // booting again must not duplicate
+      expect(store.adminListUsers('leadr@synthica.org')).toHaveLength(1);
+    } finally {
+      if (prev === undefined) delete process.env.DEMO_ACCOUNTS; else process.env.DEMO_ACCOUNTS = prev;
+      await store.reset();
+    }
+  });
+});
+
+describe('seeded per-level demo accounts', () => {
+  it('ship pre-approved + onboarded so they skip onboarding', () => {
+    const lead = store.authenticate('leadresearcher@synthica.org', 'Lead-Reef-2418');
+    expect(lead).toBeTruthy();
+    expect(lead.tags).toContain('lead_researcher');
+    expect(lead.onboarded).toBe(true);
+    expect(lead.approved).toBe(true);
+  });
+});
+
 describe('onboarding completion is durable', () => {
   it('updateProfile persists onboarded=true on the account', () => {
     const u = store.authenticate('jordan@example.com', 'demo1234');

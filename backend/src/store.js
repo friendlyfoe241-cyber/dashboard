@@ -196,6 +196,84 @@ function dedupeAccounts() {
   if (removed) console.log(`[store] dedupe: removed ${removed} duplicate-email account(s)`);
 }
 
+// Optional: create ready-to-use demo accounts from the DEMO_ACCOUNTS env var.
+// The static seed only applies to a fresh database, so this is how the per-level
+// demo logins get into an ALREADY-populated DB (e.g. prod Postgres). Runs every
+// boot and is idempotent — an account is created only when its email is free.
+//
+// Format: one account per line (or ';'-separated), fields split by '|':
+//   email|password|level[|Display Name]
+// level ∈ lead | associate | chapter | independent (long *_researcher / *_leader
+// forms also work). A JSON array of {email,password,level,name} is accepted too.
+const DEMO_LEVELS = {
+  lead: 'lead_researcher', lead_researcher: 'lead_researcher',
+  associate: 'associate_researcher', associate_researcher: 'associate_researcher',
+  chapter: 'chapter_leader', chapter_leader: 'chapter_leader', chapter_lead: 'chapter_leader',
+  independent: 'independent_researcher', independent_researcher: 'independent_researcher', indie: 'independent_researcher',
+};
+
+function parseDemoAccounts(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return [];
+  if (s.startsWith('[')) {
+    try { return JSON.parse(s).map((a) => ({ email: a.email, password: a.password, level: a.level, name: a.name })); }
+    catch { console.warn('[store] DEMO_ACCOUNTS: invalid JSON — ignoring'); return []; }
+  }
+  return s.split(/[\n;]+/).map((l) => l.trim()).filter(Boolean).map((line) => {
+    const [email, password, level, name] = line.split('|').map((x) => (x || '').trim());
+    return { email, password, level, name };
+  });
+}
+
+function bootstrapDemoAccounts() {
+  const specs = parseDemoAccounts(process.env.DEMO_ACCOUNTS);
+  if (!specs.length) return;
+  const everyone = () => [...db.editors, ...db.researchers];
+  const taken = (uname) => everyone().some((x) => (x.username || '').toLowerCase() === uname);
+  let created = 0;
+  for (const spec of specs) {
+    const email = (spec.email || '').trim().toLowerCase();
+    const tag = DEMO_LEVELS[(spec.level || '').trim().toLowerCase()];
+    if (!email || !spec.password || !tag) { console.warn(`[store] DEMO_ACCOUNTS: skipping malformed entry (${spec.email || '?'})`); continue; }
+    if (everyone().some((x) => x.email && x.email.toLowerCase() === email)) continue; // already exists — leave it be
+
+    let base = (email.split('@')[0] || 'member').replace(/[^a-z0-9]+/gi, '').toLowerCase() || 'member';
+    let username = base, n = 1;
+    while (taken(username)) username = `${base}${++n}`;
+    db.researchers.push({
+      id: `usr_demo_${Date.now()}_${created}`,
+      name: spec.name || email.split('@')[0],
+      username, slug: username,
+      password: hashPassword(spec.password),
+      kind: 'researcher',
+      tags: [tag],
+      email: spec.email.trim(),
+      discord: username,
+      resumeUrl: '', gpa: '', researchExperience: null, leadRecommended: false,
+      pathway: [], institution: '', bio: '', avatarUrl: '', interests: [], links: [], following: [],
+      public: true, emailVerified: true, approved: true, onboarded: true,
+      twoFactorSecret: '', twoFactorEnabled: false, createdAt: now(),
+    });
+    created += 1;
+  }
+  if (created) { console.log(`[store] demo accounts: created ${created} account(s) from DEMO_ACCOUNTS`); schedulePersist(); }
+}
+
+// Boot-time heal: established researchers (approved + already assigned a role)
+// predate the durable `onboarded` flag, so the intro wizard would nag them every
+// login. They went through the pending-approval intake already, so mark them
+// onboarded once. New / unapproved sign-ups still see onboarding.
+function healLegacyOnboarding() {
+  let healed = 0;
+  for (const r of db.researchers || []) {
+    if (r.onboarded !== true && r.approved === true && (r.tags || []).length > 0) {
+      r.onboarded = true;
+      healed += 1;
+    }
+  }
+  if (healed) { console.log(`[store] onboarding heal: marked ${healed} established researcher(s) onboarded`); schedulePersist(); }
+}
+
 // Add seed demo/staff accounts that are missing from a loaded dataset (e.g. the
 // in-memory server was started before a new demo account was added, or a
 // persisted provider snapshot predates a seed update).
@@ -242,6 +320,8 @@ export async function init() {
   dedupeAccounts();
   backfillSeedAccounts();
   bootstrapAdmin();
+  bootstrapDemoAccounts();
+  healLegacyOnboarding();
   assignPendingReviewers();
   schedulePersist();
   console.log(`[store] data provider: ${name}`);
@@ -255,6 +335,8 @@ export async function reset() {
   dedupeAccounts();
   backfillSeedAccounts();
   bootstrapAdmin();
+  bootstrapDemoAccounts();
+  healLegacyOnboarding();
   assignPendingReviewers();
   schedulePersist();
 }
