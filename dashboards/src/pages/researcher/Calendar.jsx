@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Card, Badge, Button, Field } from '../../components/ui.jsx';
+import Icon from '../../components/Icon.jsx';
 import { useToast } from '../../components/toast.jsx';
 
 // One row per calendar "kind". Mentor bookings (written into db.events by the
@@ -169,21 +170,23 @@ function CalRow({ it, onRemove, onRsvp, showDate }) {
   return (
     <div className="cal-item">
       <span className="cal-item-icon">{meta.icon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>{it.title}</div>
-        <div className="muted" style={{ fontSize: '0.78rem' }}>
+      <div className="cal-item-body">
+        <div className="cal-item-title">{it.title}</div>
+        <div className="muted cal-item-meta">
           {showDate && <>{new Date(`${it.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · </>}
           {it.context}{it.byName ? ` · ${meta.label === 'Mentor call' ? 'with' : 'set by'} ${it.byName}` : ''}
           {it.rsvpable && it.rsvpCount > 0 && ` · ${it.rsvpCount} going`}
         </div>
       </div>
-      {it.rsvpable && onRsvp && (
-        <button className={`btn btn-sm ${it.going ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onRsvp(it)}>
-          {it.going ? '✓ Going' : 'RSVP'}
-        </button>
-      )}
-      <Badge tone={overdue ? 'red' : meta.tone}>{overdue ? 'overdue' : meta.label}</Badge>
-      {it.canDelete && <button className="link-btn" onClick={() => onRemove(it)} aria-label="Delete">✕</button>}
+      <div className="cal-item-actions">
+        {it.rsvpable && onRsvp && (
+          <button className={`btn btn-sm ${it.going ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onRsvp(it)}>
+            {it.going ? <><Icon name="check" size={14} /> Going</> : 'RSVP'}
+          </button>
+        )}
+        <Badge tone={overdue ? 'red' : meta.tone}>{overdue ? 'overdue' : meta.label}</Badge>
+        {it.canDelete && <button className="link-btn" onClick={() => onRemove(it)} aria-label="Delete"><Icon name="x" size={15} /></button>}
+      </div>
     </div>
   );
 }

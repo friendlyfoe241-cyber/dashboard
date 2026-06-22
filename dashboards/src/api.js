@@ -132,6 +132,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/journal/publications${qs ? `?${qs}` : ''}`);
   },
+  recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),
@@ -273,11 +274,14 @@ export const api = {
   requestRevision: (id, note) => request(`/editor/papers/${id}/request-revision`, { method: 'POST', body: { note } }),
   onboarding: () => request('/researcher/onboarding'),
   onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
+  claimAssociateRole: () => request('/researcher/roles/associate', { method: 'POST' }),
   resubmitOnboarding: () => request('/researcher/onboarding/resubmit', { method: 'POST' }),
   chapter: () => request('/researcher/chapter'),
   createChapter: (body) => request('/researcher/chapter', { method: 'POST', body }),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
+  joinChapterByCode: (code) => request('/researcher/chapter/join', { method: 'POST', body: { code } }),
+  regenerateChapterCode: () => request('/researcher/chapter/regenerate-code', { method: 'POST' }),
   chapterProgress: () => request('/researcher/chapter/progress'),
   addChapterProgress: (body) => request('/researcher/chapter/progress', { method: 'POST', body }),
   // programs (apply → cohort → milestones)
@@ -300,4 +304,20 @@ export const api = {
   getSettings: () => request('/editor/settings'),
   setWebhook: (discordWebhookUrl) => request('/editor/settings', { method: 'PUT', body: { discordWebhookUrl } }),
   testWebhook: () => request('/editor/settings/test', { method: 'POST' }),
+
+  // Expertise mentors (ROLE_WORKFLOWS §7)
+  // Directory + booking (any researcher):
+  mentors: (specialty) => request(`/mentors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''}`),
+  mentorSpecialties: () => request('/mentors/specialties'),
+  mentor: (id) => request(`/mentors/${id}`),
+  bookMentor: (id, body) => request(`/mentors/${id}/book`, { method: 'POST', body }),
+  myMentorBookings: () => request('/me/mentor-bookings'),
+  cancelMentorBooking: (id) => request(`/mentor-bookings/${id}/cancel`, { method: 'POST' }),
+  // Mentor self-service (mentor's own dashboard):
+  mentorDashboard: () => request('/mentor/dashboard'),
+  setMentorProfile: (body) => request('/mentor/profile', { method: 'PUT', body }),
+  mentorAvailability: () => request('/mentor/dashboard'),
+  setMentorAvailability: (body) => request('/mentor/availability', { method: 'POST', body }),
+  removeMentorSlot: (slotId) => request(`/mentor/availability/${slotId}`, { method: 'DELETE' }),
+  connectMentorCalendar: (connected) => request('/mentor/calendar-connect', { method: 'POST', body: { connected } }),
 };

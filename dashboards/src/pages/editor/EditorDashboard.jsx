@@ -6,6 +6,7 @@ import { useToast } from '../../components/toast.jsx';
 import NewsFeed from '../../components/NewsFeed.jsx';
 import NewsPoster from '../../components/NewsPoster.jsx';
 import PaperModal from './PaperModal.jsx';
+import Icon from '../../components/Icon.jsx';
 
 const CAN_POST_NEWS = ['senior', 'chief', 'director'];
 
@@ -154,7 +155,7 @@ export default function EditorDashboard() {
         {tier.queueLabel} <Badge tone="gray">{inbox.length}</Badge>
       </h2>
       {inbox.length === 0 ? (
-        <EmptyState>{query ? 'No papers match your search.' : 'Nothing waiting on you right now. 🎉'}</EmptyState>
+        <EmptyState>{query ? 'No papers match your search.' : <>Nothing waiting on you right now. <Icon name="party" size={16} /></>}</EmptyState>
       ) : (
         <div className="grid grid-2">
           {inbox.map((p) => (

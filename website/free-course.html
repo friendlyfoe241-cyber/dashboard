@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/logo/favicon.png" />
+
   <title>Free Course — Synthica</title>
   <meta name="description" content="A free, self-paced intro-to-research course from Synthica — learn to form a question, find data, choose methods, write, and publish, all in plain language." />
   <link rel="canonical" href="https://www.synthica.org/free-course.html" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232589ed'/%3E%3Ctext x='16' y='23' font-family='Arial,sans-serif' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
+  
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Synthica" />
   <meta property="og:title" content="Free Course — Synthica" />
@@ -17,15 +20,16 @@
   <meta name="twitter:title" content="Free Course — Synthica" />
   <meta name="twitter:description" content="A free, self-paced intro-to-research course in plain language — from forming a question to publishing your work." />
   <meta name="twitter:image" content="https://www.synthica.org/src/logo/Synthica Preview Image.png" />
-  <link href="https://fonts.cdnfonts.com/css/garet" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="design-system.css" />
+  <script src="icons.js"></script>
   <script>
     /* Apply saved theme before paint to avoid a flash of the wrong theme. */
     (function () {
       try {
-        if (localStorage.getItem('synthica.theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+        var t = localStorage.getItem('synthica.theme');
+        var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
         var m = new Date().getMonth();
         var s = m <= 1 || m === 11 ? 'winter' : m <= 4 ? 'spring' : m <= 7 ? 'summer' : 'autumn';
         document.documentElement.setAttribute('data-season', s);
@@ -120,32 +124,32 @@
 
       <div class="grid grid-3">
         <article class="card feature-card" data-spotlight data-reveal="0">
-          <div class="feature-icon" aria-hidden="true">&#10067;</div>
+          <div class="feature-icon" data-icon="help" aria-hidden="true"></div>
           <h3>Forming a question</h3>
           <p>Turn a vague curiosity into a clear, answerable research question worth digging into.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="100">
-          <div class="feature-icon" aria-hidden="true">&#128269;</div>
+          <div class="feature-icon" data-icon="search" aria-hidden="true"></div>
           <h3>Finding data</h3>
           <p>Learn where to look, how to spot reliable sources, and how to gather what you need.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="200">
-          <div class="feature-icon" aria-hidden="true">&#128300;</div>
+          <div class="feature-icon" data-icon="flask" aria-hidden="true"></div>
           <h3>Choosing methods</h3>
           <p>Understand the basic methods researchers use and how to pick the right one for your question.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="300">
-          <div class="feature-icon" aria-hidden="true">&#9997;</div>
+          <div class="feature-icon" data-icon="pen" aria-hidden="true"></div>
           <h3>Writing it up</h3>
           <p>Put your findings into a clear paper that others can read, understand, and build on.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="400">
-          <div class="feature-icon" aria-hidden="true">&#128214;</div>
+          <div class="feature-icon" data-icon="book-open" aria-hidden="true"></div>
           <h3>Publishing</h3>
           <p>See how peer review works and how to share your finished work openly with the world.</p>
         </article>
         <article class="card feature-card" data-spotlight data-reveal="500">
-          <div class="feature-icon" aria-hidden="true">&#127757;</div>
+          <div class="feature-icon" data-icon="globe" aria-hidden="true"></div>
           <h3>Going further</h3>
           <p>Find out how to keep growing as a researcher inside our global community of 1000+ members.</p>
         </article>
@@ -164,7 +168,7 @@
 
       <div class="grid">
         <article class="card" data-reveal>
-          <div class="feature-icon" aria-hidden="true">&#128276;</div>
+          <div class="feature-icon" data-icon="bell" aria-hidden="true"></div>
           <h3>Get notified on Discord</h3>
           <p>
             The Free Course is on its way. Join our Discord and we'll announce it there the moment it

@@ -44,12 +44,12 @@ export default function CommandPalette({ nav = [] }) {
     const t = setTimeout(() => {
       api.search(needle).then((r) => {
         const out = [];
-        for (const p of r.people || []) out.push({ label: `👤 ${p.name}${p.role ? ` · ${p.role}` : ''}`, to: `/p/${p.slug}` });
+        for (const p of r.people || []) out.push({ label: `Person · ${p.name}${p.role ? ` · ${p.role}` : ''}`, to: `/p/${p.slug}` });
         if (user?.kind === 'researcher') {
-          for (const pr of r.projects || []) out.push({ label: `📁 ${pr.title}`, to: `/researcher/project/${pr.id}` });
-          for (const g of r.groups || []) out.push({ label: `🔬 ${g.name}`, to: `/researcher/groups/${g.id}` });
+          for (const pr of r.projects || []) out.push({ label: `Project · ${pr.title}`, to: `/researcher/project/${pr.id}` });
+          for (const g of r.groups || []) out.push({ label: `Group · ${g.name}`, to: `/researcher/groups/${g.id}` });
         }
-        for (const pub of r.publications || []) out.push({ label: `📄 ${pub.title}`, to: '/archive' });
+        for (const pub of r.publications || []) out.push({ label: `Paper · ${pub.title}`, to: '/archive' });
         setResults(out);
       }).catch(() => setResults([]));
     }, 200);

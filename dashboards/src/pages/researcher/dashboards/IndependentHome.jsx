@@ -65,7 +65,7 @@ export default function IndependentHome() {
 
 function DashboardHero({ name, pending, approved, projects, onAdd }) {
   return (
-    <section className="card" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, var(--brand-deep, #1f3a5f), var(--brand, #2d6cdf))', color: '#fff' }}>
+    <section className="hero-card" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, var(--brand-deep, #1f3a5f), var(--brand, #2d6cdf))' }}>
       <div className="card-row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
         <div style={{ minWidth: 0 }}>
           <div className="section-badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>Independent researcher</div>

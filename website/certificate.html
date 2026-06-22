@@ -3,20 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/logo/favicon.png" />
+
   <title>Certificates — Synthica</title>
   <meta name="description" content="Generate and verify official Synthica researcher certificates — Associate, Independent, and Lead Researcher recognition." />
   <link rel="canonical" href="https://www.synthica.org/certificate.html" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232589ed'/%3E%3Ctext x='16' y='23' font-family='Arial,sans-serif' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E" />
-  <link href="https://fonts.cdnfonts.com/css/garet" rel="stylesheet" />
+  
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="design-system.css" />
+  <script src="icons.js"></script>
   <script>
     (function () {
       try {
-        if (localStorage.getItem('synthica.theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+        var t = localStorage.getItem('synthica.theme');
+        var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
         var m = new Date().getMonth();
         var s = m <= 1 || m === 11 ? 'winter' : m <= 4 ? 'spring' : m <= 7 ? 'summer' : 'autumn';
         document.documentElement.setAttribute('data-season', s);
@@ -27,7 +31,8 @@
     /* Page-specific bits, built only from the site's brand tokens. */
     .cert-wrap { max-width: 860px; margin: 0 auto; }
     .cert-role { text-align: center; }
-    .cert-role-emoji { font-size: 2rem; display: block; margin-bottom: 0.4rem; }
+    .cert-role-icon { display: block; margin-bottom: 0.4rem; color: var(--brand-blue); }
+    .cert-role-icon svg { display: block; margin: 0 auto; }
     .cert-role h3 { margin: 0 0 0.35rem; }
     .cert-cta { text-align: center; }
     .cert-cta .cert-actions { justify-content: center; }
@@ -114,17 +119,17 @@
       <div class="cert-wrap">
         <div class="grid grid-3" style="margin-bottom: 1.75rem;">
           <article class="card cert-role" data-reveal="0">
-            <span class="cert-role-emoji" aria-hidden="true">🥉</span>
+            <span class="cert-role-icon" data-icon="award" data-icon-size="32" aria-hidden="true"></span>
             <h3>Associate Researcher</h3>
             <p>Awarded for contributing to a research team and seeing a project through.</p>
           </article>
           <article class="card cert-role" data-reveal="100">
-            <span class="cert-role-emoji" aria-hidden="true">🔬</span>
+            <span class="cert-role-icon" data-icon="microscope" data-icon-size="32" aria-hidden="true"></span>
             <h3>Independent Researcher</h3>
             <p>Awarded for driving your own original research from question to write-up.</p>
           </article>
           <article class="card cert-role" data-reveal="200">
-            <span class="cert-role-emoji" aria-hidden="true">🏅</span>
+            <span class="cert-role-icon" data-icon="trophy" data-icon-size="32" aria-hidden="true"></span>
             <h3>Lead Researcher</h3>
             <p>Awarded for leading a team to a publishable research result.</p>
           </article>
@@ -207,11 +212,11 @@
           if (data && data.valid) {
             var TLABEL = { associate: 'Associate Researcher', independent: 'Independent Researcher', lead: 'Lead Researcher' };
             verifyResult.className = 'verify-result verify-ok';
-            verifyResult.textContent = '✓ Genuine — issued to ' + data.name + ' as ' + (TLABEL[data.type] || data.type) +
+            verifyResult.textContent = 'Verified — issued to ' + data.name + ' as ' + (TLABEL[data.type] || data.type) +
               (data.issuedAt ? ' on ' + new Date(data.issuedAt).toLocaleDateString() : '') + '.';
           } else {
             verifyResult.className = 'verify-result verify-bad';
-            verifyResult.textContent = '✗ No certificate found with that code.';
+            verifyResult.textContent = 'Not found — no certificate found with that code.';
           }
         } catch (e) {
           verifyResult.className = 'verify-result verify-bad';
