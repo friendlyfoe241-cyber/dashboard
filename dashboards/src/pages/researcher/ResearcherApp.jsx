@@ -4,7 +4,7 @@ import Layout from '../../components/Layout.jsx';
 import { useAuth } from '../../auth.jsx';
 import { api } from '../../api.js';
 import PendingApproval from './PendingApproval.jsx';
-import Dashboard from './Dashboard.jsx';
+import AssociateHome from './dashboards/AssociateHome.jsx';
 import ProjectDetail from './ProjectDetail.jsx';
 import ResearchHub from './ResearchHub.jsx';
 import ApplicationHub from './ApplicationHub.jsx';
@@ -27,6 +27,8 @@ import MentorHome from './dashboards/MentorHome.jsx';
 import Tools from '../Tools.jsx';
 import Profile from '../Profile.jsx';
 import Account from '../Account.jsx';
+import Sandbox, { SandboxProject } from './Sandbox.jsx';
+import Chapter from './Chapter.jsx';
 
 // One-time celebration the first time a member opens the app after an auditor
 // assigns (or upgrades) their role.
@@ -63,14 +65,17 @@ export default function ResearcherApp() {
   // (Community ⊃ News, Explore ⊃ projects/roles/competitions/programs).
   const nav = [
     { to: '/researcher', label: 'Home', icon: '🏠', end: true },
+    { to: '/researcher/chapter', label: 'Chapter', icon: '🌍' },
     { section: 'Community' },
     { to: '/researcher/community', label: 'Community', icon: '📣' },
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
     { to: '/researcher/people', label: 'People', icon: '👥' },
     { to: '/researcher/mentors', label: 'Mentors', icon: '🧑‍🏫' },
     { section: 'Research' },
+    { to: '/researcher/hub', label: 'Research Hub', icon: '🧭' },
     { to: '/researcher/projects', label: 'Projects', icon: '📂' },
     { to: '/researcher/groups', label: 'Groups', icon: '🔬' },
+    { to: '/researcher/sandbox', label: 'Sandbox', icon: '🧪' },
     { to: '/researcher/calendar', label: 'Calendar', icon: '📅' },
     { to: '/researcher/drive', label: 'Drive', icon: '🗂️' },
     // Mentors get a dedicated workspace to manage availability + bookings.
@@ -86,7 +91,8 @@ export default function ResearcherApp() {
     <Layout nav={nav}>
       <RoleCongrats />
       <Routes>
-        <Route index element={<Dashboard />} />
+        {/* Member portal home — every member is an Associate Researcher. */}
+        <Route index element={<AssociateHome />} />
         <Route path="community" element={<Community />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />
@@ -105,8 +111,11 @@ export default function ResearcherApp() {
         <Route path="programs" element={<Programs />} />
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />
+        <Route path="sandbox" element={<Sandbox />} />
+        <Route path="sandbox/:projectId" element={<SandboxProject />} />
         <Route path="competitions" element={<Competitions />} />
         <Route path="news" element={<News />} />
+        <Route path="chapter" element={<Chapter />} />
         <Route path="account" element={<Account />} />
         {/* Deep-link routes kept so existing links still resolve. */}
         <Route path="hub" element={<ResearchHub />} />

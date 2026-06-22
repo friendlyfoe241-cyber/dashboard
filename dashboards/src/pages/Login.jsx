@@ -7,10 +7,12 @@ import GoogleButton from '../components/GoogleButton.jsx';
 
 const SUBJECTS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 
+// Emails match the seeded demo accounts (backend/src/seed.js). "Moderator" is the
+// member-facing name for the Auditor role (ROLE_WORKFLOWS §9).
 const DEMO_ACCOUNTS = [
   { label: 'Admin', email: 'admin@synthica.org' },
   { label: 'Director', email: 'director@synthica.org' },
-  { label: 'Auditor', email: 'auditor@synthica.org' },
+  { label: 'Moderator', email: 'auditor@synthica.org' },
   { label: 'Lead researcher', email: 'sam@example.com' },
   { label: 'Associate researcher', email: 'jordan@example.com' },
   { label: 'Independent researcher', email: 'testindependent@synthica.org' },
