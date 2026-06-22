@@ -221,8 +221,16 @@ app.get('/api/admin/analytics', requireAuth, requireAuditor, wrap((_req, res) =>
 app.get('/api/admin/applications', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.allApplications())));
 
 app.post('/api/admin/applications/:id', requireAuth, requireAuditor, wrap((req, res) => {
-  const { status, assignTag } = req.body || {};
-  res.json(store.setApplicationStatus({ id: req.params.id, status, assignTag, reviewerId: req.user.id }));
+  const { status, assignTag, feedback } = req.body || {};
+  res.json(store.setApplicationStatus({ id: req.params.id, status, assignTag, feedback, reviewerId: req.user.id }));
+}));
+
+// Independent project proposals — Moderator queue (dedicated, in addition to the
+// shared /admin/applications view) so Unit 15 can list + approve/reject them.
+app.get('/api/admin/proposals', requireAuth, requireAuditor, wrap((_req, res) => res.json(store.listProposals())));
+app.post('/api/admin/proposals/:id', requireAuth, requireAuditor, wrap((req, res) => {
+  const { status, feedback } = req.body || {};
+  res.json(store.reviewProposal({ id: req.params.id, status, feedback, reviewerId: req.user.id }));
 }));
 
 // Auditors assign/remove researcher tags directly (role assignment).
@@ -365,7 +373,35 @@ app.get('/api/messages', requireAuth, wrap((req, res) => res.json(store.listConv
 app.get('/api/messages/unread', requireAuth, wrap((req, res) => res.json({ count: store.unreadMessageCount(req.user.id) })));
 app.get('/api/network', requireAuth, wrap((req, res) => res.json(store.networkFor(req.user.id))));
 app.get('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.getThread(req.user.id, req.params.userId))));
-app.post('/api/messages/:userId', requireAuth, wrap((req, res) => res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text: (req.body || {}).text }))));
+app.post('/api/messages/:userId', requireAuth, wrap((req, res) => {
+  const { text, replyTo, mediaUrl, mediaType } = req.body || {};
+  res.json(store.sendMessage({ from: req.user.id, to: req.params.userId, text, replyTo, mediaUrl, mediaType }));
+}));
+// Edit a message
+app.put('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  const { text } = req.body || {};
+  res.json(store.editMessage(req.user.id, req.params.messageId, text));
+}));
+// Delete a message
+app.delete('/api/messages/:messageId', requireAuth, wrap((req, res) => {
+  res.json(store.deleteMessage(req.user.id, req.params.messageId));
+}));
+// Toggle reaction on a message
+app.post('/api/messages/:messageId/react', requireAuth, wrap((req, res) => {
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: 'Emoji is required' });
+  res.json(store.toggleReaction(req.user.id, req.params.messageId, emoji));
+}));
+// Forward a message
+app.post('/api/messages/:messageId/forward', requireAuth, wrap((req, res) => {
+  const { toUserId } = req.body || {};
+  if (!toUserId) return res.status(400).json({ error: 'Recipient is required' });
+  res.json(store.forwardMessage(req.user.id, req.params.messageId, toUserId));
+}));
+// Get users for forwarding
+app.get('/api/messages/forward-targets', requireAuth, wrap((req, res) => {
+  res.json(store.getForwardTargets(req.user.id));
+}));
 
 // --- Trust & safety: report, block, account export/delete ------------------
 app.post('/api/report', requireAuth, wrap((req, res) => {
@@ -422,14 +458,24 @@ app.post('/api/admin/users/:id/send-reset', requireAuth, requireDirector, wrap((
 // Branded email broadcast to a member segment (director only).
 app.post('/api/admin/broadcast', requireAuth, requireDirector, async (req, res) => {
   try {
-    const { subject, heading, body, audience } = req.body || {};
+    const { subject, heading, body, audience, to } = req.body || {};
     if (!subject?.trim() || !body?.trim()) return res.status(400).json({ error: 'A subject and message are required' });
-    const recipients = store.broadcastRecipients(audience);
+    
+    let recipients;
+    if (to && to.trim()) {
+      // Custom email recipient(s) - supports comma-separated emails
+      const emails = to.split(',').map(e => e.trim()).filter(e => e && e.includes('@'));
+      if (emails.length === 0) return res.status(400).json({ error: 'At least one valid email is required' });
+      recipients = emails.map(email => ({ email }));
+    } else {
+      recipients = store.broadcastRecipients(audience);
+    }
+    
     const blocks = String(body).split(/\n{2,}/).map((p) => escHtml(p).replace(/\n/g, '<br>'));
     for (const r of recipients) {
       actionEmail({ to: r.email, subject: subject.trim(), heading: (heading || subject).trim(), intro: `Hi ${String(r.name || 'there').split(' ')[0]},`, blocks, signoff: 'Thanks,' });
     }
-    res.json({ sent: recipients.length, audience: audience || 'all' });
+    res.json({ sent: recipients.length, audience: to ? 'custom' : (audience || 'all') });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Broadcast failed' });
   }
@@ -537,6 +583,12 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   res.json(pub);
 }));
 
+app.post('/api/journal/publications/:id/access', wrap((req, res) => {
+  const accesses = store.recordPublicationAccess(req.params.id);
+  if (accesses === null) return res.status(404).json({ error: 'Publication not found' });
+  res.json({ ok: true, accesses });
+}));
+
 // Per-paper OG share card (1200×630 PNG) + a share page whose meta tags
 // crawlers can read (the static site can't serve per-paper tags).
 app.get('/api/journal/publications/:id/og.png', wrap((req, res) => {
@@ -558,7 +610,7 @@ app.get('/api/journal/publications/:id/share', wrap((req, res) => {
 // --- Track 3: Editor dashboard ---------------------------------------------
 // All editor routes require auth and act as the logged-in editor.
 const editorOnly = (req, res, next) =>
-  req.user.kind === 'editor' ? next() : res.status(403).json({ error: 'Editors only' });
+  req.user.kind === 'editor' || req.user.allViewsDemo ? next() : res.status(403).json({ error: 'Editors only' });
 
 app.get('/api/editor/papers', requireAuth, editorOnly, wrap((req, res) => {
   res.json(store.papersForEditor(req.user.id));
@@ -600,7 +652,7 @@ app.post('/api/editor/papers/:id/request-revision', requireAuth, editorOnly, wra
 app.post('/api/editor/papers/:id/chief', requireAuth, editorOnly, wrap((req, res) => {
   if (req.user.role !== EDITOR_ROLES.CHIEF) return res.status(403).json({ error: 'Editor-in-chief only' });
   const { decision, comments } = req.body || {};
-  res.json(store.chiefDecision({ paperId: req.params.id, decision, comments }));
+  res.json(store.chiefDecision({ paperId: req.params.id, editorId: req.user.id, decision, comments }));
 }));
 
 // Director-only views + actions (the platform Admin sees these too).
@@ -624,6 +676,11 @@ app.post('/api/editor/director/publish', requireAuth, editorOnly, directorOnly, 
 
 app.get('/api/editor/director/workload', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
   res.json(store.editorWorkload());
+}));
+
+// Review-stage papers + swap candidates that power the reassignment panel.
+app.get('/api/editor/director/reassign', requireAuth, editorOnly, directorOnly, wrap((_req, res) => {
+  res.json(store.directorReassignBoard());
 }));
 
 app.post('/api/editor/director/reassign', requireAuth, editorOnly, directorOnly, wrap((req, res) => {
@@ -657,9 +714,9 @@ app.post('/api/editor/settings/test', requireAuth, editorOnly, directorOnly, wra
 
 // --- Track 4: Researcher dashboard -----------------------------------------
 const researcherOnly = (req, res, next) => {
-  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
-  // New members can't act until an auditor assigns their role.
-  if (req.user.approved === false) return res.status(403).json({ error: 'Your account is awaiting role assignment by an auditor.' });
+  if (req.user.kind !== 'researcher' && !req.user.allViewsDemo) {
+    return res.status(403).json({ error: 'Researchers only' });
+  }
   next();
 };
 
@@ -714,8 +771,8 @@ app.get('/api/researcher/my-listings', requireAuth, researcherOnly, wrap((req, r
 }));
 
 app.put('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
-  res.json(store.updateListing({ listingId: req.params.id, leadId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+  const { title, category, spots, description, bannerUrl, lookingFor, customApplication, customQuestions } = req.body || {};
+  res.json(store.updateListing({ listingId: req.params.id, leadId: req.user.id, title, category, spots, description, bannerUrl, lookingFor, customApplication, customQuestions }));
 }));
 
 app.delete('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((req, res) => {
@@ -723,8 +780,8 @@ app.delete('/api/researcher/listings/:id', requireAuth, researcherOnly, wrap((re
 }));
 
 app.post('/api/researcher/listings', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, spots, description, bannerUrl, lookingFor } = req.body || {};
-  res.json(store.createListing({ userId: req.user.id, title, category, spots, description, bannerUrl, lookingFor }));
+  const { title, category, spots, description, bannerUrl, lookingFor, projectId, customApplication, customQuestions } = req.body || {};
+  res.json(store.createListing({ userId: req.user.id, title, category, spots, description, bannerUrl, lookingFor, projectId, customApplication, customQuestions }));
 }));
 
 // --- Shared calendar: lead/staff deadlines + due dates ----------------------
@@ -743,8 +800,8 @@ app.delete('/api/events/:id', requireAuth, wrap((req, res) => {
   res.json(store.deleteEvent({ id: req.params.id, userId: req.user.id }));
 }));
 app.post('/api/researcher/projects', requireAuth, researcherOnly, wrap((req, res) => {
-  const { title, category, description } = req.body || {};
-  res.json(store.createProject({ userId: req.user.id, title, category, description }));
+  const { title, category, description, spots, customApplication, customQuestions, publishListing } = req.body || {};
+  res.json(store.createProject({ userId: req.user.id, title, category, description, spots, customApplication, customQuestions, publishListing }));
 }));
 app.get('/api/researcher/listing-applications', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.myListingApplications(req.user.id));
@@ -847,6 +904,83 @@ app.get('/api/researcher/projects/:id/events', requireAuth, researcherOnly, wrap
   res.json(store.projectEvents(req.params.id, req.user.id));
 }));
 
+// ============================================================
+// SANDBOX PROJECTS (Independent Researcher personal projects)
+// ============================================================
+app.get('/api/researcher/sandbox', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.listSandboxProjects(req.user.id));
+}));
+
+app.get('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.getSandboxProject(req.user.id, req.params.projectId));
+}));
+
+app.post('/api/researcher/sandbox', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description } = req.body || {};
+  res.json(store.createSandboxProject({ userId: req.user.id, title, category, description }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description } = req.body || {};
+  res.json(store.updateSandboxProject(req.user.id, req.params.projectId, { title, category, description }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxProject(req.user.id, req.params.projectId));
+}));
+
+// Sandbox tasks
+app.post('/api/researcher/sandbox/:projectId/tasks', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, priority, dueDate } = req.body || {};
+  res.json(store.addSandboxTask(req.user.id, req.params.projectId, { title, description, priority, dueDate }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId/tasks/:taskId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, priority, dueDate, status } = req.body || {};
+  res.json(store.updateSandboxTask(req.user.id, req.params.projectId, req.params.taskId, { title, description, priority, dueDate, status }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/tasks/:taskId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxTask(req.user.id, req.params.projectId, req.params.taskId));
+}));
+
+// Sandbox notes
+app.post('/api/researcher/sandbox/:projectId/notes', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, content } = req.body || {};
+  res.json(store.addSandboxNote(req.user.id, req.params.projectId, { title, content }));
+}));
+
+app.put('/api/researcher/sandbox/:projectId/notes/:noteId', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, content } = req.body || {};
+  res.json(store.updateSandboxNote(req.user.id, req.params.projectId, req.params.noteId, { title, content }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/notes/:noteId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxNote(req.user.id, req.params.projectId, req.params.noteId));
+}));
+
+// Sandbox documents
+app.post('/api/researcher/sandbox/:projectId/documents', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, type, url, size } = req.body || {};
+  res.json(store.addSandboxDocument(req.user.id, req.params.projectId, { name, type, url, size }));
+}));
+
+app.delete('/api/researcher/sandbox/:projectId/documents/:docId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.deleteSandboxDocument(req.user.id, req.params.projectId, req.params.docId));
+}));
+
+// Sandbox Google Drive sync
+app.post('/api/researcher/sandbox/:projectId/sync-drive', requireAuth, researcherOnly, wrap((req, res) => {
+  const project = store.getSandboxProject(req.user.id, req.params.projectId);
+  // Return project data for client to sync with Drive
+  res.json({ project, needsSync: true });
+}));
+
+app.put('/api/researcher/sandbox/:projectId/drive-folder', requireAuth, researcherOnly, wrap((req, res) => {
+  const { folderId } = req.body || {};
+  res.json(store.setSandboxDriveFolder(req.user.id, req.params.projectId, folderId));
+}));
+
 // Project idea board (brainstorm + vote; lead chooses).
 app.post('/api/researcher/projects/:id/ideas', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.addIdea({ projectId: req.params.id, userId: req.user.id, text: (req.body || {}).text }));
@@ -856,6 +990,17 @@ app.post('/api/researcher/projects/:id/ideas/:ideaId/vote', requireAuth, researc
 }));
 app.post('/api/researcher/projects/:id/ideas/:ideaId/choose', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.chooseIdea({ projectId: req.params.id, userId: req.user.id, ideaId: req.params.ideaId }));
+}));
+
+// Independent research proposals — submit, list mine, revise & resubmit.
+app.get('/api/researcher/proposals', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listProposalsForUser(req.user.id))));
+app.post('/api/researcher/proposals', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description, methodology } = req.body || {};
+  res.json(store.addProposal({ userId: req.user.id, title, category, description, methodology }));
+}));
+app.post('/api/researcher/proposals/:id/revise', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, category, description, methodology } = req.body || {};
+  res.json(store.reviseProposal({ id: req.params.id, userId: req.user.id, title, category, description, methodology }));
 }));
 
 // Pathway — personal guided research to-dos.
@@ -881,6 +1026,10 @@ app.post('/api/people/:id/unfollow', requireAuth, wrap((req, res) => res.json(st
 app.get('/api/feed', requireAuth, wrap((req, res) => res.json(store.feedFor(req.user.id))));
 
 // Onboarding (current researcher).
+app.post('/api/researcher/roles/associate', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.claimAssociateRole(req.user.id));
+}));
+
 app.get('/api/researcher/onboarding', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.myOnboarding(req.user.id));
 }));
@@ -890,11 +1039,22 @@ app.post('/api/researcher/onboarding/step', requireAuth, researcherOnly, wrap((r
   res.json(store.setOnboardingStep({ userId: req.user.id, key, done }));
 }));
 
+// A rejected sign-up edits their profile and asks for another review. Uses
+// requireAuth (not researcherOnly) because the member isn't approved yet.
+app.post('/api/researcher/onboarding/resubmit', requireAuth, wrap((req, res) => {
+  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
+  res.json(store.resubmitOnboarding(req.user.id));
+}));
+
 // Chapter leader: roster + stats, and onboarding new members.
 app.get('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
   const view = store.chapterView(req.user.id);
-  if (!view) return res.status(404).json({ error: 'You do not lead a chapter' });
-  res.json(view);
+  res.json(view || { hasChapter: false, isLeader: false });
+}));
+
+app.post('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
+  const { name, location, handbookUrl } = req.body || {};
+  res.json(store.createChapter({ leaderId: req.user.id, name, location, handbookUrl }));
 }));
 
 app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((req, res) => {
@@ -905,6 +1065,57 @@ app.post('/api/researcher/chapter/members', requireAuth, researcherOnly, wrap((r
 app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, body } = req.body || {};
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
+}));
+
+// Member joins a private chapter by entering its 8-character code.
+app.post('/api/researcher/chapter/join', requireAuth, researcherOnly, wrap((req, res) => {
+  const { code } = req.body || {};
+  res.json(store.joinChapterByCode({ userId: req.user.id, code }));
+}));
+
+// Leader rotates their chapter's join code.
+app.post('/api/researcher/chapter/regenerate-code', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.regenerateJoinCode(req.user.id));
+}));
+
+app.post('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  const { title, description, type } = req.body || {};
+  res.json(store.addChapterProgress({ leaderId: req.user.id, title, description, type }));
+}));
+
+app.get('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.getChapterProgress(req.user.id));
+}));
+
+// --- Expertise mentors (ROLE_WORKFLOWS §7) ---------------------------------
+// Directory + booking (any researcher) and mentor self-service (mentor tag).
+app.get('/api/mentors', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listMentors({ specialty: req.query.specialty }))));
+app.get('/api/mentors/specialties', requireAuth, researcherOnly, wrap((_req, res) => res.json(store.mentorSpecialties())));
+app.get('/api/mentors/:id', requireAuth, researcherOnly, wrap((req, res) => res.json(store.getMentor(req.params.id))));
+app.post('/api/mentors/:id/book', requireAuth, researcherOnly, wrap((req, res) => {
+  const { slot, note } = req.body || {};
+  res.json(store.bookMentor({ researcherId: req.user.id, mentorId: req.params.id, slot, note }));
+}));
+app.get('/api/me/mentor-bookings', requireAuth, researcherOnly, wrap((req, res) => res.json(store.myMentorBookings(req.user.id))));
+
+// Mentor's own dashboard: profile, availability, bookings.
+app.get('/api/mentor/dashboard', requireAuth, researcherOnly, wrap((req, res) => res.json(store.mentorDashboard(req.user.id))));
+app.put('/api/mentor/profile', requireAuth, researcherOnly, wrap((req, res) => {
+  const { specialties, mentorBio } = req.body || {};
+  res.json(store.setMentorProfile({ userId: req.user.id, specialties, mentorBio }));
+}));
+app.post('/api/mentor/availability', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.addMentorSlot({ userId: req.user.id, slot: (req.body || {}).slot }));
+}));
+app.delete('/api/mentor/availability/:slotId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.removeMentorSlot({ userId: req.user.id, slotId: req.params.slotId }));
+}));
+app.post('/api/mentor/calendar-connect', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.setMentorCalendarConnected({ userId: req.user.id, connected: (req.body || {}).connected }));
+}));
+// Either party cancels a booking.
+app.post('/api/mentor-bookings/:id/cancel', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.cancelMentorBooking({ userId: req.user.id, bookingId: req.params.id }));
 }));
 
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive

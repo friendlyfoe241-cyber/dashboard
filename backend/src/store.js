@@ -44,6 +44,7 @@ function buildSeed() {
     activities: clone(seed.activities || []),
     messages: clone(seed.messages || []),
     reports: clone(seed.reports || []),
+    chapterProgress: [],
   };
 }
 
@@ -81,6 +82,13 @@ function recordAudit(actor, action, detail) {
     action,
     detail: detail || '',
   });
+}
+
+// Audit a review-pipeline decision (every decision is logged for traceability,
+// per JOURNAL_PIPELINE §6.6/§12). `stageName` is a human-readable stage label.
+function auditDecision(sub, editorId, stageName, decision) {
+  const verb = decision === 'approve' ? 'approved' : 'rejected';
+  recordAudit(getEditorById(editorId), 'paper_decision', `${stageName} ${verb} ${sub.id} "${sub.title}"`);
 }
 
 // Assign reviewers to any submission sitting in the review stage without them
@@ -795,6 +803,25 @@ export function editorWorkload() {
     .sort((a, b) => b.load - a.load);
 }
 
+// Reassignment board: review-stage papers with their two assigned Reviews
+// editors and the other eligible (same-category) reviewers the Director could
+// swap in. Drives the "Reassign a reviews editor" panel on the Director desk.
+export function directorReassignBoard() {
+  return db.submissions
+    .filter((s) => s.stage === STAGE.REVIEW)
+    .map((s) => {
+      const assigned = s.assignedReviewers.map((id) => {
+        const e = getEditorById(id);
+        return { id, name: e?.name || 'Unknown editor', reviewed: s.reviews.some((r) => r.editorId === id), load: loadOf(id) };
+      });
+      const candidates = db.editors
+        .filter((e) => e.role === EDITOR_ROLES.REVIEWS && e.category === s.category && !s.assignedReviewers.includes(e.id))
+        .map((e) => ({ id: e.id, name: e.name, load: loadOf(e.id) }))
+        .sort((a, b) => a.load - b.load);
+      return { paperId: s.id, title: s.title, category: s.category, assigned, candidates };
+    });
+}
+
 // Papers visible to a given editor, scoped by role + category + assignment.
 export function papersForEditor(editorId) {
   const editor = getEditorById(editorId);
@@ -811,20 +838,30 @@ export function papersForEditor(editorId) {
       case EDITOR_ROLES.REVIEWS: {
         // Reviews editors see the paper single-blind (no author identity).
         const anon = anonymizeForReviews(s);
+        const coReview = raw.reviews.find((r) => r.editorId !== editorId && raw.assignedReviewers.includes(r.editorId));
         if (raw.stage === STAGE.REVIEW && raw.assignedReviewers.includes(editorId)) {
-          const coReview = raw.reviews.find((r) => r.editorId !== editorId);
-          inbox.push({ ...anon, myReview: myReview || null, coReviewerDecision: coReview?.decision || null });
+          // Live peer visibility: when the OTHER reviews editor has already
+          // submitted, surface their full decision + feedback + recommendation.
+          inbox.push({
+            ...anon,
+            myReview: myReview || null,
+            coReviewerDecision: coReview?.decision || null,
+            coReview: coReview ? coReviewView(coReview) : null,
+          });
         } else if (raw.assignedReviewers.includes(editorId) && myReview) {
-          archive.push(anon);
+          archive.push({ ...anon, myReview, coReview: coReview ? coReviewView(coReview) : null });
         }
         break;
       }
 
       case EDITOR_ROLES.SENIOR:
+        // Senior screening (§9.2) and final check (§9.4) both need the full
+        // reviews chain — decisions, feedback AND recommendations — so priorFeedback
+        // (decision + comments per editor, role-tagged) goes to both stages.
         if ((raw.stage === STAGE.SENIOR_SCREEN || raw.stage === STAGE.SENIOR_FINAL) && raw.assignee === editorId) {
-          inbox.push({ ...s, reviewerRecommendations: reviewerRecs(raw), feed: buildFeed(raw) });
+          inbox.push({ ...s, reviewerRecommendations: reviewerRecs(raw), priorFeedback: priorFeedback(raw), feed: buildFeed(raw) });
         } else if (raw.assignee === editorId && myReview) {
-          archive.push({ ...s, feed: buildFeed(raw) });
+          archive.push({ ...s, reviewerRecommendations: reviewerRecs(raw), priorFeedback: priorFeedback(raw), feed: buildFeed(raw) });
         }
         break;
 
@@ -851,11 +888,26 @@ function reviewerRecs(sub) {
     .map((r) => ({ editorName: getEditorById(r.editorId)?.name, recommendation: r.recommendation }));
 }
 
+// One reviews editor's submission as the peer reviewer sees it (single-blind:
+// the co-reviewer is identified by role, never by author identity).
+function coReviewView(r) {
+  return {
+    decision: r.decision,
+    comments: r.comments,
+    recommendation: r.recommendation || null,
+    at: r.at,
+  };
+}
+
+// Full prior decision chain, role-tagged so each upstream stage can be labelled
+// (Reviews Editor / Senior Editor). Used by senior, associate and chief views.
 function priorFeedback(sub) {
   return sub.reviews.map((r) => ({
     editorName: getEditorById(r.editorId)?.name,
+    role: getEditorById(r.editorId)?.role || null,
     decision: r.decision,
     comments: r.comments,
+    recommendation: r.recommendation || null,
   }));
 }
 
@@ -892,11 +944,15 @@ function buildFeed(sub) {
   return entries.sort((a, b) => new Date(a.at) - new Date(b.at));
 }
 
-// Director dashboard: every decision generates an email task; finished papers
-// land in the publish queue.
+// Director dashboard: every decision generates an email task; Chief-approved
+// papers wait in the publish queue until the Director mints a DOI.
+//   toEmail   — every approve/reject decision across all stages (mirror queue)
+//   toPublish — READY_TO_PUBLISH: Chief-approved, not yet published by Director
+//   published — already published (DOI minted, in the Archive) — for reference
 export function directorView() {
   const toEmail = [];
   const toPublish = [];
+  const published = [];
   for (const raw of db.submissions) {
     const s = decorate(raw);
     // "Papers to email": anything that has reached a notify-worthy decision point.
@@ -906,15 +962,27 @@ export function directorView() {
         title: raw.title,
         authorName: raw.authorName,
         authorEmail: raw.authorEmail,
+        category: raw.category,
         state: note.label,
         decision: note.decision,
         at: note.at,
         emailed: note.emailed || false,
+        emailedAt: note.emailedAt || null,
       });
     }
-    if (raw.stage === STAGE.PUBLISHED) toPublish.push(s);
+    if (raw.stage === STAGE.PUBLISHED) {
+      if (raw.published) {
+        const pub = db.publications.find((p) => p.doi === raw.doi || p.title === raw.title);
+        published.push({ ...s, doi: raw.doi || pub?.doi || null, publishedAt: raw.publishedAt || pub?.publishedAt || null });
+      } else {
+        toPublish.push(s);
+      }
+    }
   }
-  return { toEmail, toPublish };
+  // Newest decisions first so the Director acts on the freshest items up top.
+  toEmail.sort((a, b) => new Date(b.at) - new Date(a.at));
+  published.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+  return { toEmail, toPublish, published };
 }
 
 // --- write API: the workflow engine ---------------------------------------
@@ -935,6 +1003,7 @@ export function submitReviewDecision({ paperId, editorId, decision, comments, re
 
   sub.reviews.push({ editorId, decision, comments, recommendation: recommendation || null, at: now() });
   log(sub, { type: 'review', editorId, decision });
+  auditDecision(sub, editorId, 'Reviews Editor', decision);
 
   // Advance only once both assigned reviewers have weighed in.
   const both = sub.assignedReviewers.every((rid) => sub.reviews.some((r) => r.editorId === rid));
@@ -965,6 +1034,7 @@ export function seniorDecision({ paperId, editorId, decision, comments }) {
   sub.reviews.push({ editorId, decision, comments, recommendation: null, at: now() });
   const wasScreen = sub.stage === STAGE.SENIOR_SCREEN;
   log(sub, { type: 'senior', editorId, decision });
+  auditDecision(sub, editorId, wasScreen ? 'Senior Editor (screening)' : 'Senior Editor (final)', decision);
 
   if (decision !== 'approve') {
     reject(sub, wasScreen ? STAGE_LABEL[STAGE.ASSOCIATE] : STAGE_LABEL[STAGE.CHIEF]);
@@ -988,6 +1058,7 @@ export function associateRound({ paperId, editorId, note }) {
 
   sub.associateRounds += 1;
   log(sub, { type: 'associate_round', editorId, round: sub.associateRounds, note: note || null });
+  recordAudit(getEditorById(editorId), 'associate_round', `${sub.id} "${sub.title}" — round ${sub.associateRounds}/${ASSOCIATE_TOTAL_ROUNDS}`);
 
   if (sub.associateRounds >= ASSOCIATE_TOTAL_ROUNDS) {
     advance(sub, STAGE.SENIOR_FINAL, { label: STAGE_LABEL[STAGE.SENIOR_FINAL], decision: 'approved' });
@@ -997,12 +1068,14 @@ export function associateRound({ paperId, editorId, note }) {
 }
 
 // Editor-in-chief final approval -> Director's publish queue.
-export function chiefDecision({ paperId, decision, comments }) {
+export function chiefDecision({ paperId, editorId, decision, comments }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   if (sub.stage !== STAGE.CHIEF) throw httpError(409, 'Paper is not awaiting the editor-in-chief');
+  if (!comments?.trim()) throw httpError(400, 'Feedback is required');
 
-  log(sub, { type: 'chief', decision, comments: comments || null });
+  log(sub, { type: 'chief', editorId, decision, comments: comments.trim() });
+  auditDecision(sub, editorId, 'Editor-in-Chief', decision);
   if (decision === 'approve') {
     advance(sub, STAGE.PUBLISHED, { label: STAGE_LABEL[STAGE.PUBLISHED], decision: 'approved' });
   } else {
@@ -1012,21 +1085,29 @@ export function chiefDecision({ paperId, decision, comments }) {
   return decorate(sub);
 }
 
-// Director marks an email as sent.
+// Director marks an author email as sent — timestamps the decision row.
 export function markEmailed({ paperId, at }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   const note = sub.history.find((h) => h.notifyDirector && h.at === at);
-  if (note) note.emailed = true;
+  if (!note) throw httpError(404, 'No matching decision to mark emailed');
+  if (!note.emailed) {
+    note.emailed = true;
+    note.emailedAt = now();
+  }
   schedulePersist();
-  return true;
+  return { emailedAt: note.emailedAt };
 }
 
 // Director publishes a finished paper into the journal DOI registry (Track 2).
+// Chief approval parks the paper at STAGE.PUBLISHED (READY_TO_PUBLISH); this is
+// the Director's act that mints the DOI, creates the public Publication, and
+// notifies the author + reviewers that the paper is live.
 export function publishToJournal({ paperId, doiSuffix, volume, issue, pages }) {
   const sub = getSub(paperId);
   if (!sub) throw httpError(404, 'Paper not found');
   if (sub.stage !== STAGE.PUBLISHED) throw httpError(409, 'Paper is not ready to publish');
+  if (sub.published) throw httpError(409, 'This paper has already been published');
 
   const today = now().slice(0, 10);
   const pub = {
@@ -1063,9 +1144,22 @@ export function publishToJournal({ paperId, doiSuffix, volume, issue, pages }) {
   pub.source = 'editorial';
   pub.verified = true;
   db.publications.push(pub);
+  // Mark the submission published so it leaves the "Papers to publish" queue and
+  // remember the DOI/date for the Director's "Published" reference list.
+  sub.published = true;
+  sub.doi = pub.doi;
+  sub.publishedAt = pub.publishedAt;
   sub.history.push({ at: now(), type: 'published_to_journal', doi: pub.doi });
   recordAudit({ name: 'Director' }, 'publish', `${sub.title} (${pub.doi})`);
   registerDoi(pub); // optional Crossref deposit (no-op unless configured)
+  // The paper is now live in the Archive: tell the author + reviewers and post
+  // to the Discord queue. (Chief approval only announced acceptance.)
+  emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'published' });
+  notifyReviewers(sub, 'A paper you reviewed is now published', `"${sub.title}" · DOI ${pub.doi}`);
+  notifyMove({ title: sub.title, paperId: sub.id, category: sub.category, label: `Published · DOI ${pub.doi}`, decision: 'published' });
+  if (sub.submittedBy) {
+    recordActivity(sub.submittedBy, 'published', `published “${sub.title}” in the Synthica Journal`, '/archive');
+  }
   schedulePersist();
   return pub;
 }
@@ -1387,20 +1481,25 @@ function advance(sub, nextStage, note) {
     sub.assignee = null;
   }
   log(sub, { type: 'advance', to: nextStage, notifyDirector: true, label: note.label, decision: note.decision });
+  // Reaching STAGE.PUBLISHED here means the Chief approved — the paper is
+  // ACCEPTED and now waits on the Director's desk. It only enters the Archive
+  // once the Director mints a DOI in publishToJournal(), which sends the final
+  // "now published" announcement. Keep this step to an acceptance notice.
+  const accepted = nextStage === STAGE.PUBLISHED;
   // Followers see the author's paper move to a later round of publishing.
   const ROUND_NAME = {
     [STAGE.SENIOR_SCREEN]: 'senior editor screening',
     [STAGE.ASSOCIATE]: 'associate editor revisions',
     [STAGE.SENIOR_FINAL]: 'senior editor final review',
     [STAGE.CHIEF]: 'editor-in-chief review',
-    [STAGE.PUBLISHED]: 'publication 🎉',
+    [STAGE.PUBLISHED]: 'acceptance — awaiting the Director ✅',
   };
   if (sub.submittedBy) {
     recordActivity(
       sub.submittedBy,
-      nextStage === STAGE.PUBLISHED ? 'published' : 'paper_advance',
+      'paper_advance',
       `advanced their paper “${sub.title}” to ${ROUND_NAME[nextStage] || 'the next round'}`,
-      nextStage === STAGE.PUBLISHED ? '/archive' : `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
+      `/p/${getUserById(sub.submittedBy)?.slug || sub.submittedBy}`,
     );
   }
   notifyMove({
@@ -1408,11 +1507,11 @@ function advance(sub, nextStage, note) {
     paperId: sub.id,
     category: sub.category,
     label: note.label,
-    decision: nextStage === STAGE.PUBLISHED ? 'published' : 'approved',
+    decision: 'approved',
   });
-  if (nextStage === STAGE.PUBLISHED) {
+  if (accepted) {
     emailDecision({ authorEmail: sub.authorEmail, authorName: sub.authorName, title: sub.title, decision: 'published' });
-    notifyReviewers(sub, '🎉 A paper you reviewed was approved for publication', `"${sub.title}" · by ${sub.authorName}`);
+    notifyReviewers(sub, '✅ A paper you reviewed was accepted for publication', `"${sub.title}" · by ${sub.authorName}`);
   } else {
     notifyReviewers(sub, '📤 A paper you reviewed moved forward', `"${sub.title}" → ${note.label}`);
   }
@@ -1824,12 +1923,13 @@ export function reviewProgramApplication({ id, status, reviewerId }) {
 
 // Certificate type → the researcher tag that earns it (see RESEARCHER_TAGS in
 // domain.js). Mirrors the official Synthica generator repos
-// (AssociateResearcherGen / IndependentResearcherGen / LeadResearchGen):
-// same templates, same eligibility.
+// (AssociateResearcherGen / IndependentResearcherGen / LeadResearchGen /
+// ChapterLeaderCertGen): same templates, same eligibility.
 const CERT_TYPES = {
   associate: 'associate_researcher',
   independent: 'independent_researcher',
   lead: 'lead_researcher',
+  chapter: 'chapter_leader',
 };
 
 const certCode = () => {
@@ -1905,17 +2005,58 @@ export function digestData() {
   };
 }
 
+// Advanced roles a member can apply for (Associate Researcher is granted on
+// onboarding approval — it's never an application, ROLE_WORKFLOWS §3.2 / §4).
+const APPLICABLE_ROLES = new Set(['Lead Researcher', 'Independent Researcher', 'Chapter Leader']);
+
 export function addApplication(app) {
   // You can't apply to a listing you lead.
   if (app.listingId) {
     const listing = db.listings.find((l) => l.id === app.listingId);
     if (listing && listing.leadId === app.userId) throw httpError(400, "You can't apply to your own listing");
   }
+  // Role-upgrade applications (no listing): validate the requested role and the
+  // required essay so the Moderator queue never receives a half-filled form.
+  if (!app.listingId && app.role) {
+    if (app.role === 'Associate Researcher')
+      throw httpError(400, 'Associate Researcher is granted automatically — no application needed.');
+    if (!APPLICABLE_ROLES.has(app.role)) throw httpError(400, 'Unknown role');
+    const u = getResearcherById(app.userId);
+    if (u && (u.tags || []).includes(ROLE_TO_TAG[app.role]))
+      throw httpError(400, `You already hold the ${app.role} role.`);
+    if (db.applications.some((a) => a.userId === app.userId && a.role === app.role && a.status === 'pending'))
+      throw httpError(400, `You already have a pending ${app.role} application.`);
+    if (!String(app.message || '').trim())
+      throw httpError(400, 'Please answer the application questions before submitting.');
+  }
   const record = { id: `app_${db.applications.length + 1}`, status: 'pending', at: now(), ...app };
   db.applications.push(record);
   notifyEvent({ title: '📝 New application', body: `${record.userName} applied${record.role ? ` for ${record.role}` : ''}.` });
   schedulePersist();
   return record;
+}
+
+// A rejected sign-up revises their profile and asks for another review: flip
+// their onboarding row back to pending and clear the rejection flag so the
+// pending screen shows "under review" again (ROLE_WORKFLOWS §3.1).
+export function resubmitOnboarding(userId) {
+  const u = getResearcherById(userId);
+  if (!u) throw httpError(404, 'Researcher not found');
+  if (u.approved) throw httpError(400, 'Your membership is already active.');
+  const a = db.applications
+    .filter((x) => x.kind === 'onboarding' && x.userId === userId)
+    .sort((x, y) => new Date(y.at) - new Date(x.at))[0];
+  if (a) {
+    a.status = 'pending';
+    a.reviewedBy = null;
+    a.reviewedAt = null;
+    a.resubmittedAt = now();
+  }
+  u.onboardingRejected = false;
+  notifyEvent({ title: '🔁 Membership resubmitted', body: `${u.name} updated their profile and asked for another review.` });
+  schedulePersist();
+  const { password, twoFactorSecret, ...safe } = u;
+  return safe;
 }
 
 // --- researcher project tasks (Track 4) ------------------------------------
@@ -2182,18 +2323,161 @@ const dmCard = (id) => {
   return { id, name: u?.name || 'Member', slug: u?.slug || id, avatarUrl: u?.avatarUrl || '', role: u ? roleDisplay(u) : '' };
 };
 
-export function sendMessage({ from, to, text }) {
+export function sendMessage({ from, to, text, replyTo, mediaUrl, mediaType }) {
   if (from === to) throw httpError(400, "You can't message yourself");
   if (!getUserById(to)) throw httpError(404, 'Recipient not found');
   if (isBlockedBetween(from, to)) throw httpError(403, 'You can no longer message this person');
-  if (!text?.trim()) throw httpError(400, 'Write a message');
+  if (!text?.trim() && !mediaUrl) throw httpError(400, 'Write a message or attach media');
   if (!Array.isArray(db.messages)) db.messages = [];
-  const msg = { id: uid('msg'), from, to, text: String(text).trim().slice(0, 4000), at: now(), read: false };
+  
+  // Get reply info if replying to a message
+  let replyInfo = null;
+  if (replyTo) {
+    const parentMsg = (db.messages || []).find(m => m.id === replyTo);
+    if (parentMsg) {
+      const sender = getUserById(parentMsg.from);
+      replyInfo = {
+        replyToId: parentMsg.id,
+        replyToContent: parentMsg.text,
+        replyToSender: sender?.name || 'Unknown',
+        replyToType: parentMsg.mediaUrl ? 'media' : 'text'
+      };
+    }
+  }
+  
+  const msg = {
+    id: uid('msg'),
+    from,
+    to,
+    text: String(text || '').trim().slice(0, 4000),
+    at: now(),
+    read: false,
+    delivered: false,
+    mediaUrl: mediaUrl || null,
+    mediaType: mediaType || null,
+    reactions: {},
+    isEdited: false,
+    isPinned: false,
+    ...replyInfo
+  };
+  
   db.messages.push(msg);
-  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100), link: `/researcher/messages/${from}` });
-  emit(to, 'message', { from, text: msg.text, at: msg.at });
+  pushNotif(to, { type: 'message', title: `💬 New message from ${getUserById(from)?.name || 'a member'}`, body: msg.text.slice(0, 100) || '📎 Media', link: `/researcher/messages/${from}` });
+  emit(to, 'message', { from, text: msg.text, at: msg.at, mediaUrl: msg.mediaUrl });
   schedulePersist();
   return { ...msg, mine: true };
+}
+
+// Edit a message
+export function editMessage(userId, messageId, newText) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.from === userId);
+  if (!msg) throw httpError(404, 'Message not found');
+  msg.text = String(newText).trim().slice(0, 4000);
+  msg.isEdited = true;
+  msg.editedAt = now();
+  schedulePersist();
+  // Notify the other user
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_edited', { messageId, text: msg.text });
+  return msg;
+}
+
+// Delete a message (soft delete - just clear content)
+export function deleteMessage(userId, messageId) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.from === userId);
+  if (!msg) throw httpError(404, 'Message not found');
+  msg.text = '[deleted]';
+  msg.isDeleted = true;
+  msg.mediaUrl = null;
+  msg.mediaType = null;
+  schedulePersist();
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_deleted', { messageId });
+  return { success: true };
+}
+
+// Add/remove reaction to a message
+export function toggleReaction(userId, messageId, emoji) {
+  const msg = (db.messages || []).find(m => m.id === messageId);
+  if (!msg) throw httpError(404, 'Message not found');
+  if (!msg.reactions) msg.reactions = {};
+  if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+  
+  const idx = msg.reactions[emoji].indexOf(userId);
+  if (idx >= 0) {
+    msg.reactions[emoji].splice(idx, 1);
+    if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+  } else {
+    msg.reactions[emoji].push(userId);
+  }
+  schedulePersist();
+  
+  const otherId = msg.to === userId ? msg.from : msg.to;
+  emit(otherId, 'message_reaction', { messageId, reactions: msg.reactions });
+  return msg.reactions;
+}
+
+// Mark message as delivered
+export function markDelivered(userId, messageId) {
+  const msg = (db.messages || []).find(m => m.id === messageId && m.to === userId);
+  if (msg && !msg.delivered) {
+    msg.delivered = true;
+    schedulePersist();
+    emit(msg.from, 'message_delivered', { messageId });
+  }
+  return { success: true };
+}
+
+// Mark all messages in thread as read
+export function markThreadRead(userId, otherId) {
+  let count = 0;
+  for (const msg of db.messages || []) {
+    if (msg.to === userId && msg.from === otherId && !msg.read) {
+      msg.read = true;
+      count++;
+    }
+  }
+  if (count > 0) schedulePersist();
+  return { count };
+}
+
+// Forward a message to another user
+export function forwardMessage(userId, messageId, toUserId) {
+  const originalMsg = (db.messages || []).find(m => m.id === messageId);
+  if (!originalMsg) throw httpError(404, 'Original message not found');
+  if (!getUserById(toUserId)) throw httpError(404, 'Recipient not found');
+  if (isBlockedBetween(userId, toUserId)) throw httpError(403, 'You can no longer message this person');
+  
+  // Create forwarded message with reference to original
+  const forwardedMsg = {
+    id: uid('msg'),
+    from: userId,
+    to: toUserId,
+    text: originalMsg.text,
+    at: now(),
+    read: false,
+    delivered: false,
+    mediaUrl: originalMsg.mediaUrl,
+    mediaType: originalMsg.mediaType,
+    reactions: {},
+    isEdited: false,
+    isPinned: false,
+    isForwarded: true,
+    originalFrom: originalMsg.from
+  };
+  
+  db.messages.push(forwardedMsg);
+  pushNotif(toUserId, { type: 'message', title: `💬 New message from ${getUserById(userId)?.name || 'a member'}`, body: forwardedMsg.text.slice(0, 100) || '📎 Media', link: `/researcher/messages/${userId}` });
+  emit(toUserId, 'message', { from: userId, text: forwardedMsg.text, at: forwardedMsg.at });
+  schedulePersist();
+  return { ...forwardedMsg, mine: true };
+}
+
+// Get list of users for forwarding
+export function getForwardTargets(userId) {
+  return [...db.editors, ...db.researchers]
+    .filter(u => u.id !== userId && !isBlockedBetween(userId, u.id))
+    .map(u => ({ id: u.id, name: u.name, username: u.username }));
 }
 
 // One row per person you've exchanged messages with: last message + unread count.
@@ -2224,7 +2508,29 @@ export function getThread(userId, otherId) {
     .sort((a, b) => new Date(a.at) - new Date(b.at))
     .map((m) => {
       if (m.to === userId && !m.read) { m.read = true; changed = true; }
-      return { id: m.id, text: m.text, at: m.at, mine: m.from === userId };
+      // Mark as delivered when recipient sees the thread
+      if (m.to === userId && !m.delivered) { m.delivered = true; }
+      return {
+        id: m.id,
+        text: m.text,
+        at: m.at,
+        mine: m.from === userId,
+        delivered: m.delivered,
+        read: m.read,
+        reactions: m.reactions || {},
+        isEdited: m.isEdited || false,
+        isPinned: m.isPinned || false,
+        isDeleted: m.isDeleted || false,
+        isForwarded: m.isForwarded || false,
+        originalFrom: m.originalFrom,
+        mediaUrl: m.mediaUrl,
+        mediaType: m.mediaType,
+        replyToId: m.replyToId,
+        replyToContent: m.replyToContent,
+        replyToSender: m.replyToSender,
+        replyToType: m.replyToType,
+        editedAt: m.editedAt
+      };
     });
   if (changed) schedulePersist();
   return { user: dmCard(otherId), messages };
@@ -3219,6 +3525,72 @@ export function addChapterMember({ leaderId, name, email, discord }) {
   return { id: user.id, name: user.name, email: user.email, discord: user.discord, existing };
 }
 
+// Chapter Leaders can create their chapter
+export function createChapter({ leaderId, name, location, handbookUrl }) {
+  const existing = db.chapters.find((c) => c.leaderId === leaderId);
+  if (existing) throw httpError(409, 'You already lead a chapter');
+  if (!name?.trim()) throw httpError(400, 'Chapter name is required');
+  
+  const user = getResearcherById(leaderId);
+  if (!user) throw httpError(404, 'User not found');
+  
+  const chapter = {
+    id: `chap_${uid('')}`,
+    name: name.trim(),
+    location: (location || '').trim(),
+    handbookUrl: (handbookUrl || '').trim(),
+    leaderId,
+    members: [],
+    announcements: [],
+    createdAt: now(),
+  };
+  
+  // If leader is not already a chapter_leader tag, add it
+  if (!user.tags.includes('chapter_leader')) {
+    user.tags.push('chapter_leader');
+  }
+  
+  db.chapters.push(chapter);
+  pushNotif(leaderId, { type: 'chapter', title: 'Chapter created!', body: `Your chapter "${name}" is ready. Start by onboarding members.`, link: '/researcher/chapter' });
+  schedulePersist();
+  return chapter;
+}
+
+// Progress logging for Chapter Leaders
+export function addChapterProgress({ leaderId, title, description, type }) {
+  const chapter = getChapterLedBy(leaderId);
+  if (!chapter) throw httpError(403, 'You must lead a chapter to log progress');
+  if (!title?.trim()) throw httpError(400, 'Title is required');
+  
+  if (!Array.isArray(db.chapterProgress)) db.chapterProgress = [];
+  
+  const progress = {
+    id: `prog_${uid('')}`,
+    chapterId: chapter.id,
+    leaderId,
+    title: title.trim(),
+    description: (description || '').trim(),
+    type: type || 'general', // general, member, event, recruitment, outreach
+    createdAt: now(),
+  };
+  
+  db.chapterProgress.push(progress);
+  schedulePersist();
+  return progress;
+}
+
+// Get progress entries for a chapter leader's chapter
+export function getChapterProgress(leaderId) {
+  const chapter = getChapterLedBy(leaderId);
+  if (!chapter) return [];
+  
+  if (!Array.isArray(db.chapterProgress)) db.chapterProgress = [];
+  
+  return db.chapterProgress
+    .filter((p) => p.chapterId === chapter.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
 // --- leads: create listings/projects + review their own applicants ---------
 
 const isLead = (u) => u && Array.isArray(u.tags) && u.tags.includes('lead_researcher');
@@ -3562,6 +3934,197 @@ export function editorStats(editorId) {
     }
   }
   return { reviewed, approved, declined, active };
+}
+
+// ============================================================
+// SANDBOX PROJECTS (for Independent Researchers)
+// ============================================================
+
+// Get all sandbox projects for a user
+export function listSandboxProjects(userId) {
+  const projects = (db.sandboxProjects || []).filter(p => p.userId === userId);
+  return projects.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+
+// Get a single sandbox project
+export function getSandboxProject(userId, projectId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  return p;
+}
+
+// Create a sandbox project
+export function createSandboxProject({ userId, title, category, description }) {
+  if (!title?.trim()) throw httpError(400, 'Title is required');
+  const p = {
+    id: `sandbox_${uid('')}`,
+    userId,
+    title: title.trim(),
+    category: category || 'General',
+    description: (description || '').trim(),
+    tasks: [],
+    notes: [],
+    documents: [],
+    createdAt: now(),
+    updatedAt: now(),
+    driveFolderId: null,
+    lastSynced: null
+  };
+  if (!Array.isArray(db.sandboxProjects)) db.sandboxProjects = [];
+  db.sandboxProjects.push(p);
+  schedulePersist();
+  return p;
+}
+
+// Update a sandbox project
+export function updateSandboxProject(userId, projectId, updates) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  if (updates.title !== undefined) p.title = updates.title.trim();
+  if (updates.category !== undefined) p.category = updates.category;
+  if (updates.description !== undefined) p.description = updates.description.trim();
+  p.updatedAt = now();
+  schedulePersist();
+  return p;
+}
+
+// Delete a sandbox project
+export function deleteSandboxProject(userId, projectId) {
+  const idx = (db.sandboxProjects || []).findIndex(p => p.id === projectId && p.userId === userId);
+  if (idx < 0) throw httpError(404, 'Project not found');
+  db.sandboxProjects.splice(idx, 1);
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a task to sandbox project
+export function addSandboxTask(userId, projectId, { title, description, priority, dueDate }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const task = {
+    id: `task_${uid('')}`,
+    title: title.trim(),
+    description: (description || '').trim(),
+    priority: priority || 'medium',
+    dueDate: dueDate || null,
+    status: 'todo',
+    createdAt: now()
+  };
+  p.tasks.push(task);
+  p.updatedAt = now();
+  schedulePersist();
+  return task;
+}
+
+// Update a task
+export function updateSandboxTask(userId, projectId, taskId, updates) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const task = p.tasks.find(t => t.id === taskId);
+  if (!task) throw httpError(404, 'Task not found');
+  if (updates.title !== undefined) task.title = updates.title.trim();
+  if (updates.description !== undefined) task.description = updates.description.trim();
+  if (updates.priority !== undefined) task.priority = updates.priority;
+  if (updates.dueDate !== undefined) task.dueDate = updates.dueDate;
+  if (updates.status !== undefined) task.status = updates.status;
+  p.updatedAt = now();
+  schedulePersist();
+  return task;
+}
+
+// Delete a task
+export function deleteSandboxTask(userId, projectId, taskId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.tasks.findIndex(t => t.id === taskId);
+  if (idx < 0) throw httpError(404, 'Task not found');
+  p.tasks.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a note to sandbox project
+export function addSandboxNote(userId, projectId, { title, content }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const note = {
+    id: `note_${uid('')}`,
+    title: title.trim() || 'Untitled Note',
+    content: content || '',
+    createdAt: now(),
+    updatedAt: now()
+  };
+  p.notes.push(note);
+  p.updatedAt = now();
+  schedulePersist();
+  return note;
+}
+
+// Update a note
+export function updateSandboxNote(userId, projectId, noteId, { title, content }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const note = p.notes.find(n => n.id === noteId);
+  if (!note) throw httpError(404, 'Note not found');
+  if (title !== undefined) note.title = title.trim() || 'Untitled Note';
+  if (content !== undefined) note.content = content;
+  note.updatedAt = now();
+  p.updatedAt = now();
+  schedulePersist();
+  return note;
+}
+
+// Delete a note
+export function deleteSandboxNote(userId, projectId, noteId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.notes.findIndex(n => n.id === noteId);
+  if (idx < 0) throw httpError(404, 'Note not found');
+  p.notes.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Add a document reference
+export function addSandboxDocument(userId, projectId, { name, type, url, size }) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const doc = {
+    id: `doc_${uid('')}`,
+    name,
+    type,
+    url,
+    size: size || 0,
+    addedAt: now()
+  };
+  p.documents.push(doc);
+  p.updatedAt = now();
+  schedulePersist();
+  return doc;
+}
+
+// Delete a document
+export function deleteSandboxDocument(userId, projectId, docId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  const idx = p.documents.findIndex(d => d.id === docId);
+  if (idx < 0) throw httpError(404, 'Document not found');
+  p.documents.splice(idx, 1);
+  p.updatedAt = now();
+  schedulePersist();
+  return { success: true };
+}
+
+// Update Drive folder ID after sync
+export function setSandboxDriveFolder(userId, projectId, folderId) {
+  const p = (db.sandboxProjects || []).find(p => p.id === projectId && p.userId === userId);
+  if (!p) throw httpError(404, 'Project not found');
+  p.driveFolderId = folderId;
+  p.lastSynced = now();
+  schedulePersist();
+  return p;
 }
 
 // Synchronous in-memory default so the module is usable on import (e.g. tests)
