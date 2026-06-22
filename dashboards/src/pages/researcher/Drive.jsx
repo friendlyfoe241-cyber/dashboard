@@ -4,41 +4,46 @@ import { EmptyState } from '../../components/ui.jsx';
 import { embedSrc, fileMeta } from '../../files.js';
 
 // Synthica Drive — a real file-browser feel over everything you're working on.
-// Folders derive from your projects (shared links) + a "My papers" folder from
-// submissions and archived papers. Toolbar: back, path bar, view toggle.
+// Folders derive from your projects (shared links) + a "My papers" folder built
+// from your journal submissions and archived papers. Toolbar: back, path bar,
+// search, grid/list toggle. Click a file to preview (PDFs/Drive) or open it.
 export default function Drive() {
-  const [projects, setProjects] = useState([]);
-  const [subs, setSubs] = useState([]);
-  const [pubs, setPubs] = useState([]);
-  const [open, setOpen] = useState(null); // folder id
+  const [data, setData] = useState(null); // { projects, subs, pubs } | null while loading
+  const [open, setOpen] = useState(null); // open folder id
   const [view, setView] = useState(() => localStorage.getItem('synthica.drive.view') || 'grid');
   const [q, setQ] = useState('');
   const [preview, setPreview] = useState(null);
 
   useEffect(() => {
-    api.myProjects().then(setProjects).catch(() => {});
-    api.mySubmissions().then(setSubs).catch(() => {});
-    api.myPublications().then(setPubs).catch(() => {});
+    Promise.allSettled([api.myProjects(), api.mySubmissions(), api.myPublications()]).then(([pr, su, pu]) => {
+      setData({
+        projects: pr.status === 'fulfilled' ? pr.value : [],
+        subs: su.status === 'fulfilled' ? su.value : [],
+        pubs: pu.status === 'fulfilled' ? pu.value : [],
+      });
+    });
   }, []);
 
   const setViewMode = (v) => { setView(v); try { localStorage.setItem('synthica.drive.view', v); } catch { /* ignore */ } };
 
-  // Build the folder tree from live data — nothing to manage by hand.
+  // Build the folder tree from live data — nothing to manage by hand. "My
+  // papers" gathers every revision of each submission plus archived papers.
   const folders = useMemo(() => {
-    const f = projects.map((p) => ({
+    if (!data) return [];
+    const f = data.projects.map((p) => ({
       id: p.id,
       name: p.title,
-      sub: p.category,
+      sub: p.category || 'Project',
       files: (p.links || []).map((l) => ({ id: l.id, name: l.label || l.url, url: l.url, at: l.at })),
     }));
     const paperFiles = [
-      ...subs.flatMap((s) =>
+      ...data.subs.flatMap((s) =>
         (s.revisions || []).map((r) => ({ id: `${s.id}v${r.version}`, name: `${s.title} (v${r.version})`, url: r.url, at: r.at }))),
-      ...pubs.filter((p) => p.pdfUrl).map((p) => ({ id: p.id, name: p.title, url: p.pdfUrl, at: p.publishedAt })),
+      ...data.pubs.filter((p) => p.pdfUrl).map((p) => ({ id: p.id, name: p.title, url: p.pdfUrl, at: p.publishedAt })),
     ];
     if (paperFiles.length) f.push({ id: 'papers', name: 'My papers', sub: 'Submissions & archive', files: paperFiles });
     return f;
-  }, [projects, subs, pubs]);
+  }, [data]);
 
   const folder = folders.find((x) => x.id === open);
   const needle = q.trim().toLowerCase();
@@ -48,23 +53,27 @@ export default function Drive() {
   const visibleFolders = !folder
     ? folders.filter((fo) => !needle || fo.name.toLowerCase().includes(needle))
     : null;
+  const totalFiles = useMemo(() => folders.reduce((n, fo) => n + fo.files.length, 0), [folders]);
 
+  const goRoot = () => { setOpen(null); setQ(''); };
   const openFile = (file) => {
     if (embedSrc(file.url)) setPreview(file);
     else window.open(file.url, '_blank', 'noopener');
   };
 
+  if (data === null) return <div className="page-loading">Loading your files…</div>;
+
   return (
     <div>
       <h1 className="page-title">Synthica Drive</h1>
-      <p className="page-sub">Every link your teams have shared, organized into project folders automatically.</p>
+      <p className="page-sub">Every link your teams have shared plus your own papers, organized into folders automatically.</p>
 
       <div className="fm">
         {/* toolbar */}
         <div className="fm-toolbar">
-          <button className="fm-btn" disabled={!folder} onClick={() => { setOpen(null); setQ(''); }} title="Back" aria-label="Back">←</button>
+          <button className="fm-btn" disabled={!folder} onClick={goRoot} title="Back" aria-label="Back">←</button>
           <div className="fm-path">
-            <button className="fm-crumb" onClick={() => { setOpen(null); setQ(''); }}>🗂 Drive</button>
+            <button className="fm-crumb" onClick={goRoot}>🗂 Drive</button>
             {folder && (
               <>
                 <span className="fm-sep">/</span>
@@ -74,8 +83,8 @@ export default function Drive() {
           </div>
           <input className="fm-search" placeholder={folder ? 'Search this folder' : 'Search folders'} value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="seg fm-view">
-            <button type="button" className={`seg-btn ${view === 'grid' ? 'on' : ''}`} onClick={() => setViewMode('grid')} title="Grid view">▦</button>
-            <button type="button" className={`seg-btn ${view === 'list' ? 'on' : ''}`} onClick={() => setViewMode('list')} title="List view">☰</button>
+            <button type="button" className={`seg-btn ${view === 'grid' ? 'on' : ''}`} onClick={() => setViewMode('grid')} title="Grid view" aria-label="Grid view">▦</button>
+            <button type="button" className={`seg-btn ${view === 'list' ? 'on' : ''}`} onClick={() => setViewMode('list')} title="List view" aria-label="List view">☰</button>
           </div>
         </div>
 
@@ -83,7 +92,7 @@ export default function Drive() {
         <div className="fm-body">
           {!folder ? (
             visibleFolders.length === 0 ? (
-              <EmptyState>No folders yet — join a project and its shared links will show up here.</EmptyState>
+              <EmptyState>{q ? 'No folders match your search.' : 'No folders yet — join a project or submit a paper and they\'ll show up here.'}</EmptyState>
             ) : view === 'grid' ? (
               <div className="drive-grid">
                 {visibleFolders.map((fo) => (
@@ -108,7 +117,7 @@ export default function Drive() {
               </div>
             )
           ) : visibleFiles.length === 0 ? (
-            <EmptyState>{q ? 'No files match your search.' : "Nothing in this folder yet — add links from the project page and they'll appear here."}</EmptyState>
+            <EmptyState>{q ? 'No files match your search.' : 'Nothing in this folder yet — add links from the project page and they\'ll appear here.'}</EmptyState>
           ) : view === 'grid' ? (
             <div className="drive-grid">
               {visibleFiles.map((file) => {
@@ -144,7 +153,7 @@ export default function Drive() {
         <div className="fm-status">
           {folder
             ? `${visibleFiles.length} item${visibleFiles.length === 1 ? '' : 's'}${q ? ` matching “${q}”` : ''} · ${folder.sub}`
-            : `${visibleFolders.length} folder${visibleFolders.length === 1 ? '' : 's'} · synced from your projects`}
+            : `${visibleFolders.length} folder${visibleFolders.length === 1 ? '' : 's'} · ${totalFiles} file${totalFiles === 1 ? '' : 's'} · synced from your projects & papers`}
         </div>
       </div>
 
@@ -157,7 +166,7 @@ export default function Drive() {
               </strong>
               <span className="row" style={{ flexShrink: 0 }}>
                 <a className="btn btn-ghost btn-sm" href={preview.url} target="_blank" rel="noreferrer">Open ↗</a>
-                <button className="btn btn-ghost btn-sm" onClick={() => setPreview(null)}>✕</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setPreview(null)} aria-label="Close preview">✕</button>
               </span>
             </div>
             <iframe className="drive-frame" src={embedSrc(preview.url)} title={preview.name} loading="lazy" />

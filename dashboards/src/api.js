@@ -92,7 +92,7 @@ export const api = {
   // admin (director / auditor)
   adminAnalytics: () => request('/admin/analytics'),
   adminApplications: () => request('/admin/applications'),
-  reviewApplication: (id, status, assignTag) => request(`/admin/applications/${id}`, { method: 'POST', body: { status, assignTag } }),
+  reviewApplication: (id, status, assignTag, feedback) => request(`/admin/applications/${id}`, { method: 'POST', body: { status, assignTag, feedback } }),
   adminSetTags: (id, body) => request(`/admin/users/${id}/tags`, { method: 'POST', body }),
   adminUsers: (q) => request(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   adminSetRole: (id, body) => request(`/admin/users/${id}/role`, { method: 'POST', body }),
@@ -108,6 +108,11 @@ export const api = {
   adminDeletePublication: (id) => request(`/admin/publications/${id}`, { method: 'DELETE' }),
   adminArchiveQueue: () => request('/admin/archive-queue'),
   verifyPublication: (id, status) => request(`/admin/publications/${id}/verify`, { method: 'POST', body: { status } }),
+  // Independent project proposals (Unit 6). The Moderator console feature-detects
+  // these — if the backend doesn't expose the endpoints yet it falls back to a
+  // "coming soon" state instead of erroring.
+  adminProposals: () => request('/admin/proposals'),
+  reviewProposal: (id, status, feedback) => request(`/admin/proposals/${id}`, { method: 'POST', body: { status, feedback } }),
   adminEditPublication: (id, body) => request(`/admin/publications/${id}`, { method: 'PUT', body }),
   featurePublication: (id, featured) => request(`/admin/publications/${id}/feature`, { method: 'POST', body: { featured } }),
   setSettings: (body) => request('/editor/settings', { method: 'PUT', body }),
@@ -127,6 +132,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/journal/publications${qs ? `?${qs}` : ''}`);
   },
+  recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),
@@ -139,6 +145,7 @@ export const api = {
   publish: (body) => request('/editor/director/publish', { method: 'POST', body }),
   addComment: (id, body) => request(`/editor/papers/${id}/comments`, { method: 'POST', body: { body } }),
   workload: () => request('/editor/director/workload'),
+  reassignBoard: () => request('/editor/director/reassign'),
   reassign: (body) => request('/editor/director/reassign', { method: 'POST', body }),
 
   // Track 4 — researcher
@@ -167,9 +174,28 @@ export const api = {
   setProjectRole: (id, userId, title) => request(`/researcher/projects/${id}/roles`, { method: 'POST', body: { userId, title } }),
   suggestedForProject: (id) => request(`/researcher/projects/${id}/suggested`),
   projectStats: (id) => request(`/researcher/projects/${id}/stats`),
+  projectEvents: (id) => request(`/researcher/projects/${id}/events`),
   addIdea: (id, text) => request(`/researcher/projects/${id}/ideas`, { method: 'POST', body: { text } }),
   voteIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/vote`, { method: 'POST' }),
   chooseIdea: (id, ideaId) => request(`/researcher/projects/${id}/ideas/${ideaId}/choose`, { method: 'POST' }),
+  
+  // Sandbox (Independent Researcher personal projects)
+  sandboxList: () => request('/researcher/sandbox'),
+  sandboxProject: (id) => request(`/researcher/sandbox/${id}`),
+  sandboxCreate: (body) => request('/researcher/sandbox', { method: 'POST', body }),
+  sandboxUpdate: (id, body) => request(`/researcher/sandbox/${id}`, { method: 'PUT', body }),
+  sandboxDelete: (id) => request(`/researcher/sandbox/${id}`, { method: 'DELETE' }),
+  sandboxAddTask: (id, body) => request(`/researcher/sandbox/${id}/tasks`, { method: 'POST', body }),
+  sandboxUpdateTask: (id, taskId, body) => request(`/researcher/sandbox/${id}/tasks/${taskId}`, { method: 'PUT', body }),
+  sandboxDeleteTask: (id, taskId) => request(`/researcher/sandbox/${id}/tasks/${taskId}`, { method: 'DELETE' }),
+  sandboxAddNote: (id, body) => request(`/researcher/sandbox/${id}/notes`, { method: 'POST', body }),
+  sandboxUpdateNote: (id, noteId, body) => request(`/researcher/sandbox/${id}/notes/${noteId}`, { method: 'PUT', body }),
+  sandboxDeleteNote: (id, noteId) => request(`/researcher/sandbox/${id}/notes/${noteId}`, { method: 'DELETE' }),
+  sandboxAddDoc: (id, body) => request(`/researcher/sandbox/${id}/documents`, { method: 'POST', body }),
+  sandboxDeleteDoc: (id, docId) => request(`/researcher/sandbox/${id}/documents/${docId}`, { method: 'DELETE' }),
+  sandboxSyncDrive: (id) => request(`/researcher/sandbox/${id}/sync-drive`, { method: 'POST' }),
+  sandboxSetDriveFolder: (id, folderId) => request(`/researcher/sandbox/${id}/drive-folder`, { method: 'PUT', body: { folderId } }),
+  
   calendar: () => request('/calendar'),
   addEvent: (body) => request('/events', { method: 'POST', body }),
   rsvpEvent: (id, going) => request(`/events/${id}/rsvp`, { method: 'POST', body: { going } }),
@@ -205,7 +231,12 @@ export const api = {
   conversations: () => request('/messages'),
   unreadMessages: () => request('/messages/unread'),
   thread: (userId) => request(`/messages/${userId}`),
-  sendMessage: (userId, text) => request(`/messages/${userId}`, { method: 'POST', body: { text } }),
+  sendMessage: (userId, text, opts = {}) => request(`/messages/${userId}`, { method: 'POST', body: { text, ...opts } }),
+  editMessage: (messageId, text) => request(`/messages/${messageId}`, { method: 'PUT', body: { text } }),
+  deleteMessage: (messageId) => request(`/messages/${messageId}`, { method: 'DELETE' }),
+  toggleReaction: (messageId, emoji) => request(`/messages/${messageId}/react`, { method: 'POST', body: { emoji } }),
+  forwardMessage: (messageId, toUserId) => request(`/messages/${messageId}/forward`, { method: 'POST', body: { toUserId } }),
+  forwardTargets: () => request('/messages/forward-targets'),
   network: () => request('/network'),
   // trust & safety
   report: (kind, targetId, reason) => request('/report', { method: 'POST', body: { kind, targetId, reason } }),
@@ -224,6 +255,12 @@ export const api = {
   seedPathway: (track) => request('/researcher/pathway/seed', { method: 'POST', body: { track } }),
   togglePathway: (id, done) => request(`/researcher/pathway/${id}/toggle`, { method: 'POST', body: { done } }),
   deletePathway: (id) => request(`/researcher/pathway/${id}`, { method: 'DELETE' }),
+  // independent research proposals (submit → Moderator approval → project)
+  myProposals: () => request('/researcher/proposals'),
+  submitProposal: (body) => request('/researcher/proposals', { method: 'POST', body }),
+  reviseProposal: (id, body) => request(`/researcher/proposals/${id}/revise`, { method: 'POST', body }),
+  adminProposals: () => request('/admin/proposals'),
+  reviewProposal: (id, status, feedback) => request(`/admin/proposals/${id}`, { method: 'POST', body: { status, feedback } }),
   people: () => request('/people'),
   follow: (id) => request(`/people/${id}/follow`, { method: 'POST' }),
   unfollow: (id) => request(`/people/${id}/unfollow`, { method: 'POST' }),
@@ -237,11 +274,16 @@ export const api = {
   requestRevision: (id, note) => request(`/editor/papers/${id}/request-revision`, { method: 'POST', body: { note } }),
   onboarding: () => request('/researcher/onboarding'),
   onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
+  claimAssociateRole: () => request('/researcher/roles/associate', { method: 'POST' }),
+  resubmitOnboarding: () => request('/researcher/onboarding/resubmit', { method: 'POST' }),
   chapter: () => request('/researcher/chapter'),
+  createChapter: (body) => request('/researcher/chapter', { method: 'POST', body }),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
   chapterAnnounce: (body) => request('/researcher/chapter/announcements', { method: 'POST', body }),
   joinChapterByCode: (code) => request('/researcher/chapter/join', { method: 'POST', body: { code } }),
   regenerateChapterCode: () => request('/researcher/chapter/regenerate-code', { method: 'POST' }),
+  chapterProgress: () => request('/researcher/chapter/progress'),
+  addChapterProgress: (body) => request('/researcher/chapter/progress', { method: 'POST', body }),
   // programs (apply → cohort → milestones)
   programs: () => request('/researcher/programs'),
   applyProgram: (id, message) => request(`/researcher/programs/${id}/apply`, { method: 'POST', body: { message } }),
@@ -262,4 +304,20 @@ export const api = {
   getSettings: () => request('/editor/settings'),
   setWebhook: (discordWebhookUrl) => request('/editor/settings', { method: 'PUT', body: { discordWebhookUrl } }),
   testWebhook: () => request('/editor/settings/test', { method: 'POST' }),
+
+  // Expertise mentors (ROLE_WORKFLOWS §7)
+  // Directory + booking (any researcher):
+  mentors: (specialty) => request(`/mentors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''}`),
+  mentorSpecialties: () => request('/mentors/specialties'),
+  mentor: (id) => request(`/mentors/${id}`),
+  bookMentor: (id, body) => request(`/mentors/${id}/book`, { method: 'POST', body }),
+  myMentorBookings: () => request('/me/mentor-bookings'),
+  cancelMentorBooking: (id) => request(`/mentor-bookings/${id}/cancel`, { method: 'POST' }),
+  // Mentor self-service (mentor's own dashboard):
+  mentorDashboard: () => request('/mentor/dashboard'),
+  setMentorProfile: (body) => request('/mentor/profile', { method: 'PUT', body }),
+  mentorAvailability: () => request('/mentor/dashboard'),
+  setMentorAvailability: (body) => request('/mentor/availability', { method: 'POST', body }),
+  removeMentorSlot: (slotId) => request(`/mentor/availability/${slotId}`, { method: 'DELETE' }),
+  connectMentorCalendar: (connected) => request('/mentor/calendar-connect', { method: 'POST', body: { connected } }),
 };
