@@ -1005,6 +1005,13 @@ app.post('/api/researcher/onboarding/step', requireAuth, researcherOnly, wrap((r
   res.json(store.setOnboardingStep({ userId: req.user.id, key, done }));
 }));
 
+// A rejected sign-up edits their profile and asks for another review. Uses
+// requireAuth (not researcherOnly) because the member isn't approved yet.
+app.post('/api/researcher/onboarding/resubmit', requireAuth, wrap((req, res) => {
+  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
+  res.json(store.resubmitOnboarding(req.user.id));
+}));
+
 // Chapter leader: roster + stats, and onboarding new members.
 app.get('/api/researcher/chapter', requireAuth, researcherOnly, wrap((req, res) => {
   const view = store.chapterView(req.user.id);

@@ -266,6 +266,7 @@ export const api = {
   requestRevision: (id, note) => request(`/editor/papers/${id}/request-revision`, { method: 'POST', body: { note } }),
   onboarding: () => request('/researcher/onboarding'),
   onboardingStep: (key, done) => request('/researcher/onboarding/step', { method: 'POST', body: { key, done } }),
+  resubmitOnboarding: () => request('/researcher/onboarding/resubmit', { method: 'POST' }),
   chapter: () => request('/researcher/chapter'),
   createChapter: (body) => request('/researcher/chapter', { method: 'POST', body }),
   addChapterMember: (body) => request('/researcher/chapter/members', { method: 'POST', body }),
