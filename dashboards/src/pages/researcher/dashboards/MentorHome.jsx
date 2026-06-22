@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../api.js';
 import { useAuth } from '../../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState, Pfp } from '../../../components/ui.jsx';
+import Icon from '../../../components/Icon.jsx';
 import { useToast } from '../../../components/toast.jsx';
 import { imageSrc } from '../../../files.js';
 
@@ -47,7 +48,7 @@ export default function MentorHome() {
       <div className="comp-hero">
         <span className="comp-hero-glow" />
         <div className="comp-hero-body">
-          <span className="comp-hero-tag">🧑‍🏫 Expertise Mentor</span>
+          <span className="comp-hero-tag"><Icon name="graduation-cap" size={13} /> Expertise Mentor</span>
           <h1 className="comp-hero-title">Advise researchers 1:1</h1>
           <p className="comp-hero-desc">
             Share your specialties, open up times you’re free, and let researchers book a call.
@@ -122,7 +123,7 @@ function CalendarStub({ connected, onChange }) {
       disabled={busy}
       title="Demo only — two-way Google Calendar sync isn’t wired up yet. Bookings already appear on your in-app calendar."
     >
-      {connected ? '✓ Google Calendar connected (demo)' : '📅 Connect Google Calendar'}
+      {connected ? <><Icon name="check" size={14} /> Google Calendar connected (demo)</> : <><Icon name="calendar" size={14} /> Connect Google Calendar</>}
     </button>
   );
 }
@@ -222,7 +223,7 @@ function AvailabilityCard({ data, onChanged }) {
         <div className="stack">
           {slots.map((s) => (
             <div key={s.id} className="cal-item" style={s.past ? { opacity: 0.55 } : undefined}>
-              <span className="cal-item-icon">{s.booked ? '✅' : s.past ? '🕓' : '🟢'}</span>
+              <span className="cal-item-icon">{s.booked ? <Icon name="check-circle" size={16} /> : s.past ? <Icon name="clock" size={16} /> : <span className="slot-open-dot" aria-hidden="true" />}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>{fmtSlot(s.slot)}</div>
                 <div className="muted" style={{ fontSize: '0.78rem' }}>
@@ -230,7 +231,7 @@ function AvailabilityCard({ data, onChanged }) {
                 </div>
               </div>
               {!s.booked && !s.past && (
-                <button className="link-btn" onClick={() => remove(s)} aria-label="Remove slot">✕</button>
+                <button className="link-btn" onClick={() => remove(s)} aria-label="Remove slot"><Icon name="x" size={15} /></button>
               )}
             </div>
           ))}

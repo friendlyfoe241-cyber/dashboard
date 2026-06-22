@@ -2174,3 +2174,5 @@ html[data-theme='dark'] .dash-hero { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0
 /* Section badges + the hero label can now hold a leading icon inline. */
 .section-badge { display: inline-flex; align-items: center; gap: 0.35rem; }
 .hero-card .label-up { display: inline-flex; align-items: center; gap: 0.4rem; }
+/* Open availability slot indicator (replaces the 🟢 emoji on the mentor desk). */
+.slot-open-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--success, #16a34a); }

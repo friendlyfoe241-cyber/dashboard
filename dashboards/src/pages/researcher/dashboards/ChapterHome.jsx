@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../api.js';
 import { useAuth } from '../../../auth.jsx';
 import { Card, Badge, Button, Field, EmptyState } from '../../../components/ui.jsx';
+import Icon from '../../../components/Icon.jsx';
 import { useToast } from '../../../components/toast.jsx';
 
 // --- shared building blocks (local, self-contained) -------------------------
@@ -102,7 +103,7 @@ function JoinCodeCard({ code, onRegenerated }) {
           </div>
         </div>
         <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Button className="btn-sm" onClick={copy}>📋 Copy code</Button>
+          <Button className="btn-sm" onClick={copy}><Icon name="clipboard" size={15} /> Copy code</Button>
           <Button variant="ghost" className="btn-sm" disabled={busy} onClick={regenerate}>{busy ? '…' : '↻ Regenerate'}</Button>
         </div>
       </div>
@@ -138,7 +139,7 @@ function ChapterAnnouncements({ chapter, onPosted }) {
     <Card style={{ marginBottom: '1.1rem' }}>
       <div className="card-row">
         <h3 style={{ margin: 0 }}>Announcements</h3>
-        <Button className="btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : '📣 Post announcement'}</Button>
+        <Button className="btn-sm" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : <><Icon name="megaphone" size={15} /> Post announcement</>}</Button>
       </div>
       {open && (
         <form onSubmit={send} style={{ marginTop: '0.6rem' }}>
@@ -193,7 +194,7 @@ function MemberRoster({ chapter, onChanged }) {
     <Card>
       <div className="card-row">
         <h3 style={{ margin: 0 }}>Member roster <span className="muted" style={{ fontWeight: 400 }}>({chapter.members.length})</span></h3>
-        <Button className="btn-sm" onClick={() => setAdding((a) => !a)}>{adding ? 'Cancel' : '➕ Onboard a member'}</Button>
+        <Button className="btn-sm" onClick={() => setAdding((a) => !a)}>{adding ? 'Cancel' : <><Icon name="plus" size={15} /> Onboard a member</>}</Button>
       </div>
 
       {adding && (
@@ -257,7 +258,7 @@ function LeaderDashboard({ chapter, reload }) {
         subtitle="Run your local Synthica chapter — share your join code, onboard members, and keep everyone moving with announcements and progress tracking."
       >
         <span className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-          {chapter.location && <Badge tone="gray">📍 {chapter.location}</Badge>}
+          {chapter.location && <Badge tone="gray"><Icon name="map-pin" size={11} /> {chapter.location}</Badge>}
           {chapter.handbookUrl && (
             <a className="btn btn-ghost btn-sm" href={chapter.handbookUrl} target="_blank" rel="noreferrer" style={{ background: 'rgba(255,255,255,0.16)', color: '#fff', borderColor: 'transparent' }}>
               Chapter handbook
@@ -296,7 +297,7 @@ function OnboardingChecklist({ ob, onChange }) {
     <Card>
       <div className="card-row">
         <div>
-          <h3 style={{ margin: 0 }}>{ob.pct === 100 ? "You're all set 🎉" : 'Your onboarding'} · {ob.chapterName}</h3>
+          <h3 style={{ margin: 0 }}>{ob.pct === 100 ? "You're all set" : 'Your onboarding'} · {ob.chapterName}</h3>
           <p className="muted" style={{ margin: '0.2rem 0 0' }}>Onboarding {ob.pct}% complete</p>
         </div>
         {ob.handbookUrl && (
