@@ -4,7 +4,7 @@ import Layout from '../../components/Layout.jsx';
 import { useAuth } from '../../auth.jsx';
 import { api } from '../../api.js';
 import PendingApproval from './PendingApproval.jsx';
-import Dashboard from './Dashboard.jsx';
+import AssociateHome from './dashboards/AssociateHome.jsx';
 import ProjectDetail from './ProjectDetail.jsx';
 import ResearchHub from './ResearchHub.jsx';
 import ApplicationHub from './ApplicationHub.jsx';
@@ -66,6 +66,7 @@ export default function ResearcherApp() {
     { to: '/researcher/messages', label: 'Messages', icon: '💬' },
     { to: '/researcher/people', label: 'People', icon: '👥' },
     { section: 'Research' },
+    { to: '/researcher/hub', label: 'Research Hub', icon: '🧭' },
     { to: '/researcher/projects', label: 'Projects', icon: '📂' },
     { to: '/researcher/groups', label: 'Groups', icon: '🔬' },
     { to: '/researcher/sandbox', label: 'Sandbox', icon: '🧪' },
@@ -82,7 +83,8 @@ export default function ResearcherApp() {
     <Layout nav={nav}>
       <RoleCongrats />
       <Routes>
-        <Route index element={<Dashboard />} />
+        {/* Member portal home — every member is an Associate Researcher. */}
+        <Route index element={<AssociateHome />} />
         <Route path="community" element={<Community />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:userId" element={<Messages />} />
