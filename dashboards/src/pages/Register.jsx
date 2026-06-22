@@ -36,7 +36,7 @@ export default function Register() {
       <form className="login-card login-card-v2" onSubmit={onSubmit}>
         <div className="login-brand"><img className="brand-img" src="/assets/logo/logo.png" alt="" />Synthica</div>
         <h1>Join Synthica</h1>
-        <p className="sub">Create your researcher account — it's free.</p>
+        <p className="sub">Create your free researcher account — join projects, a global community, programs, and competitions.</p>
 
         {ref && <div className="login-hint" style={{ marginTop: 0, color: 'var(--brand-deep)' }}>🎉 You were invited — your referrer gets the credit when you join.</div>}
         {error && <div className="login-error">{error}</div>}

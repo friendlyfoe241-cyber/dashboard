@@ -4,67 +4,33 @@ import { Card, Badge, Button, Field } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { useAuth } from '../../auth.jsx';
 import NewsPoster from '../../components/NewsPoster.jsx';
+import Icon from '../../components/Icon.jsx';
 
-// ---------------------------------------------------------------------------
-// Director / Admin console — platform operations (ROLE_WORKFLOWS §10).
-//
-// Organised into self-explanatory tabs:
-//   Analytics · People & roles · Broadcast · Programs & competitions ·
-//   Integrations · Backup & audit
-//
-// The moderator/auditor queues (onboarding, role/proposal applications,
-// reports, archive verification) live in the dedicated /moderator console and
-// are intentionally NOT shown here. An auditor who lands on this page sees only
-// the read-only platform views their role grants (Analytics, audit log,
-// referral leaderboard); every operational control is gated behind
-// `isDirector`.
-// ---------------------------------------------------------------------------
-
-const TABS = [
-  { id: 'analytics', label: 'Analytics', icon: '📊' },
-  { id: 'people', label: 'People & roles', icon: '👥' },
-  { id: 'broadcast', label: 'Broadcast', icon: '📣', director: true },
-  { id: 'programs', label: 'Programs & competitions', icon: '🎓', director: true },
-  { id: 'integrations', label: 'Integrations', icon: '🔌', director: true },
-  { id: 'backup', label: 'Backup & audit', icon: '🗄️' },
-];
-
+// Director-only control center: analytics, integrations (API keys/webhooks),
+// and application review (the "auditor" function).
 export default function Admin() {
   const { user } = useAuth();
   // The platform Admin account has full Director powers here.
-  const isDirector = user?.role === 'director' || user?.role === 'admin' || !!user?.allViewsDemo;
-  const tabs = TABS.filter((t) => !t.director || isDirector);
-  const [tab, setTab] = useState(tabs[0].id);
-
+  const isDirector = user?.role === 'director' || user?.role === 'admin';
   return (
     <div>
-      <h1 className="page-title">Admin console</h1>
-      <p className="page-sub">Platform operations: analytics, people &amp; roles, broadcast, programs, integrations, and backups.</p>
+      <h1 className="page-title">Admin</h1>
+      <p className="page-sub">Analytics, integrations, applications, audit log, and announcements.</p>
       <EmailStatusBanner />
-
-      <nav className="admin-tabs" role="tablist" aria-label="Admin sections">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`admin-tab ${tab === t.id ? 'active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            <span aria-hidden="true">{t.icon}</span> {t.label}
-          </button>
-        ))}
-      </nav>
-
-      <div role="tabpanel">
-        {tab === 'analytics' && <AnalyticsTab />}
-        {tab === 'people' && <PeopleTab isDirector={isDirector} />}
-        {tab === 'broadcast' && isDirector && <BroadcastTab />}
-        {tab === 'programs' && isDirector && <ProgramsTab isDirector={isDirector} />}
-        {tab === 'integrations' && isDirector && <IntegrationsTab />}
-        {tab === 'backup' && <BackupTab />}
-      </div>
+      {isDirector && <NewsPoster />}
+      <AnalyticsCards />
+      <People isDirector={isDirector} />
+      <Applications />
+      <ProgramsPanel isDirector={isDirector} />
+      <Moderation />
+      <CompetitionsAdmin />
+      <GlobalEvents />
+      <ReferralLeaderboard />
+      <Archive />
+      <AuditLog />
+      {isDirector && <Integrations />}
+      {isDirector && <Backup />}
+      <SetupGuide />
     </div>
   );
 }
@@ -76,8 +42,8 @@ function EmailStatusBanner() {
   useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
   if (!cfg || cfg.emailConfigured !== false) return null;
   return (
-    <div className="login-error" style={{ background: '#fffbeb', color: '#92400e', borderColor: '#fde68a', marginBottom: '1rem' }}>
-      ⚠️ Email delivery isn’t configured (no <code>RESEND_API_KEY</code>). Password-reset, verification, and broadcast emails won’t actually send. Set it in your backend env to enable them.
+    <div className="login-error alert-warning" style={{ marginBottom: '1rem' }}>
+      <span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won't actually send. Set it in your backend env to enable them.</span>
     </div>
   );
 }
@@ -87,105 +53,37 @@ const EDITOR_ROLES = ['reviews', 'associate', 'senior', 'chief', 'director', 'au
 const CATS = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Computer Science', 'Humanities', 'Economics', 'Psychology'];
 const ARTICLE_TYPES = ['Article', 'Letter', 'Analysis', 'Review', 'Preprint', 'Dataset', 'Conference Paper'];
 
-// Lightweight titled-section wrapper so each tab reads as a clear stack of
-// blocks (heading + optional badge/sub/actions) instead of a wall of cards.
-function Section({ title, badge, sub, actions, children }) {
-  return (
-    <section style={{ marginBottom: '1.75rem' }}>
-      <div className="card-row" style={{ marginBottom: sub ? '0.25rem' : '0.6rem' }}>
-        <h2 className="section-title" style={{ margin: 0 }}>
-          {title}{badge != null && <> <Badge tone="gray">{badge}</Badge></>}
-        </h2>
-        {actions}
-      </div>
-      {sub && <p className="muted" style={{ margin: '0 0 0.6rem' }}>{sub}</p>}
-      {children}
-    </section>
-  );
+// Parse hosted full text into sections; a line beginning "## " starts a section.
+function parseFullText(text) {
+  const t = String(text || '').trim();
+  if (!t) return [];
+  const out = [];
+  let cur = { heading: '', body: '' };
+  for (const line of t.split('\n')) {
+    const m = line.match(/^##\s+(.*)/);
+    if (m) {
+      if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+      cur = { heading: m[1].trim(), body: '' };
+    } else {
+      cur.body += line + '\n';
+    }
+  }
+  if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
+  return out;
 }
 
-// ===========================================================================
-// TAB 1 — Analytics
-// ===========================================================================
-
-const STAGE_LABELS = {
-  review: 'In review', senior_screen: 'Senior screen', associate: 'With associate',
-  senior_final: 'Senior final', chief: 'With chief', published: 'Published', rejected: 'Declined',
-};
-
-// Horizontal bar chart (pure CSS) for a {label: count} map.
-function Bars({ data, labels = {}, tone = 'blue' }) {
-  const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return <p className="muted" style={{ margin: 0 }}>No data yet.</p>;
-  const max = Math.max(...entries.map(([, n]) => n));
-  return (
-    <div className="bars">
-      {entries.map(([k, n]) => (
-        <div key={k} className="bar-row">
-          <span className="bar-label">{labels[k] || k}</span>
-          <span className="bar-track">
-            <span className={`bar-fill bar-${tone}`} style={{ width: `${Math.max(6, (n / max) * 100)}%` }} />
-          </span>
-          <span className="bar-num">{n}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AnalyticsTab() {
-  const [a, setA] = useState(null);
-  useEffect(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
-  if (!a) return <Card><p className="muted" style={{ margin: 0 }}>Loading analytics…</p></Card>;
-  const kpis = [
-    { icon: '👥', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
-    { icon: '📄', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
-    { icon: '🧪', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
-    { icon: '👁', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
-    { icon: '🪪', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
-  ];
-  return (
-    <Section title="Platform overview" sub="Live KPIs across the membership, journal pipeline, and projects.">
-      <div className="kpi-grid">
-        {kpis.map((k) => (
-          <div key={k.label} className={`kpi ${k.hot ? 'kpi-hot' : ''}`}>
-            <span className="kpi-icon">{k.icon}</span>
-            <div className="kpi-value">{k.value}</div>
-            <div className="kpi-label">{k.label}</div>
-            <div className="kpi-sub">{k.sub}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-2" style={{ marginTop: '1rem' }}>
-        <Card>
-          <h3 style={{ marginTop: 0 }}>Pipeline by stage</h3>
-          <Bars data={a.byStage} labels={STAGE_LABELS} tone="blue" />
-        </Card>
-        <Card>
-          <h3 style={{ marginTop: 0 }}>Published by subject</h3>
-          <Bars data={a.byCategory} tone="gold" />
-        </Card>
-      </div>
-    </Section>
-  );
-}
-
-// ===========================================================================
-// TAB 2 — People & roles
-// ===========================================================================
-
-// People lookup + role management. Directors get editor-role, bulk, suspend,
-// and reset powers; auditors get the tags-only path (re-assigning researcher
-// tags on existing accounts).
-function PeopleTab({ isDirector }) {
+// People lookup + role management. Auditors review/re-assign researcher roles
+// (with the same signals + suggestion shown at onboarding); directors also get
+// editor-role and bulk powers.
+function People({ isDirector }) {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [users, setUsers] = useState([]);
   const [bulk, setBulk] = useState({ emails: '', tag: 'lead_researcher' });
-  const [visibleCount, setVisibleCount] = useState(6);
+  const [visibleCount, setVisibleCount] = useState(3);
 
   const search = (query) => api.adminUsers(query).then(setUsers).catch(() => {});
-  useEffect(() => { search(''); setVisibleCount(6); }, []);
+  useEffect(() => { search(''); setVisibleCount(3); }, []);
 
   // Directors use the full role endpoint; auditors the tags-only one.
   const setTags = (u, body) => (isDirector ? api.adminSetRole(u.id, body) : api.adminSetTags(u.id, body));
@@ -200,14 +98,29 @@ function PeopleTab({ isDirector }) {
     api.adminBulkRole(bulk).then((r) => toast.success(`Updated ${r.updated.length}${r.notFound.length ? `, ${r.notFound.length} not found` : ''}`)).then(() => search(q)).catch((e) => toast.error(e.message));
 
   return (
-    <div>
-      <Section
-        title="Find people"
-        sub="Search the whole membership by name, email, or username, then assign roles and tags."
-        actions={<input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(6); }} style={{ maxWidth: 280 }} />}
-      >
-        <div className="stack">
-          {users.length === 0 && <Card><p className="muted" style={{ margin: 0 }}>No matching members.</p></Card>}
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>People</h2>
+
+      {isDirector && (
+        <Card style={{ marginBottom: '1rem' }}>
+          <h3>Bulk assign by email</h3>
+          <p className="muted" style={{ margin: '0.25rem 0 0.6rem' }}>Paste comma- or space-separated emails to grant a role to all of them.</p>
+          <textarea placeholder="a@x.com, b@y.com, …" value={bulk.emails} onChange={(e) => setBulk({ ...bulk, emails: e.target.value })} />
+          <div className="row" style={{ marginTop: '0.5rem' }}>
+            <select value={bulk.tag} onChange={(e) => setBulk({ ...bulk, tag: e.target.value })} style={{ width: 'auto' }}>
+              {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <Button onClick={runBulk}>Assign to all</Button>
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <div className="card-row">
+          <h3>Lookup</h3>
+          <input placeholder="Search name / email / username" value={q} onChange={(e) => { setQ(e.target.value); search(e.target.value); setVisibleCount(3); }} style={{ maxWidth: 280 }} />
+        </div>
+        <div className="stack" style={{ marginTop: '0.6rem' }}>
           {users.slice(0, visibleCount).map((u) => (
             <div key={u.id} className="info-block">
               <div className="card-row">
@@ -232,7 +145,7 @@ function PeopleTab({ isDirector }) {
                   )}
                   <div className="row" style={{ marginTop: '0.3rem' }}>
                     {(u.tags || []).map((t) => (
-                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} ✕</button>
+                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} <Icon name="x" size={12} /></button>
                     ))}
                   </div>
                 </div>
@@ -254,28 +167,14 @@ function PeopleTab({ isDirector }) {
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={() => setVisibleCount((c) => Math.min(c + 8, users.length))}
+              onClick={() => setVisibleCount((c) => Math.min(c + 5, users.length))}
               style={{ marginTop: '0.5rem', width: '100%' }}
             >
               Show more ({users.length - visibleCount} remaining)
             </button>
           )}
         </div>
-      </Section>
-
-      {isDirector && (
-        <Section title="Bulk assign by email" sub="Paste comma- or space-separated emails to grant a researcher tag to all of them at once.">
-          <Card>
-            <textarea placeholder="a@x.com, b@y.com, …" value={bulk.emails} onChange={(e) => setBulk({ ...bulk, emails: e.target.value })} />
-            <div className="row" style={{ marginTop: '0.5rem' }}>
-              <select value={bulk.tag} onChange={(e) => setBulk({ ...bulk, tag: e.target.value })} style={{ width: 'auto' }}>
-                {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <Button onClick={runBulk}>Assign to all</Button>
-            </div>
-          </Card>
-        </Section>
-      )}
+      </Card>
     </div>
   );
 }
@@ -300,328 +199,52 @@ function EditorRolePicker({ onPick }) {
   );
 }
 
-// Director-only: suspend/reactivate a member + send them a password-reset email.
-function MemberAdminActions({ u, onChanged }) {
-  const toast = useToast();
-  const suspend = () =>
-    api.adminSuspend(u.id, !u.suspended).then(() => { toast.success(u.suspended ? 'Reactivated' : 'Suspended'); onChanged(); }).catch((e) => toast.error(e.message));
-  const sendReset = () =>
-    api.adminSendReset(u.id).then(() => toast.success('Password-reset email sent')).catch((e) => toast.error(e.message));
+// Append-only log of editorial + admin actions.
+function AuditLog() {
+  const [rows, setRows] = useState([]);
+  useEffect(() => { api.adminAudit().then(setRows).catch(() => {}); }, []);
+  if (!rows.length) return null;
   return (
-    <>
-      <Button className="btn-sm" variant="ghost" onClick={suspend}>{u.suspended ? 'Reactivate' : 'Suspend'}</Button>
-      <Button className="btn-sm" variant="ghost" onClick={sendReset}>Send reset</Button>
-    </>
-  );
-}
-
-// ===========================================================================
-// TAB 3 — Broadcast
-// ===========================================================================
-
-// Director-only: branded email broadcast to a member segment, weekly digest,
-// pinned announcements, and platform-wide calendar events.
-function BroadcastTab() {
-  const toast = useToast();
-  const [cfg, setCfg] = useState(null);
-  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
-  const [busy, setBusy] = useState(false);
-  const [digestBusy, setDigestBusy] = useState(false);
-  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
-
-  const send = async (e) => {
-    e.preventDefault();
-    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
-    setBusy(true);
-    try {
-      const r = await api.adminBroadcast(f);
-      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
-      setF({ subject: '', heading: '', body: '', audience: 'all' });
-    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
-  };
-
-  const sendDigest = async () => {
-    if (!window.confirm('Send the weekly research digest to all researchers now?')) return;
-    setDigestBusy(true);
-    try {
-      const r = await api.sendDigest();
-      toast.success(`Digest sent to ${r.sent}/${r.recipients} researchers`);
-    } catch (e) { toast.error(e.message); } finally { setDigestBusy(false); }
-  };
-
-  return (
-    <div>
-      <Section title="Email broadcast" sub="Send a branded HTML email to a member segment, from your account.">
-        <Card>
-          {cfg && cfg.emailConfigured === false && (
-            <p className="muted" style={{ marginTop: 0, color: '#92400e' }}>⚠️ Email delivery isn’t configured — broadcasts will be logged only.</p>
-          )}
-          <form onSubmit={send}>
-            <div className="grid grid-2">
-              <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
-              <Field label="Audience">
-                <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
-                  <option value="all">All members</option>
-                  <option value="researchers">Researchers</option>
-                  <option value="editors">Editors / staff</option>
-                </select>
-              </Field>
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Audit log</h2>
+      <Card>
+        <div className="stack">
+          {rows.slice(0, 30).map((r) => (
+            <div key={r.id} className="muted" style={{ fontSize: '0.82rem' }}>
+              <strong>{new Date(r.at).toLocaleString()}</strong> · {r.actorName} · <Badge tone="gray">{r.action}</Badge> {r.detail}
             </div>
-            <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
-            <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
-            <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
-          </form>
-        </Card>
-      </Section>
-
-      <Section title="Weekly digest" sub="A summary email of new opportunities, programs, and competitions for every researcher.">
-        <Card>
-          <div className="card-row">
-            <p className="muted" style={{ margin: 0 }}>Normally scheduled — trigger an extra send right now if you need to.</p>
-            <Button variant="ghost" onClick={sendDigest} disabled={digestBusy}>{digestBusy ? 'Sending…' : 'Send weekly digest now'}</Button>
-          </div>
-        </Card>
-      </Section>
-
-      <Section title="Announcement" sub="Post a pinned platform announcement that appears in the member news feed.">
-        <NewsPoster />
-      </Section>
-
-      <Section title="Global events" sub="Workshops and platform-wide events appear on every member's Calendar.">
-        <GlobalEvents />
-      </Section>
-    </div>
-  );
-}
-
-// Post a platform-wide event (workshop, meetup) that shows on everyone's calendar.
-function GlobalEvents() {
-  const toast = useToast();
-  const [form, setForm] = useState({ title: '', type: 'workshop', dueAt: '' });
-  const post = (e) => {
-    e.preventDefault();
-    api.addEvent({ title: form.title, type: form.type, dueAt: form.dueAt }).then(() => { setForm({ title: '', type: 'workshop', dueAt: '' }); toast.success('Event posted to all calendars'); }).catch((er) => toast.error(er.message));
-  };
-  return (
-    <Card>
-      <form onSubmit={post} className="row" style={{ alignItems: 'flex-end' }}>
-        <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
-        <Field label="Type"><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="workshop">workshop</option><option value="meetup">meetup</option><option value="event">event</option></select></Field>
-        <Field label="Date"><input type="date" value={form.dueAt} onChange={(e) => setForm({ ...form, dueAt: e.target.value })} required /></Field>
-        <Button type="submit">Post</Button>
-      </form>
-    </Card>
-  );
-}
-
-// ===========================================================================
-// TAB 4 — Programs & competitions
-// ===========================================================================
-
-function ProgramsTab({ isDirector }) {
-  return (
-    <div>
-      <ProgramsPanel isDirector={isDirector} />
-      <CompetitionsAdmin />
-    </div>
-  );
-}
-
-// Programs: create/close cohorts, manage milestones, and admit applicants.
-function ProgramsPanel({ isDirector }) {
-  const toast = useToast();
-  const [programs, setPrograms] = useState([]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' });
-  const load = useCallback(() => { api.adminPrograms().then(setPrograms).catch(() => {}); }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const reviewApp = (id, status) =>
-    api.reviewProgramApplication(id, status).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
-  const toggleMs = (pid, mid, done) =>
-    api.toggleProgramMilestone(pid, mid, done).then(load).catch((e) => toast.error(e.message));
-  const setStatus = (pid, status) =>
-    api.setProgramStatus(pid, status).then(() => { load(); toast.success(`Program ${status}`); }).catch((e) => toast.error(e.message));
-  const create = (e) => {
-    e.preventDefault();
-    api.createProgram(form).then(() => { setShowCreate(false); setForm({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' }); load(); toast.success('Program created'); }).catch((err) => toast.error(err.message));
-  };
-
-  const pending = programs.flatMap((p) => p.applications.filter((a) => a.status === 'pending').map((a) => ({ ...a, programTitle: p.title })));
-
-  return (
-    <Section
-      title="Programs"
-      badge={`${pending.length} pending`}
-      sub="Run cohort-based programs: create them, track milestones, and admit applicants."
-      actions={isDirector && <Button onClick={() => setShowCreate((v) => !v)}>{showCreate ? 'Cancel' : '+ New program'}</Button>}
-    >
-      {showCreate && (
-        <Card style={{ marginBottom: '0.8rem' }}>
-          <form onSubmit={create}>
-            <div className="grid grid-2">
-              <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
-              <Field label="Cohort label (e.g. Summer 2026)"><input value={form.cohortLabel} onChange={(e) => setForm({ ...form, cohortLabel: e.target.value })} /></Field>
-            </div>
-            <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-            <div className="grid grid-2">
-              <Field label="Spots"><input type="number" min="0" value={form.spots} onChange={(e) => setForm({ ...form, spots: e.target.value })} /></Field>
-              <Field label="Apply deadline"><input type="date" value={form.applyDeadline} onChange={(e) => setForm({ ...form, applyDeadline: e.target.value })} /></Field>
-            </div>
-            <div className="grid grid-2">
-              <Field label="Starts"><input type="date" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} /></Field>
-              <Field label="Ends"><input type="date" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} /></Field>
-            </div>
-            <Button type="submit">Create program</Button>
-          </form>
-        </Card>
-      )}
-
-      {pending.length > 0 && (
-        <>
-          <h3 style={{ margin: '0 0 0.4rem' }}>Pending admissions <Badge tone="gold">{pending.length}</Badge></h3>
-          <div className="stack" style={{ marginBottom: '0.8rem' }}>
-            {pending.map((a) => (
-              <Card key={a.id}>
-                <div className="card-row">
-                  <div><strong>{a.userName}</strong> → {a.programTitle}{a.message && <div className="muted" style={{ fontSize: '0.82rem' }}>{a.message}</div>}</div>
-                  <div className="row">
-                    <Button variant="approve" className="btn-sm" onClick={() => reviewApp(a.id, 'accepted')}>Accept</Button>
-                    <Button variant="reject" className="btn-sm" onClick={() => reviewApp(a.id, 'rejected')}>Reject</Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="stack">
-        {programs.length === 0 && <Card><p className="muted" style={{ margin: 0 }}>No programs yet.</p></Card>}
-        {programs.map((p) => (
-          <Card key={p.id}>
-            <div className="card-row">
-              <div>
-                <strong>{p.title}</strong> {p.cohortLabel && <Badge>{p.cohortLabel}</Badge>} <Badge tone={p.status === 'open' ? 'green' : 'gray'}>{p.status}</Badge>
-                <div className="muted" style={{ fontSize: '0.82rem' }}>
-                  {p.cohortMembers.length}{p.spots ? `/${p.spots}` : ''} members
-                  {p.cohortMembers.length > 0 && <> — {p.cohortMembers.map((m) => m.name).join(', ')}</>}
-                </div>
-              </div>
-              {isDirector && (
-                <div className="row">
-                  {p.status === 'open'
-                    ? <Button variant="ghost" className="btn-sm" onClick={() => setStatus(p.id, 'closed')}>Close</Button>
-                    : <Button variant="ghost" className="btn-sm" onClick={() => setStatus(p.id, 'open')}>Reopen</Button>}
-                </div>
-              )}
-            </div>
-            {p.milestones.length > 0 && (
-              <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                {p.milestones.map((m) => (
-                  <label key={m.id} className="muted" style={{ fontSize: '0.84rem', cursor: isDirector ? 'pointer' : 'default' }}>
-                    <input type="checkbox" checked={m.done} disabled={!isDirector} onChange={(e) => toggleMs(p.id, m.id, e.target.checked)} /> {m.title}
-                  </label>
-                ))}
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-// Post competitions to the members' Competitions board.
-function CompetitionsAdmin() {
-  const toast = useToast();
-  const [comps, setComps] = useState([]);
-  const [form, setForm] = useState({ title: '', description: '', url: '', category: '', deadline: '', prize: '' });
-  const load = useCallback(() => { api.competitions().then(setComps).catch(() => {}); }, []);
-  useEffect(() => { load(); }, [load]);
-  const post = (e) => {
-    e.preventDefault();
-    api.addCompetition(form).then(() => { setForm({ title: '', description: '', url: '', category: '', deadline: '', prize: '' }); load(); toast.success('Competition posted'); }).catch((er) => toast.error(er.message));
-  };
-  const remove = (id) => api.deleteCompetition(id).then(() => { load(); toast.success('Removed'); }).catch((er) => toast.error(er.message));
-  return (
-    <Section title="Competitions" badge={comps.length} sub="Post external competitions to the members' Competitions board.">
-      <Card style={{ marginBottom: '0.8rem' }}>
-        <form onSubmit={post}>
-          <div className="grid grid-2">
-            <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
-            <Field label="Link"><input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://…" /></Field>
-          </div>
-          <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <div className="grid grid-3">
-            <Field label="Category"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="">—</option>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
-            <Field label="Deadline"><input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} /></Field>
-            <Field label="Prize"><input value={form.prize} onChange={(e) => setForm({ ...form, prize: e.target.value })} placeholder="e.g. $5,000" /></Field>
-          </div>
-          <Button type="submit">Post competition</Button>
-        </form>
+          ))}
+        </div>
       </Card>
-      <div className="stack">
-        {comps.map((c) => (
-          <Card key={c.id}><div className="card-row"><div><strong>{c.title}</strong> {c.deadline && <Badge tone="gray">{c.deadline}</Badge>}</div><button className="btn btn-ghost btn-sm" onClick={() => remove(c.id)}>Delete</button></div></Card>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-// ===========================================================================
-// TAB 5 — Integrations
-// ===========================================================================
-
-function IntegrationsTab() {
-  return (
-    <div>
-      <Section title="Notification channels" sub="Webhooks that mirror the editorial queue to Discord / WhatsApp.">
-        <Integrations />
-      </Section>
-      <Section title="Setup & deployment guide" sub="Self-serve steps for sign-in, email, persistence, and going public.">
-        <SetupGuide />
-      </Section>
     </div>
   );
 }
 
-function Integrations() {
+// Download a full JSON snapshot for backup (Director only).
+function Backup() {
   const toast = useToast();
-  const [form, setForm] = useState({ discordWebhookUrl: '', whatsappWebhookUrl: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    api.getSettings().then((s) => setForm({ discordWebhookUrl: s.discordWebhookUrl || '', whatsappWebhookUrl: s.whatsappWebhookUrl || '' })).catch(() => {});
-  }, []);
-
-  const save = async () => {
-    setBusy(true); setError('');
-    try { await api.setSettings(form); toast.success('Integrations saved'); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+  const download = async () => {
+    try {
+      const data = await api.adminExport();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `synthica-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e.message);
+    }
   };
-  const test = async () => {
-    setBusy(true); setError('');
-    try { await api.setSettings(form); await api.testWebhook(); toast.success('Test sent to Discord'); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
-  };
-
   return (
-    <Card>
-      {error && <div className="login-error">{error}</div>}
-      <Field label="Discord webhook URL"><input value={form.discordWebhookUrl} onChange={(e) => setForm({ ...form, discordWebhookUrl: e.target.value })} placeholder="https://discord.com/api/webhooks/…" /></Field>
-      <Field label="WhatsApp relay webhook URL (Twilio/Make/Zapier)"><input value={form.whatsappWebhookUrl} onChange={(e) => setForm({ ...form, whatsappWebhookUrl: e.target.value })} placeholder="https://…" /></Field>
-      <div className="row">
-        <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-        <Button variant="ghost" onClick={test} disabled={busy}>Send Discord test</Button>
+    <Card style={{ marginBottom: '1.5rem' }}>
+      <div className="card-row">
+        <div>
+          <h3>Backup</h3>
+          <p className="muted" style={{ marginTop: '0.2rem' }}>Download a full JSON snapshot of all data.</p>
+        </div>
+        <Button onClick={download}>Export backup</Button>
       </div>
-      <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.78rem' }}>
-        Set <code>DISCORD_WEBHOOK_URL</code> / <code>WHATSAPP_WEBHOOK_URL</code> on the backend to persist across restarts.
-      </p>
     </Card>
   );
 }
@@ -679,7 +302,8 @@ function SetupGuide() {
     },
   ];
   return (
-    <div>
+    <div style={{ marginTop: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Setup & deployment guide</h2>
       <div className="stack">
         {guides.map((g) => (
           <Card key={g.t}>
@@ -697,131 +321,177 @@ function SetupGuide() {
   );
 }
 
-// ===========================================================================
-// TAB 6 — Backup & audit
-// ===========================================================================
+const STAGE_LABELS = {
+  review: 'In review', senior_screen: 'Senior screen', associate: 'With associate',
+  senior_final: 'Senior final', chief: 'With chief', published: 'Published', rejected: 'Declined',
+};
 
-function BackupTab() {
+// Horizontal bar chart (pure CSS) for a {label: count} map.
+function Bars({ data, labels = {}, tone = 'blue' }) {
+  const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return <p className="muted" style={{ margin: 0 }}>No data yet.</p>;
+  const max = Math.max(...entries.map(([, n]) => n));
   return (
-    <div>
-      <Section title="Backup" sub="Download a full JSON snapshot of all platform data.">
-        <Backup />
-      </Section>
-      <Section title="Paper archive" sub="Curate the public journal archive — upload past or external papers and manage published records.">
-        <Archive />
-      </Section>
-      <ReferralLeaderboard />
-      <AuditLog />
+    <div className="bars">
+      {entries.map(([k, n]) => (
+        <div key={k} className="bar-row">
+          <span className="bar-label">{labels[k] || k}</span>
+          <span className="bar-track">
+            <span className={`bar-fill bar-${tone}`} style={{ width: `${Math.max(6, (n / max) * 100)}%` }} />
+          </span>
+          <span className="bar-num">{n}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-// Download a full JSON snapshot for backup (Director only).
-function Backup() {
-  const toast = useToast();
-  const download = async () => {
-    try {
-      const data = await api.adminExport();
-      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `synthica-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast.error(e.message);
-    }
-  };
+function AnalyticsCards() {
+  const [a, setA] = useState(null);
+  const load = useCallback(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!a) return <Card><p className="muted" style={{ margin: 0 }}>Loading analytics…</p></Card>;
+  const pipeline = a.pipelineSubmissions ?? a.submissions ?? 0;
+  const pendingApps = a.pendingApplications ?? 0;
+  const pendingPapers = a.pendingPapers ?? 0;
+  const pendingTotal = a.pendingReviews ?? (pendingApps + pendingPapers);
+  const kpis = [
+    { icon: 'users', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
+    { icon: 'file-text', label: 'Published papers', value: a.published, sub: `${pipeline} in editorial pipeline` },
+    { icon: 'flask', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
+    { icon: 'eye', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
+    { icon: 'id-card', label: 'Pending reviews', value: pendingTotal, sub: `${pendingApps} applications · ${pendingPapers} papers`, hot: pendingTotal > 0 },
+  ];
   return (
-    <Card>
-      <div className="card-row">
-        <p className="muted" style={{ margin: 0 }}>A complete export you can re-import or keep as an off-platform backup.</p>
-        <Button onClick={download}>Export backup</Button>
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Analytics</h2>
+      <div className="kpi-grid">
+        {kpis.map((k) => (
+          <div key={k.label} className={`kpi ${k.hot ? 'kpi-hot' : ''}`}>
+            <span className="kpi-icon"><Icon name={k.icon} size={22} /></span>
+            <div className="kpi-value">{k.value}</div>
+            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-sub">{k.sub}</div>
+          </div>
+        ))}
       </div>
+      <div className="grid grid-2" style={{ marginTop: '1rem' }}>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Pipeline by stage</h3>
+          <Bars data={a.byStage} labels={STAGE_LABELS} tone="blue" />
+        </Card>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Published by subject</h3>
+          <Bars data={a.byCategory} tone="gold" />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Integrations() {
+  const toast = useToast();
+  const [form, setForm] = useState({ discordWebhookUrl: '', whatsappWebhookUrl: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.getSettings().then((s) => setForm({ discordWebhookUrl: s.discordWebhookUrl || '', whatsappWebhookUrl: s.whatsappWebhookUrl || '' })).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setBusy(true); setError('');
+    try { await api.setSettings(form); toast.success('Integrations saved'); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const test = async () => {
+    setBusy(true); setError('');
+    try { await api.setSettings(form); await api.testWebhook(); toast.success('Test sent to Discord'); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ marginBottom: '1.5rem' }}>
+      <h3>Integrations</h3>
+      <p className="muted" style={{ margin: '0.25rem 0 0.75rem' }}>Notification channels for the editorial queue.</p>
+      {error && <div className="login-error">{error}</div>}
+      <Field label="Discord webhook URL"><input value={form.discordWebhookUrl} onChange={(e) => setForm({ ...form, discordWebhookUrl: e.target.value })} placeholder="https://discord.com/api/webhooks/…" /></Field>
+      <Field label="WhatsApp relay webhook URL (Twilio/Make/Zapier)"><input value={form.whatsappWebhookUrl} onChange={(e) => setForm({ ...form, whatsappWebhookUrl: e.target.value })} placeholder="https://…" /></Field>
+      <div className="row">
+        <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        <Button variant="ghost" onClick={test} disabled={busy}>Send Discord test</Button>
+      </div>
+      <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.78rem' }}>
+        Set <code>DISCORD_WEBHOOK_URL</code> / <code>WHATSAPP_WEBHOOK_URL</code> on the backend to persist across restarts.
+      </p>
     </Card>
   );
 }
 
-// Append-only log of editorial + admin actions.
-function AuditLog() {
-  const [rows, setRows] = useState([]);
-  useEffect(() => { api.adminAudit().then(setRows).catch(() => {}); }, []);
-  return (
-    <Section title="Audit log" sub="Append-only record of editorial and admin actions.">
-      <Card>
-        {rows.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>No activity recorded yet.</p>
-        ) : (
-          <div className="stack">
-            {rows.slice(0, 30).map((r) => (
-              <div key={r.id} className="muted" style={{ fontSize: '0.82rem' }}>
-                <strong>{new Date(r.at).toLocaleString()}</strong> · {r.actorName} · <Badge tone="gray">{r.action}</Badge> {r.detail}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </Section>
-  );
-}
-
-// Who's referred the most members (for future rewards).
-function ReferralLeaderboard() {
-  const [rows, setRows] = useState(null);
-  useEffect(() => { api.referralLeaderboard().then(setRows).catch(() => setRows([])); }, []);
-  if (!rows) return null;
-  return (
-    <Section title="Referral leaderboard" sub="Members who've brought in the most sign-ups.">
-      <Card>
-        {rows.length === 0 ? <p className="muted" style={{ margin: 0 }}>No referrals yet.</p> : (
-          <div className="stack">
-            {rows.map((r, i) => (
-              <div key={r.id} className="card-row info-block">
-                <div><strong>#{i + 1}</strong> {r.name}</div>
-                <Badge tone="green">{r.count} referred</Badge>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </Section>
-  );
-}
-
-// Paper archive: upload past/external papers (arXiv/Nature-style) and manage
-// the published record. (Self-archive verification is moderator work and lives
-// in the /moderator console; this is the Director's curation surface.)
+// Paper archive: upload past/external papers (arXiv/Nature-style), verify
+// self-archived submissions, and manage the published record.
 function Archive() {
   const toast = useToast();
   const [pubs, setPubs] = useState([]);
+  const [queue, setQueue] = useState([]);
   const [open, setOpen] = useState(false);
   const load = useCallback(() => {
     api.adminPublications().then(setPubs).catch(() => {});
+    api.adminArchiveQueue().then(setQueue).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const verify = (id, status) =>
+    api.verifyPublication(id, status).then(() => { toast.success(`Paper ${status}`); load(); }).catch((e) => toast.error(e.message));
   const remove = (id) => {
     if (!window.confirm('Remove this paper from the archive?')) return;
     api.adminDeletePublication(id).then(() => { toast.success('Removed'); load(); }).catch((e) => toast.error(e.message));
   };
 
   return (
-    <Card>
+    <div style={{ marginBottom: '1.5rem' }}>
       <div className="card-row" style={{ marginBottom: '0.6rem' }}>
-        <span className="muted">Upload past or external papers and curate the public archive. <Badge tone="gray">{pubs.length} papers</Badge></span>
+        <h2 className="section-title" style={{ margin: 0 }}>Paper archive <Badge tone="gray">{pubs.length}</Badge></h2>
         <Button onClick={() => setOpen((o) => !o)}>{open ? 'Close' : '+ Upload paper'}</Button>
       </div>
+      <p className="muted" style={{ margin: '0 0 0.6rem' }}>Upload past or external papers, verify member self-archives, and curate the public archive.</p>
 
       {open && <UploadForm onDone={() => { setOpen(false); load(); }} />}
 
+      {queue.length > 0 && (
+        <>
+          <h3 style={{ margin: '1rem 0 0.4rem' }}>Pending verification <Badge tone="gold">{queue.length}</Badge></h3>
+          <div className="stack">
+            {queue.map((p) => (
+              <Card key={p.id}>
+                <div className="card-row">
+                  <div>
+                    <strong>{p.title}</strong>
+                    <div className="muted" style={{ fontSize: '0.8rem' }}>{p.authors.map((a) => a.name).join(', ')} · {p.category} · {p.publishedAt}</div>
+                    {p.pdfUrl && <a href={p.pdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem' }}>PDF / source</a>}
+                  </div>
+                  <div className="row">
+                    <Button variant="approve" className="btn-sm" onClick={() => verify(p.id, 'approved')}>Verify</Button>
+                    <Button variant="reject" className="btn-sm" onClick={() => verify(p.id, 'rejected')}>Reject</Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      <h3 style={{ margin: '1rem 0 0.4rem' }}>All papers</h3>
       {pubs.length === 0 ? (
-        <p className="muted" style={{ margin: 0 }}>No papers in the archive yet.</p>
+        <Card><p className="muted">No papers in the archive yet.</p></Card>
       ) : (
         <div className="stack">
           {pubs.slice(0, 40).map((p) => <AdminPubRow key={p.id} p={p} onChanged={load} onRemove={remove} />)}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -838,7 +508,7 @@ function AdminPubRow({ p, onChanged, onRemove }) {
   const [busy, setBusy] = useState(false);
 
   const feature = () =>
-    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive ⭐'); onChanged(); }).catch((e) => toast.error(e.message));
+    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive'); onChanged(); }).catch((e) => toast.error(e.message));
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -847,16 +517,16 @@ function AdminPubRow({ p, onChanged, onRemove }) {
   };
 
   return (
-    <div className="info-block">
+    <Card>
       <div className="card-row">
         <div style={{ minWidth: 0 }}>
           <strong>{p.title}</strong>{' '}
-          {p.featured && <Badge tone="gold">⭐ featured</Badge>}{' '}
+          {p.featured && <Badge tone="gold"><span className="icon-label"><Icon name="star" size={12} /> featured</span></Badge>}{' '}
           {p.verified === false && <Badge tone="gold">unverified</Badge>} <Badge tone="gray">{p.source || 'editorial'}</Badge>
           <div className="muted" style={{ fontSize: '0.8rem' }}>{(p.authors || []).map((a) => a.name).join(', ')} · {p.category} · {p.doi}</div>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
-          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? '★ Unfeature' : '☆ Feature'}</Button>
+          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? <span className="icon-label"><Icon name="star" size={14} /> Unfeature</span> : <span className="icon-label"><Icon name="star-outline" size={14} /> Feature</span>}</Button>
           <Button className="btn-sm" variant="ghost" onClick={() => setEditing((x) => !x)}>{editing ? 'Cancel' : 'Edit'}</Button>
           <Button variant="reject" className="btn-sm" onClick={() => onRemove(p.id)}>Delete</Button>
         </div>
@@ -886,27 +556,8 @@ function AdminPubRow({ p, onChanged, onRemove }) {
           <Button type="submit" className="btn-sm" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
         </form>
       )}
-    </div>
+    </Card>
   );
-}
-
-// Parse hosted full text into sections; a line beginning "## " starts a section.
-function parseFullText(text) {
-  const t = String(text || '').trim();
-  if (!t) return [];
-  const out = [];
-  let cur = { heading: '', body: '' };
-  for (const line of t.split('\n')) {
-    const m = line.match(/^##\s+(.*)/);
-    if (m) {
-      if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
-      cur = { heading: m[1].trim(), body: '' };
-    } else {
-      cur.body += line + '\n';
-    }
-  }
-  if (cur.heading || cur.body.trim()) out.push({ heading: cur.heading, body: cur.body.trim() });
-  return out;
 }
 
 // arXiv-style upload form — metadata + PDF link, with authors linkable to profiles.
@@ -963,7 +614,7 @@ function UploadForm({ onDone }) {
                 <option value="">link profile…</option>
                 {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove">✕</button>}
+              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove"><Icon name="x" size={14} /></button>}
             </div>
           ))}
         </div>
@@ -993,5 +644,446 @@ function UploadForm({ onDone }) {
         <Button type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add to archive'}</Button>
       </form>
     </Card>
+  );
+}
+
+// Auditor queue: new-member onboarding (assign a role) + role/project applications.
+function Applications() {
+  const toast = useToast();
+  const [apps, setApps] = useState([]);
+  const load = useCallback(() => { api.adminApplications().then(setApps).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const review = (id, status, assignTag) =>
+    api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+
+  const onboarding = apps.filter((a) => a.kind === 'onboarding' && a.status === 'pending');
+  const pendingOnboardingCount = onboarding.length;
+  // Program applications have their own panel below (cohort admission).
+  const others = apps.filter((a) => a.kind !== 'onboarding' && a.kind !== 'program' && a.status === 'pending');
+  const pendingOthersCount = others.length;
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Onboarding <Badge tone="gray">{pendingOnboardingCount} pending</Badge>
+      </h2>
+      <p className="muted" style={{ margin: '0 0 0.6rem' }}>New members — approve and assign a starting role.</p>
+      {pendingOnboardingCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
+      ) : (
+        <div className="stack">{onboarding.map((a) => <AppRow key={a.id} a={a} review={review} assignable />)}</div>
+      )}
+
+      <h2 className="section-title" style={{ margin: '1.5rem 0 0.6rem' }}>
+        Role &amp; project applications <Badge tone="gray">{pendingOthersCount} pending</Badge>
+      </h2>
+      {pendingOthersCount === 0 ? (
+        <Card><p className="muted">0 pending</p></Card>
+      ) : (
+        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
+      )}
+    </div>
+  );
+}
+
+// A single application with approve/reject and (when assignable) a role picker.
+// Onboarding rows default the picker to the system's recommended role.
+function AppRow({ a, review, assignable }) {
+  const [tag, setTag] = useState(a.recommendation?.tag || 'independent_researcher');
+  return (
+    <Card>
+      <div className="card-row">
+        <div>
+          <strong>{a.userName}</strong> — {a.role || (a.kind === 'onboarding' ? 'new member' : 'project application')}
+          {a.assignedTag && <> · <Badge tone="green">{a.assignedTag}</Badge></>}
+          {a.resumeUrl ? <> · <a href={a.resumeUrl} target="_blank" rel="noreferrer">résumé</a></> : (a.kind === 'onboarding' && <> · <span className="muted" style={{ fontSize: '0.8rem' }}>no résumé</span></>)}
+          {a.kind === 'onboarding' && (
+            <div className="info-block" style={{ marginTop: '0.4rem' }}>
+              <div className="muted" style={{ fontSize: '0.8rem' }}>
+                Research {a.researchExperience ?? '—'}/10 · Leadership {a.leadershipExperience ?? '—'}/10
+                {a.wantsChapterLead ? ' · wants to lead a chapter' : ''}{a.gpa ? ` · GPA ${a.gpa}` : ''}
+              </div>
+              {a.experienceSummary && (
+                <div style={{ fontSize: '0.82rem', marginTop: '0.3rem', color: 'var(--slate)' }}>
+                  “{a.experienceSummary}”
+                </div>
+              )}
+              {a.priorLead && a.legacyProject?.title && (
+                <div style={{ fontSize: '0.82rem', marginTop: '0.3rem' }}>
+                  <Badge tone="gold">Returning lead</Badge>{' '}
+                  <span className="muted">Claims project “{a.legacyProject.title}” ({a.legacyProject.category || 'no subject'}) — approving as Lead restores it.</span>
+                </div>
+              )}
+              {a.recommendation && (
+                <div style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+                  <Badge tone="gold">Suggested: {a.recommendation.label}</Badge>{' '}
+                  <span className="muted">{a.recommendation.reason}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {a.answers && (
+            <details style={{ marginTop: '0.3rem' }}>
+              <summary className="muted" style={{ cursor: 'pointer' }}>View application</summary>
+              <div className="stack" style={{ marginTop: '0.3rem' }}>
+                {Object.entries(a.answers).map(([k, v]) => v && (
+                  <div key={k} className="muted" style={{ fontSize: '0.8rem' }}><strong>{k}:</strong> {v}</div>
+                ))}
+              </div>
+            </details>
+          )}
+          {a.message && !a.answers && <div className="muted" style={{ marginTop: '0.2rem' }}>{a.message}</div>}
+          <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>{new Date(a.at).toLocaleDateString()}</div>
+        </div>
+        <div className="row">
+          {a.status === 'pending' ? (
+            <>
+              {assignable && (
+                <select value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 'auto' }} title="Role to grant on approval">
+                  {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+              <Button variant="approve" className="btn-sm" onClick={() => review(a.id, 'approved', assignable ? tag : undefined)}>Approve</Button>
+              <Button variant="reject" className="btn-sm" onClick={() => review(a.id, 'rejected')}>Reject</Button>
+            </>
+          ) : (
+            <Badge tone={a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Programs: cohort admissions for auditors; create/close/milestones + the
+// weekly digest trigger for directors.
+function ProgramsPanel({ isDirector }) {
+  const toast = useToast();
+  const [programs, setPrograms] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' });
+  const load = useCallback(() => { api.adminPrograms().then(setPrograms).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const reviewApp = (id, status) =>
+    api.reviewProgramApplication(id, status).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+  const toggleMs = (pid, mid, done) =>
+    api.toggleProgramMilestone(pid, mid, done).then(load).catch((e) => toast.error(e.message));
+  const setStatus = (pid, status) =>
+    api.setProgramStatus(pid, status).then(() => { load(); toast.success(`Program ${status}`); }).catch((e) => toast.error(e.message));
+  const create = (e) => {
+    e.preventDefault();
+    api.createProgram(form).then(() => { setShowCreate(false); setForm({ title: '', cohortLabel: '', description: '', spots: 25, applyDeadline: '', startAt: '', endAt: '' }); load(); toast.success('Program created'); }).catch((err) => toast.error(err.message));
+  };
+  const sendDigest = () =>
+    api.sendDigest().then((r) => toast.success(`Digest sent to ${r.sent}/${r.recipients} researchers`)).catch((e) => toast.error(e.message));
+
+  const pending = programs.flatMap((p) => p.applications.filter((a) => a.status === 'pending').map((a) => ({ ...a, programTitle: p.title })));
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div className="card-row" style={{ marginBottom: '0.6rem' }}>
+        <h2 className="section-title" style={{ margin: 0 }}>Programs <Badge tone="gray">{pending.length} pending</Badge></h2>
+        {isDirector && (
+          <div className="row">
+            <Button variant="ghost" onClick={sendDigest}>Send weekly digest now</Button>
+            <Button onClick={() => setShowCreate((v) => !v)}>{showCreate ? 'Cancel' : '+ New program'}</Button>
+          </div>
+        )}
+      </div>
+
+      {showCreate && (
+        <Card>
+          <form onSubmit={create}>
+            <div className="grid grid-2">
+              <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+              <Field label="Cohort label (e.g. Summer 2026)"><input value={form.cohortLabel} onChange={(e) => setForm({ ...form, cohortLabel: e.target.value })} /></Field>
+            </div>
+            <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+            <div className="grid grid-2">
+              <Field label="Spots"><input type="number" min="0" value={form.spots} onChange={(e) => setForm({ ...form, spots: e.target.value })} /></Field>
+              <Field label="Apply deadline"><input type="date" value={form.applyDeadline} onChange={(e) => setForm({ ...form, applyDeadline: e.target.value })} /></Field>
+            </div>
+            <div className="grid grid-2">
+              <Field label="Starts"><input type="date" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} /></Field>
+              <Field label="Ends"><input type="date" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} /></Field>
+            </div>
+            <Button type="submit">Create program</Button>
+          </form>
+        </Card>
+      )}
+
+      {pending.length > 0 && (
+        <div className="stack" style={{ marginBottom: '0.8rem' }}>
+          {pending.map((a) => (
+            <Card key={a.id}>
+              <div className="card-row">
+                <div><strong>{a.userName}</strong> → {a.programTitle}{a.message && <div className="muted" style={{ fontSize: '0.82rem' }}>{a.message}</div>}</div>
+                <div className="row">
+                  <Button onClick={() => reviewApp(a.id, 'accepted')}>Accept</Button>
+                  <Button variant="ghost" onClick={() => reviewApp(a.id, 'rejected')}>Reject</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="stack">
+        {programs.map((p) => (
+          <Card key={p.id}>
+            <div className="card-row">
+              <div>
+                <strong>{p.title}</strong> {p.cohortLabel && <Badge>{p.cohortLabel}</Badge>} <Badge tone={p.status === 'open' ? 'green' : 'gray'}>{p.status}</Badge>
+                <div className="muted" style={{ fontSize: '0.82rem' }}>
+                  {p.cohortMembers.length}{p.spots ? `/${p.spots}` : ''} members
+                  {p.cohortMembers.length > 0 && <> — {p.cohortMembers.map((m) => m.name).join(', ')}</>}
+                </div>
+              </div>
+              {isDirector && (
+                <div className="row">
+                  {p.status === 'open'
+                    ? <Button variant="ghost" onClick={() => setStatus(p.id, 'closed')}>Close</Button>
+                    : <Button variant="ghost" onClick={() => setStatus(p.id, 'open')}>Reopen</Button>}
+                </div>
+              )}
+            </div>
+            {p.milestones.length > 0 && (
+              <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {p.milestones.map((m) => (
+                  <label key={m.id} className="muted" style={{ fontSize: '0.84rem', cursor: isDirector ? 'pointer' : 'default' }}>
+                    <input type="checkbox" checked={m.done} disabled={!isDirector} onChange={(e) => toggleMs(p.id, m.id, e.target.checked)} /> {m.title}
+                  </label>
+                ))}
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Post competitions to the members' Competitions board.
+function CompetitionsAdmin() {
+  const toast = useToast();
+  const [comps, setComps] = useState([]);
+  const [form, setForm] = useState({ title: '', description: '', url: '', category: '', deadline: '', prize: '' });
+  const load = useCallback(() => { api.competitions().then(setComps).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  const post = (e) => {
+    e.preventDefault();
+    api.addCompetition(form).then(() => { setForm({ title: '', description: '', url: '', category: '', deadline: '', prize: '' }); load(); toast.success('Competition posted'); }).catch((er) => toast.error(er.message));
+  };
+  const remove = (id) => api.deleteCompetition(id).then(() => { load(); toast.success('Removed'); }).catch((er) => toast.error(er.message));
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Competitions <Badge tone="gray">{comps.length}</Badge></h2>
+      <Card style={{ marginBottom: '0.8rem' }}>
+        <form onSubmit={post}>
+          <div className="grid grid-2">
+            <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+            <Field label="Link"><input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://…" /></Field>
+          </div>
+          <Field label="Description"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <div className="grid grid-3">
+            <Field label="Category"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="">—</option>{CATS.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Deadline"><input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} /></Field>
+            <Field label="Prize"><input value={form.prize} onChange={(e) => setForm({ ...form, prize: e.target.value })} placeholder="e.g. $5,000" /></Field>
+          </div>
+          <Button type="submit">Post competition</Button>
+        </form>
+      </Card>
+      <div className="stack">
+        {comps.map((c) => (
+          <Card key={c.id}><div className="card-row"><div><strong>{c.title}</strong> {c.deadline && <Badge tone="gray">{c.deadline}</Badge>}</div><button className="btn btn-ghost btn-sm" onClick={() => remove(c.id)}>Delete</button></div></Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Post a platform-wide event (workshop, meetup) that shows on everyone's calendar.
+function GlobalEvents() {
+  const toast = useToast();
+  const [form, setForm] = useState({ title: '', type: 'workshop', dueAt: '' });
+  const post = (e) => {
+    e.preventDefault();
+    api.addEvent({ title: form.title, type: form.type, dueAt: form.dueAt }).then(() => { setForm({ title: '', type: 'workshop', dueAt: '' }); toast.success('Event posted to all calendars'); }).catch((er) => toast.error(er.message));
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Global events</h2>
+      <Card>
+        <p className="muted" style={{ marginTop: 0 }}>Workshops and platform-wide events appear on every member's Calendar.</p>
+        <form onSubmit={post} className="row" style={{ alignItems: 'flex-end' }}>
+          <Field label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field>
+          <Field label="Type"><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="workshop">workshop</option><option value="meetup">meetup</option><option value="event">event</option></select></Field>
+          <Field label="Date"><input type="date" value={form.dueAt} onChange={(e) => setForm({ ...form, dueAt: e.target.value })} required /></Field>
+          <Button type="submit">Post</Button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Who's referred the most members (for future rewards).
+function ReferralLeaderboard() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { api.referralLeaderboard().then(setRows).catch(() => setRows([])); }, []);
+  if (!rows) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Referral leaderboard</h2>
+      <Card>
+        {rows.length === 0 ? <p className="muted" style={{ margin: 0 }}>No referrals yet.</p> : (
+          <div className="stack">
+            {rows.map((r, i) => (
+              <div key={r.id} className="card-row info-block">
+                <div><strong>#{i + 1}</strong> {r.name}</div>
+                <Badge tone="green">{r.count} referred</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// Director-only: suspend/reactivate a member + send them a password-reset email.
+function MemberAdminActions({ u, onChanged }) {
+  const toast = useToast();
+  const suspend = () =>
+    api.adminSuspend(u.id, !u.suspended).then(() => { toast.success(u.suspended ? 'Reactivated' : 'Suspended'); onChanged(); }).catch((e) => toast.error(e.message));
+  const sendReset = () =>
+    api.adminSendReset(u.id).then(() => toast.success('Password-reset email sent')).catch((e) => toast.error(e.message));
+  return (
+    <>
+      <Button className="btn-sm" variant="ghost" onClick={suspend}>{u.suspended ? 'Reactivate' : 'Suspend'}</Button>
+      <Button className="btn-sm" variant="ghost" onClick={sendReset}>Send reset</Button>
+    </>
+  );
+}
+
+// Director-only: branded email broadcast to a member segment.
+function BroadcastEmail() {
+  const toast = useToast();
+  const [cfg, setCfg] = useState(null);
+  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
+  const send = async (e) => {
+    e.preventDefault();
+    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
+    setBusy(true);
+    try {
+      const r = await api.adminBroadcast(f);
+      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
+      setF({ subject: '', heading: '', body: '', audience: 'all' });
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
+      <Card>
+        {cfg && cfg.emailConfigured === false && (
+          <p className="muted alert-warning" style={{ marginTop: 0 }}><span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured — broadcasts will be logged only.</span></p>
+        )}
+        <form onSubmit={send}>
+          <div className="grid grid-2">
+            <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
+            <Field label="Audience">
+              <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
+                <option value="all">All members</option>
+                <option value="researchers">Researchers</option>
+                <option value="editors">Editors / staff</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
+          <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
+          <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
+          <span className="muted" style={{ marginLeft: '0.6rem', fontSize: '0.8rem' }}>Sent as a branded HTML email from your account.</span>
+        </form>
+      </Card>
+    </div>
+  );
+}
+// The reports queue: content members have flagged, with one-click resolution.
+function ReportsQueue() {
+  const toast = useToast();
+  const [reports, setReports] = useState(null);
+  useEffect(() => { api.adminReports('open').then(setReports).catch(() => setReports([])); }, []);
+
+  const resolve = (id, action) => {
+    const verb = action === 'dismiss' ? 'Dismiss this report' : action === 'remove' ? 'Remove the reported content' : 'Suspend the author (and remove the content)';
+    if (action !== 'dismiss' && !window.confirm(`${verb}?`)) return;
+    api.resolveReport(id, action).then(setReports).then(() => toast.success('Report resolved')).catch((e) => toast.error(e.message));
+  };
+
+  if (!reports) return null;
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+        Reports queue {reports.length > 0 && <Badge tone="gold">{reports.length} open</Badge>}
+      </h2>
+      {reports.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. <span className="icon-label"><Icon name="party" size={16} /></span></p></Card>
+      ) : (
+        <div className="stack">
+          {reports.map((r) => (
+            <Card key={r.id}>
+              <div className="card-row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <Badge tone="red">{r.kind}</Badge>{' '}
+                  <strong>{r.targetOwnerName}</strong>
+                  <span className="muted" style={{ fontSize: '0.78rem' }}> · reported by {r.reporterName} · {new Date(r.at).toLocaleDateString()}</span>
+                  {r.reason && <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>Reason: “{r.reason}”</div>}
+                  {r.snippet && <div className="info-block" style={{ fontSize: '0.82rem', marginTop: '0.35rem' }}>{r.snippet}</div>}
+                </div>
+                <div className="row" style={{ flexShrink: 0, gap: '0.3rem' }}>
+                  <Button className="btn-sm" variant="ghost" onClick={() => resolve(r.id, 'dismiss')}>Dismiss</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'remove')}>Remove</Button>
+                  <Button className="btn-sm" variant="reject" onClick={() => resolve(r.id, 'suspend')}>Suspend</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Moderation() {
+  const toast = useToast();
+  const [posts, setPosts] = useState([]);
+  const load = useCallback(() => { api.posts().then(setPosts).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  const remove = (id) => api.deletePost(id).then(() => { load(); toast.success('Post removed'); }).catch((e) => toast.error(e.message));
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <ReportsQueue />
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Recent posts <Badge tone="gray">{posts.length}</Badge></h2>
+      {posts.length === 0 ? (
+        <Card><p className="muted" style={{ margin: 0 }}>No community posts yet.</p></Card>
+      ) : (
+        <div className="stack">
+          {posts.slice(0, 12).map((p) => (
+            <Card key={p.id}>
+              <div className="card-row">
+                <div>
+                  <strong>{p.author?.name}</strong> <span className="muted" style={{ fontSize: '0.78rem' }}>· {new Date(p.at).toLocaleDateString()} · {p.likeCount} likes · {p.commentCount} comments</span>
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>{(p.text || '').slice(0, 160)}{(p.text || '').length > 160 ? '…' : ''}</div>
+                </div>
+                <Button className="btn-sm" variant="ghost" onClick={() => remove(p.id)}>Delete</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
