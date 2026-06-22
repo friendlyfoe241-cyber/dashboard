@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Navigate, useLocation, Link } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { api, setToken, clearToken, getToken } from './api.js';
+import { canAccessPortal } from './views.js';
+import PageLoader from './components/PageLoader.jsx';
 
 const AuthContext = createContext(null);
 
@@ -78,13 +80,8 @@ export const useAuth = () => useContext(AuthContext);
 export function RequireAuth({ children, kind }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return (
-    <div className="page-loading">
-      <div className="spinner" />
-      <p className="home-link"><Link to="/">go home</Link></p>
-    </div>
-  );
+  if (loading) return <PageLoader label="Signing you in" />;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (kind && user.kind !== kind) return <Navigate to="/" replace />;
+  if (kind && !canAccessPortal(user, kind)) return <Navigate to="/" replace />;
   return children;
 }

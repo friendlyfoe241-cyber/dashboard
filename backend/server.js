@@ -583,6 +583,12 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   res.json(pub);
 }));
 
+app.post('/api/journal/publications/:id/access', wrap((req, res) => {
+  const accesses = store.recordPublicationAccess(req.params.id);
+  if (accesses === null) return res.status(404).json({ error: 'Publication not found' });
+  res.json({ ok: true, accesses });
+}));
+
 // Per-paper OG share card (1200×630 PNG) + a share page whose meta tags
 // crawlers can read (the static site can't serve per-paper tags).
 app.get('/api/journal/publications/:id/og.png', wrap((req, res) => {
@@ -604,7 +610,7 @@ app.get('/api/journal/publications/:id/share', wrap((req, res) => {
 // --- Track 3: Editor dashboard ---------------------------------------------
 // All editor routes require auth and act as the logged-in editor.
 const editorOnly = (req, res, next) =>
-  req.user.kind === 'editor' ? next() : res.status(403).json({ error: 'Editors only' });
+  req.user.kind === 'editor' || req.user.allViewsDemo ? next() : res.status(403).json({ error: 'Editors only' });
 
 app.get('/api/editor/papers', requireAuth, editorOnly, wrap((req, res) => {
   res.json(store.papersForEditor(req.user.id));
@@ -708,9 +714,9 @@ app.post('/api/editor/settings/test', requireAuth, editorOnly, directorOnly, wra
 
 // --- Track 4: Researcher dashboard -----------------------------------------
 const researcherOnly = (req, res, next) => {
-  if (req.user.kind !== 'researcher') return res.status(403).json({ error: 'Researchers only' });
-  // New members can't act until an auditor assigns their role.
-  if (req.user.approved === false) return res.status(403).json({ error: 'Your account is awaiting role assignment by an auditor.' });
+  if (req.user.kind !== 'researcher' && !req.user.allViewsDemo) {
+    return res.status(403).json({ error: 'Researchers only' });
+  }
   next();
 };
 
@@ -893,6 +899,11 @@ app.get('/api/researcher/projects/:id/stats', requireAuth, researcherOnly, wrap(
   res.json(store.projectStats(req.params.id));
 }));
 
+// Project-scoped calendar: this project's deadlines + dated task due-dates.
+app.get('/api/researcher/projects/:id/events', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.projectEvents(req.params.id, req.user.id));
+}));
+
 // ============================================================
 // SANDBOX PROJECTS (Independent Researcher personal projects)
 // ============================================================
@@ -1015,6 +1026,10 @@ app.post('/api/people/:id/unfollow', requireAuth, wrap((req, res) => res.json(st
 app.get('/api/feed', requireAuth, wrap((req, res) => res.json(store.feedFor(req.user.id))));
 
 // Onboarding (current researcher).
+app.post('/api/researcher/roles/associate', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.claimAssociateRole(req.user.id));
+}));
+
 app.get('/api/researcher/onboarding', requireAuth, researcherOnly, wrap((req, res) => {
   res.json(store.myOnboarding(req.user.id));
 }));
@@ -1052,14 +1067,55 @@ app.post('/api/researcher/chapter/announcements', requireAuth, researcherOnly, w
   res.json(store.addChapterAnnouncement({ leaderId: req.user.id, title, body }));
 }));
 
+// Member joins a private chapter by entering its 8-character code.
+app.post('/api/researcher/chapter/join', requireAuth, researcherOnly, wrap((req, res) => {
+  const { code } = req.body || {};
+  res.json(store.joinChapterByCode({ userId: req.user.id, code }));
+}));
+
+// Leader rotates their chapter's join code.
+app.post('/api/researcher/chapter/regenerate-code', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.regenerateJoinCode(req.user.id));
+}));
+
 app.post('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
   const { title, description, type } = req.body || {};
   res.json(store.addChapterProgress({ leaderId: req.user.id, title, description, type }));
 }));
 
 app.get('/api/researcher/chapter/progress', requireAuth, researcherOnly, wrap((req, res) => {
-  const progress = store.getChapterProgress(req.user.id);
-  res.json(progress);
+  res.json(store.getChapterProgress(req.user.id));
+}));
+
+// --- Expertise mentors (ROLE_WORKFLOWS §7) ---------------------------------
+// Directory + booking (any researcher) and mentor self-service (mentor tag).
+app.get('/api/mentors', requireAuth, researcherOnly, wrap((req, res) => res.json(store.listMentors({ specialty: req.query.specialty }))));
+app.get('/api/mentors/specialties', requireAuth, researcherOnly, wrap((_req, res) => res.json(store.mentorSpecialties())));
+app.get('/api/mentors/:id', requireAuth, researcherOnly, wrap((req, res) => res.json(store.getMentor(req.params.id))));
+app.post('/api/mentors/:id/book', requireAuth, researcherOnly, wrap((req, res) => {
+  const { slot, note } = req.body || {};
+  res.json(store.bookMentor({ researcherId: req.user.id, mentorId: req.params.id, slot, note }));
+}));
+app.get('/api/me/mentor-bookings', requireAuth, researcherOnly, wrap((req, res) => res.json(store.myMentorBookings(req.user.id))));
+
+// Mentor's own dashboard: profile, availability, bookings.
+app.get('/api/mentor/dashboard', requireAuth, researcherOnly, wrap((req, res) => res.json(store.mentorDashboard(req.user.id))));
+app.put('/api/mentor/profile', requireAuth, researcherOnly, wrap((req, res) => {
+  const { specialties, mentorBio } = req.body || {};
+  res.json(store.setMentorProfile({ userId: req.user.id, specialties, mentorBio }));
+}));
+app.post('/api/mentor/availability', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.addMentorSlot({ userId: req.user.id, slot: (req.body || {}).slot }));
+}));
+app.delete('/api/mentor/availability/:slotId', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.removeMentorSlot({ userId: req.user.id, slotId: req.params.slotId }));
+}));
+app.post('/api/mentor/calendar-connect', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.setMentorCalendarConnected({ userId: req.user.id, connected: (req.body || {}).connected }));
+}));
+// Either party cancels a booking.
+app.post('/api/mentor-bookings/:id/cancel', requireAuth, researcherOnly, wrap((req, res) => {
+  res.json(store.cancelMentorBooking({ userId: req.user.id, bookingId: req.params.id }));
 }));
 
 // Reload baseline data (seed, or the spreadsheet when on Sheets). Destructive

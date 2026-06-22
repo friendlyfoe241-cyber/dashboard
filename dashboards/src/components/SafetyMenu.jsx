@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { useToast } from './toast.jsx';
+import Icon from './Icon.jsx';
 
 // A compact "⋯" overflow menu for user-generated content: report it, or block
 // its author. Native <details> handles open/close without outside-click glue.
@@ -26,10 +27,10 @@ export default function SafetyMenu({ kind, targetId, authorId, authorName, onBlo
 
   return (
     <details className="safety-menu">
-      <summary className="safety-menu-trigger" title="More" aria-label="More options">⋯</summary>
+      <summary className="safety-menu-trigger" title="More" aria-label="More options"><Icon name="more-horizontal" size={16} /></summary>
       <div className={`safety-menu-pop ${align === 'left' ? 'left' : ''}`}>
-        <button type="button" onClick={report}>🚩 Report {kind}</button>
-        {authorId && <button type="button" onClick={block}>🚫 Block {authorName || 'member'}</button>}
+        <button type="button" onClick={report}><span className="icon-label"><Icon name="flag" size={14} /> Report {kind}</span></button>
+        {authorId && <button type="button" onClick={block}><span className="icon-label"><Icon name="ban" size={14} /> Block {authorName || 'member'}</span></button>}
       </div>
     </details>
   );
