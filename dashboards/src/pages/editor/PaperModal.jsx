@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../../api.js';
 import { Modal, Button, Field, Badge } from '../../components/ui.jsx';
 import { Embed, embedSrc } from '../../components/embed.jsx';
+import Icon from '../../components/Icon.jsx';
 
 // Human-readable label for the role that left a decision, so the feedback chain
 // reads clearly (Reviews Editor / Senior Editor / Editor-in-Chief).
@@ -183,7 +184,7 @@ function PaperInfo({ paper, showAuthor }) {
       )}
       <p>
         <a href={paper.pdfUrl} target="_blank" rel="noreferrer">
-          📄 Open paper PDF (Google Drive)
+          <span className="icon-label"><Icon name="file-text" size={16} /> Open paper PDF (Google Drive)</span>
         </a>
       </p>
       {embedSrc(paper.pdfUrl) && <Embed url={paper.pdfUrl} height={420} title="Paper preview" />}
