@@ -24,6 +24,7 @@ function progressOf(p) {
 // applicants to their listings here.
 export default function MyProjects() {
   const { user } = useAuth();
+  const isIndependent = (user?.tags || []).includes('independent_researcher');
   const [projects, setProjects] = useState(null);
   useEffect(() => { api.myProjects().then(setProjects).catch(() => setProjects([])); }, []);
 
@@ -32,8 +33,13 @@ export default function MyProjects() {
 
   return (
     <div>
-      <h1 className="page-title">My Projects</h1>
-      <p className="page-sub">Projects you lead and projects you've joined — all in one place.</p>
+      <div className="card-row" style={{ alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="page-title">My Projects</h1>
+          <p className="page-sub">Projects you lead and projects you've joined — all in one place.</p>
+        </div>
+        {isIndependent && <Link className="btn btn-primary btn-sm" to="/researcher/independent" style={{ flex: 'none' }}>+ Add a project</Link>}
+      </div>
 
       <Applicants />
 
