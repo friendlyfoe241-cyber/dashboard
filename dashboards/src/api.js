@@ -108,6 +108,11 @@ export const api = {
   adminDeletePublication: (id) => request(`/admin/publications/${id}`, { method: 'DELETE' }),
   adminArchiveQueue: () => request('/admin/archive-queue'),
   verifyPublication: (id, status) => request(`/admin/publications/${id}/verify`, { method: 'POST', body: { status } }),
+  // Independent project proposals (Unit 6). The Moderator console feature-detects
+  // these — if the backend doesn't expose the endpoints yet it falls back to a
+  // "coming soon" state instead of erroring.
+  adminProposals: () => request('/admin/proposals'),
+  reviewProposal: (id, status, feedback) => request(`/admin/proposals/${id}`, { method: 'POST', body: { status, feedback } }),
   adminEditPublication: (id, body) => request(`/admin/publications/${id}`, { method: 'PUT', body }),
   featurePublication: (id, featured) => request(`/admin/publications/${id}/feature`, { method: 'POST', body: { featured } }),
   setSettings: (body) => request('/editor/settings', { method: 'PUT', body }),
