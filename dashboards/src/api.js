@@ -133,6 +133,8 @@ export const api = {
     return request(`/journal/publications${qs ? `?${qs}` : ''}`);
   },
   recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
+  article: (id) => request(`/journal/article/${encodeURIComponent(id)}`),
+  tagPublication: (id, body) => request(`/journal/publications/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),

@@ -17,6 +17,7 @@ const EditorApp = lazy(() => import('./pages/editor/EditorApp.jsx'));
 const ModeratorApp = lazy(() => import('./pages/moderator/ModeratorApp.jsx'));
 const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
 const Archive = lazy(() => import('./pages/Archive.jsx'));
+const ArticleHero = lazy(() => import('./pages/ArticleHero.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/forgot" element={<ForgotPassword />} />
         {/* Public, no login required: the archive + member profiles. */}
         <Route path="/archive" element={<Archive />} />
+        <Route path="/article/:id" element={<ArticleHero />} />
         <Route path="/p/:key" element={<PublicProfile />} />
         <Route path="/verify-certificate" element={<VerifyCertificate />} />
         <Route path="/" element={<HomeRedirect />} />

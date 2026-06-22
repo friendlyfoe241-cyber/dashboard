@@ -168,6 +168,9 @@ function PaperDetail({ p }) {
           ) : p.pdfUrl ? (
             <a className="btn btn-primary btn-sm" href={p.pdfUrl} target="_blank" rel="noreferrer">Read the full paper →</a>
           ) : null}
+          <p style={{ marginTop: '0.7rem' }}>
+            <Link className="btn btn-ghost btn-sm" to={`/article/${p.id || p.doi}`}>Open full article page →</Link>
+          </p>
         </div>
 
         <aside className="arx-side">

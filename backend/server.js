@@ -583,6 +583,22 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   res.json(pub);
 }));
 
+// Full article page (hero) — public; if a token is present we resolve the viewer
+// so an author/staff sees the "tag accounts" controls.
+app.get('/api/journal/article/:id', wrap((req, res) => {
+  const header = req.headers.authorization || '';
+  const viewer = userFromToken(header.startsWith('Bearer ') ? header.slice(7) : null);
+  const view = store.articleView(req.params.id, viewer?.id || null);
+  if (!view) return res.status(404).json({ error: 'Article not found' });
+  res.json(view);
+}));
+
+// Tag / untag Synthica accounts on a publication (authors of the paper or staff).
+app.post('/api/journal/publications/:id/tags', requireAuth, wrap((req, res) => {
+  const { addUserIds, removeUserIds } = req.body || {};
+  res.json(store.tagPublicationAccounts({ pubId: req.params.id, actorId: req.user.id, addUserIds, removeUserIds }));
+}));
+
 app.post('/api/journal/publications/:id/access', wrap((req, res) => {
   const accesses = store.recordPublicationAccess(req.params.id);
   if (accesses === null) return res.status(404).json({ error: 'Publication not found' });

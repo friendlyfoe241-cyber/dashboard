@@ -512,7 +512,7 @@ const getUserBySlug = (slug) => [...db.editors, ...db.researchers].find((u) => u
 
 function publicProfileOf(u) {
   const publications = db.publications
-    .filter((p) => p.authorUserId === u.id || (p.authorUserIds || []).includes(u.id))
+    .filter((p) => p.authorUserId === u.id || (p.authorUserIds || []).includes(u.id) || (p.taggedUserIds || []).includes(u.id))
     .map((p) => ({
       doi: p.doi, title: p.title, category: p.category, publishedAt: p.publishedAt,
       articleType: p.articleType, pdfUrl: p.pdfUrl || '', sourceUrl: p.sourceUrl || '',
@@ -575,7 +575,7 @@ export function recordProfileView(key, viewerId) {
   schedulePersist();
 }
 
-const pubCountFor = (userId) => db.publications.filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId)).length;
+const pubCountFor = (userId) => db.publications.filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId) || (p.taggedUserIds || []).includes(userId)).length;
 const refCountFor = (userId) => db.researchers.filter((r) => r.referredBy === userId).length;
 
 // Achievement badges, computed from a member's activity.
@@ -1674,12 +1674,67 @@ const isVerifiedPub = (p) => p.verified !== false;
 export const listPublications = () => db.publications.filter(isVerifiedPub);
 export const getPublication = (id) => db.publications.find((p) => p.id === id || p.doi === id) || null;
 
+// --- article page (Nature-style hero) + account tagging --------------------
+
+// A compact public card for a tagged/linked Synthica account.
+function accountCard(userId) {
+  const u = getUserById(userId);
+  if (!u) return null;
+  return { id: u.id, name: u.name, slug: u.slug || u.id, avatarUrl: u.avatarUrl || '', role: roleDisplay(u) };
+}
+
+// Who may tag accounts on a paper: staff, or one of its linked authors.
+const canTagPublication = (actor, pub) =>
+  !!actor && (isStaff(actor) || pub.authorUserId === actor.id || (pub.authorUserIds || []).includes(actor.id));
+
+// Full article payload for the hero page: the publication plus resolved author
+// + tagged-account cards, a "can I tag" flag, and a few related papers.
+export function articleView(idOrDoi, viewerId) {
+  const pub = getPublication(idOrDoi);
+  if (!pub || pub.verified === false) return null;
+  const viewer = viewerId ? getUserById(viewerId) : null;
+  // Authors that map to a real account become profile links.
+  const authors = (pub.authors || []).map((a) => {
+    const uid = a.userId || (pub.authors.length === 1 ? pub.authorUserId : null);
+    const card = uid ? accountCard(uid) : null;
+    return { name: a.name, affiliation: a.affiliation || '', account: card };
+  });
+  const taggedAccounts = [...new Set(pub.taggedUserIds || [])].map(accountCard).filter(Boolean);
+  const related = db.publications
+    .filter((p) => isVerifiedPub(p) && p.id !== pub.id && p.category === pub.category)
+    .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
+    .slice(0, 4)
+    .map((p) => ({ id: p.id, doi: p.doi, title: p.title, category: p.category, articleType: p.articleType, publishedAt: p.publishedAt }));
+  return { ...pub, authors, taggedAccounts, related, canTag: canTagPublication(viewer, pub) };
+}
+
+// Tag (credit/link) Synthica accounts on a publication so it surfaces on their
+// profiles + dashboards. Authors of the paper or staff can manage tags.
+export function tagPublicationAccounts({ pubId, actorId, addUserIds = [], removeUserIds = [] }) {
+  const pub = getPublication(pubId);
+  if (!pub) throw httpError(404, 'Publication not found');
+  const actor = getUserById(actorId);
+  if (!canTagPublication(actor, pub)) throw httpError(403, 'Only an author or staff can tag accounts on this paper');
+  if (!Array.isArray(pub.taggedUserIds)) pub.taggedUserIds = [];
+  for (const uid of Array.isArray(addUserIds) ? addUserIds : []) {
+    if (uid && getUserById(uid) && !pub.taggedUserIds.includes(uid)) {
+      pub.taggedUserIds.push(uid);
+      if (uid !== actorId) pushNotif(uid, { type: 'paper', title: 'You were tagged on a paper', body: pub.title, link: `/article/${pub.id}` });
+    }
+  }
+  const remove = new Set(Array.isArray(removeUserIds) ? removeUserIds : []);
+  pub.taggedUserIds = pub.taggedUserIds.filter((uid) => !remove.has(uid)).slice(0, 30);
+  recordAudit(actor, 'tag_paper_accounts', `${pub.title} (${pub.taggedUserIds.length} tagged)`);
+  schedulePersist();
+  return articleView(pub.id, actorId);
+}
+
 // Admin/auditor views: the full set, plus the pending self-archive queue.
 export const adminListPublications = () => [...db.publications].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 export const listArchiveQueue = () => db.publications.filter((p) => p.source === 'self' && p.verified === false);
 export const myPublications = (userId) =>
   db.publications
-    .filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId))
+    .filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId) || (p.taggedUserIds || []).includes(userId))
     .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 export const listProjects = () => db.projects;
 export const getProject = (id) => db.projects.find((p) => p.id === id) || null;
