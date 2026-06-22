@@ -6,7 +6,8 @@ import { Card, Badge, Button, EmptyState } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 
 // Projects the researcher is part of (also surfaced on Home). Leads also see
-// applicants to their listings here.
+// applicants to their listings here. As a member you see the projects you've
+// joined with their status and task progress (ROLE_WORKFLOWS §6.1).
 export default function MyProjects() {
   const { user } = useAuth();
   const isLead = (user?.tags || []).includes('lead_researcher');
@@ -26,22 +27,46 @@ export default function MyProjects() {
 
       {isLead && <Applicants />}
       {projects.length === 0 ? (
-        <EmptyState>You're not on any projects yet — find one in <Link to="/researcher/opportunities">Opportunities</Link>.</EmptyState>
+        <EmptyState>You're not on any projects yet — find one in the <Link to="/researcher/hub">Research Hub</Link> and apply to join a team.</EmptyState>
       ) : (
         <div className="grid grid-3">
           {projects.map((p) => (
-            <Link key={p.id} to={`/researcher/project/${p.id}`} style={{ color: 'inherit' }}>
-              <Card className="paper-card">
-                <Badge>{p.category}</Badge>
-                <h3>{p.title}</h3>
-                <p className="paper-meta">{p.members.length} members · {p.tasks.length} tasks</p>
-                <span className="label-up">Open project →</span>
-              </Card>
-            </Link>
+            <ProjectCard key={p.id} project={p} leadId={user?.id} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+// A project the member is on: status, members, and live task progress.
+function ProjectCard({ project: p, leadId }) {
+  const tasks = p.tasks || [];
+  const done = tasks.filter((t) => t.done || t.status === 'done').length;
+  const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+  const isLead = p.leadId === leadId;
+  const status = p.status || 'Active';
+  return (
+    <Link to={`/researcher/project/${p.id}`} style={{ color: 'inherit' }}>
+      <Card className="paper-card">
+        <div className="card-row" style={{ marginBottom: '0.4rem' }}>
+          <Badge>{p.category}</Badge>
+          <span className="row" style={{ gap: '0.3rem' }}>
+            {isLead ? <Badge tone="gold">Lead</Badge> : <Badge tone="gray">Member</Badge>}
+            <span className="muted" style={{ fontSize: '0.72rem' }}>{status}</span>
+          </span>
+        </div>
+        <h3>{p.title}</h3>
+        <p className="paper-meta">{(p.members?.length ?? 0)} members · {tasks.length} task{tasks.length === 1 ? '' : 's'}</p>
+        {tasks.length > 0 && (
+          <div style={{ margin: '0.5rem 0' }}>
+            <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.2rem' }}>{done}/{tasks.length} tasks done</div>
+            <div className="progress"><span style={{ width: `${pct}%` }} /></div>
+          </div>
+        )}
+        <span className="label-up">Open project →</span>
+      </Card>
+    </Link>
   );
 }
 
