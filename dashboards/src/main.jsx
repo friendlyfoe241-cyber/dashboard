@@ -5,6 +5,7 @@ import App from './App.jsx';
 import { AuthProvider } from './auth.jsx';
 import { ToastProvider } from './components/toast.jsx';
 import './styles.css';
+import '../../shared/design-system.css';
 
 // Apply the saved (or OS-preferred) theme before first paint to avoid a flash.
 try {

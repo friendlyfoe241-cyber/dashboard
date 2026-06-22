@@ -16,10 +16,10 @@ export default function ModeratorApp() {
   if (!allowed) return <Navigate to="/" replace />;
 
   const nav = [
-    { to: '/moderator', label: 'Moderator desk', icon: '🛡️', end: true },
-    { to: '/archive', label: 'Archive', icon: '📚' },
+    { to: '/moderator', label: 'Moderator desk', icon: 'shield', end: true },
+    { to: '/archive', label: 'Archive', icon: 'archive' },
     { spacer: true },
-    { to: '/moderator/account', label: 'Account', icon: '👤' },
+    { to: '/moderator/account', label: 'Account', icon: 'user' },
   ];
 
   return (

@@ -32,6 +32,8 @@ export const RESEARCHER_TAGS = {
   ASSOCIATE_RESEARCHER: 'associate_researcher',
   LEAD_RESEARCHER: 'lead_researcher',
   INDEPENDENT_RESEARCHER: 'independent_researcher',
+  // Subject-matter advisor researchers can book for 1:1 calls (ROLE_WORKFLOWS §7).
+  EXPERTISE_MENTOR: 'expertise_mentor',
 };
 
 // A paper's position in the review pipeline. Declines short-circuit to `rejected`.
