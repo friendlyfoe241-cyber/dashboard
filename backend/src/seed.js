@@ -632,31 +632,6 @@ researchers[4].availability = mentorSlots([3, 6], 14); // Casey
 // at runtime when a researcher books a slot.
 export const mentorBookings = [];
 
-// Casey already leads a chapter + is an associate researcher — give them the
-// mentor tag too, so a multi-tag account also reaches the mentor dashboard.
-researchers[4].tags = [...new Set([...researchers[4].tags, RESEARCHER_TAGS.EXPERTISE_MENTOR])];
-researchers[4].specialties = ['Chemistry', 'Lab Safety', 'Data Analysis'];
-researchers[4].mentorBio = 'Chapter leader and lab veteran — ask me about running safe experiments and presenting your data clearly.';
-
-// Build future-dated availability slots for the mentors so the directory always
-// shows bookable times. Slots are at 16:00 UTC on the next several weekdays.
-function mentorSlots(dayOffsets, hour = 16) {
-  return dayOffsets.map((d) => {
-    const dt = new Date();
-    dt.setUTCHours(hour, 0, 0, 0);
-    dt.setUTCDate(dt.getUTCDate() + d);
-    return { id: id('slot'), slot: dt.toISOString(), booked: false };
-  });
-}
-researchers.find((r) => r.username === 'maya').availability = mentorSlots([2, 3, 5, 7], 15);
-researchers.find((r) => r.username === 'omar').availability = mentorSlots([1, 4, 6], 18);
-researchers.find((r) => r.username === 'testmentor').availability = mentorSlots([2, 4, 8], 17);
-researchers[4].availability = mentorSlots([3, 6], 14); // Casey
-
-// In-app mentor bookings (researcher ↔ mentor 1:1 calls). Seeded empty; created
-// at runtime when a researcher books a slot.
-export const mentorBookings = [];
-
 // task(title, type, assignedTo, status, opts)
 function task(title, type, assignedTo, status, opts = {}) {
   return {
