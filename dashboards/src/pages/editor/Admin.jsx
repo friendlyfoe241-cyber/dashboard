@@ -4,6 +4,7 @@ import { Card, Badge, Button, Field } from '../../components/ui.jsx';
 import { useToast } from '../../components/toast.jsx';
 import { useAuth } from '../../auth.jsx';
 import NewsPoster from '../../components/NewsPoster.jsx';
+import Icon from '../../components/Icon.jsx';
 
 // Director-only control center: analytics, integrations (API keys/webhooks),
 // and application review (the "auditor" function).
@@ -41,8 +42,8 @@ function EmailStatusBanner() {
   useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
   if (!cfg || cfg.emailConfigured !== false) return null;
   return (
-    <div className="login-error" style={{ background: '#fffbeb', color: '#92400e', borderColor: '#fde68a', marginBottom: '1rem' }}>
-      ⚠️ Email delivery isn’t configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won’t actually send. Set it in your backend env to enable them.
+    <div className="login-error alert-warning" style={{ marginBottom: '1rem' }}>
+      <span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured (no <code>RESEND_API_KEY</code>). Password-reset and verification emails won't actually send. Set it in your backend env to enable them.</span>
     </div>
   );
 }
@@ -144,7 +145,7 @@ function People({ isDirector }) {
                   )}
                   <div className="row" style={{ marginTop: '0.3rem' }}>
                     {(u.tags || []).map((t) => (
-                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} ✕</button>
+                      <button key={t} className="badge badge-blue" style={{ cursor: 'pointer', border: 'none' }} title="Click to remove" onClick={() => removeTag(u, t)}>{t} <Icon name="x" size={12} /></button>
                     ))}
                   </div>
                 </div>
@@ -164,23 +165,10 @@ function People({ isDirector }) {
           ))}
           {users.length > visibleCount && (
             <button
+              type="button"
+              className="btn btn-ghost btn-sm"
               onClick={() => setVisibleCount((c) => Math.min(c + 5, users.length))}
-              style={{
-                marginTop: '0.5rem',
-                display: 'block',
-                width: '100%',
-                padding: '0.5rem 1rem',
-                background: 'transparent',
-                border: '1.5px solid #2589ed',
-                borderRadius: '8px',
-                color: '#2589ed',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseOver={(e) => { e.target.style.background = '#f0f7ff'; }}
-              onMouseOut={(e) => { e.target.style.background = 'transparent'; }}
+              style={{ marginTop: '0.5rem', width: '100%' }}
             >
               Show more ({users.length - visibleCount} remaining)
             </button>
@@ -360,14 +348,19 @@ function Bars({ data, labels = {}, tone = 'blue' }) {
 
 function AnalyticsCards() {
   const [a, setA] = useState(null);
-  useEffect(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
-  if (!a) return null;
+  const load = useCallback(() => { api.adminAnalytics().then(setA).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!a) return <Card><p className="muted" style={{ margin: 0 }}>Loading analytics…</p></Card>;
+  const pipeline = a.pipelineSubmissions ?? a.submissions ?? 0;
+  const pendingApps = a.pendingApplications ?? 0;
+  const pendingPapers = a.pendingPapers ?? 0;
+  const pendingTotal = a.pendingReviews ?? (pendingApps + pendingPapers);
   const kpis = [
-    { icon: '👥', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
-    { icon: '📄', label: 'Published papers', value: a.published, sub: `${a.submissions} submissions in pipeline` },
-    { icon: '🧪', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
-    { icon: '👁', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
-    { icon: '🪪', label: 'Pending reviews', value: (a.pendingApplications || 0) + (a.pendingPapers || 0), sub: `${a.pendingApplications} applications · ${a.pendingPapers || 0} papers`, hot: (a.pendingApplications || 0) + (a.pendingPapers || 0) > 0 },
+    { icon: 'users', label: 'Members', value: a.users, sub: `${a.researchers} researchers · ${a.editors} editors` },
+    { icon: 'file-text', label: 'Published papers', value: a.published, sub: `${pipeline} in editorial pipeline` },
+    { icon: 'flask', label: 'Active projects', value: a.projects, sub: `${a.chapters} chapters worldwide` },
+    { icon: 'eye', label: 'Article reads', value: (a.totalAccesses || 0).toLocaleString(), sub: 'all-time accesses' },
+    { icon: 'id-card', label: 'Pending reviews', value: pendingTotal, sub: `${pendingApps} applications · ${pendingPapers} papers`, hot: pendingTotal > 0 },
   ];
   return (
     <div style={{ marginBottom: '1.5rem' }}>
@@ -375,7 +368,7 @@ function AnalyticsCards() {
       <div className="kpi-grid">
         {kpis.map((k) => (
           <div key={k.label} className={`kpi ${k.hot ? 'kpi-hot' : ''}`}>
-            <span className="kpi-icon">{k.icon}</span>
+            <span className="kpi-icon"><Icon name={k.icon} size={22} /></span>
             <div className="kpi-value">{k.value}</div>
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-sub">{k.sub}</div>
@@ -515,7 +508,7 @@ function AdminPubRow({ p, onChanged, onRemove }) {
   const [busy, setBusy] = useState(false);
 
   const feature = () =>
-    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive ⭐'); onChanged(); }).catch((e) => toast.error(e.message));
+    api.featurePublication(p.id, !p.featured).then(() => { toast.success(p.featured ? 'Unfeatured' : 'Featured at the top of the archive'); onChanged(); }).catch((e) => toast.error(e.message));
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -528,12 +521,12 @@ function AdminPubRow({ p, onChanged, onRemove }) {
       <div className="card-row">
         <div style={{ minWidth: 0 }}>
           <strong>{p.title}</strong>{' '}
-          {p.featured && <Badge tone="gold">⭐ featured</Badge>}{' '}
+          {p.featured && <Badge tone="gold"><span className="icon-label"><Icon name="star" size={12} /> featured</span></Badge>}{' '}
           {p.verified === false && <Badge tone="gold">unverified</Badge>} <Badge tone="gray">{p.source || 'editorial'}</Badge>
           <div className="muted" style={{ fontSize: '0.8rem' }}>{(p.authors || []).map((a) => a.name).join(', ')} · {p.category} · {p.doi}</div>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
-          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? '★ Unfeature' : '☆ Feature'}</Button>
+          <Button className="btn-sm" variant={p.featured ? 'primary' : 'ghost'} onClick={feature}>{p.featured ? <span className="icon-label"><Icon name="star" size={14} /> Unfeature</span> : <span className="icon-label"><Icon name="star-outline" size={14} /> Feature</span>}</Button>
           <Button className="btn-sm" variant="ghost" onClick={() => setEditing((x) => !x)}>{editing ? 'Cancel' : 'Edit'}</Button>
           <Button variant="reject" className="btn-sm" onClick={() => onRemove(p.id)}>Delete</Button>
         </div>
@@ -621,7 +614,7 @@ function UploadForm({ onDone }) {
                 <option value="">link profile…</option>
                 {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove">✕</button>}
+              {authors.length > 1 && <button type="button" className="link-btn" onClick={() => setAuthors((xs) => xs.filter((_, j) => j !== i))} aria-label="Remove"><Icon name="x" size={14} /></button>}
             </div>
           ))}
         </div>
@@ -661,8 +654,9 @@ function Applications() {
   const load = useCallback(() => { api.adminApplications().then(setApps).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
 
-  const review = (id, status, assignTag) =>
-    api.reviewApplication(id, status, assignTag).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
+  // `extra` carries an optional rejection feedback note (used by project proposals).
+  const review = (id, status, assignTag, extra) =>
+    api.reviewApplication(id, status, assignTag, extra).then(() => { load(); toast.success(`Application ${status}`); }).catch((e) => toast.error(e.message));
 
   const onboarding = apps.filter((a) => a.kind === 'onboarding' && a.status === 'pending');
   const pendingOnboardingCount = onboarding.length;
@@ -688,7 +682,7 @@ function Applications() {
       {pendingOthersCount === 0 ? (
         <Card><p className="muted">0 pending</p></Card>
       ) : (
-        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role} />)}</div>
+        <div className="stack">{others.map((a) => <AppRow key={a.id} a={a} review={review} assignable={!a.role && a.kind !== 'proposal'} />)}</div>
       )}
     </div>
   );
@@ -698,11 +692,20 @@ function Applications() {
 // Onboarding rows default the picker to the system's recommended role.
 function AppRow({ a, review, assignable }) {
   const [tag, setTag] = useState(a.recommendation?.tag || 'independent_researcher');
+  const isProposal = a.kind === 'proposal';
+  // Project proposals get rejected with feedback so the member can revise (§6.2).
+  const reject = () => {
+    if (!isProposal) return review(a.id, 'rejected');
+    const note = window.prompt('Feedback for the researcher (what to revise):', '');
+    if (note === null) return; // cancelled
+    review(a.id, 'rejected', undefined, note);
+  };
   return (
     <Card>
       <div className="card-row">
         <div>
-          <strong>{a.userName}</strong> — {a.role || (a.kind === 'onboarding' ? 'new member' : 'project application')}
+          <strong>{a.userName}</strong> — {a.role || (isProposal ? 'project proposal' : a.kind === 'onboarding' ? 'new member' : 'project application')}
+          {isProposal && a.category && <> · <Badge tone="gray">{a.category}</Badge></>}
           {a.assignedTag && <> · <Badge tone="green">{a.assignedTag}</Badge></>}
           {a.resumeUrl ? <> · <a href={a.resumeUrl} target="_blank" rel="noreferrer">résumé</a></> : (a.kind === 'onboarding' && <> · <span className="muted" style={{ fontSize: '0.8rem' }}>no résumé</span></>)}
           {a.kind === 'onboarding' && (
@@ -730,6 +733,13 @@ function AppRow({ a, review, assignable }) {
               )}
             </div>
           )}
+          {isProposal && (
+            <div className="info-block" style={{ marginTop: '0.4rem' }}>
+              <div style={{ fontWeight: 700 }}>{a.title}</div>
+              {a.description && <div style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>{a.description}</div>}
+              {a.methodology && <div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}><strong>Methodology:</strong> {a.methodology}</div>}
+            </div>
+          )}
           {a.answers && (
             <details style={{ marginTop: '0.3rem' }}>
               <summary className="muted" style={{ cursor: 'pointer' }}>View application</summary>
@@ -752,7 +762,7 @@ function AppRow({ a, review, assignable }) {
                 </select>
               )}
               <Button variant="approve" className="btn-sm" onClick={() => review(a.id, 'approved', assignable ? tag : undefined)}>Approve</Button>
-              <Button variant="reject" className="btn-sm" onClick={() => review(a.id, 'rejected')}>Reject</Button>
+              <Button variant="reject" className="btn-sm" onClick={reject}>Reject</Button>
             </>
           ) : (
             <Badge tone={a.status === 'approved' ? 'green' : 'red'}>{a.status}</Badge>
@@ -974,7 +984,50 @@ function MemberAdminActions({ u, onChanged }) {
   );
 }
 
-// Community moderation: review and remove recent posts.
+// Director-only: branded email broadcast to a member segment.
+function BroadcastEmail() {
+  const toast = useToast();
+  const [cfg, setCfg] = useState(null);
+  const [f, setF] = useState({ subject: '', heading: '', body: '', audience: 'all' });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.config().then(setCfg).catch(() => {}); }, []);
+  const send = async (e) => {
+    e.preventDefault();
+    if (!window.confirm(`Send this email to ${f.audience === 'all' ? 'all members' : f.audience}?`)) return;
+    setBusy(true);
+    try {
+      const r = await api.adminBroadcast(f);
+      toast.success(`Broadcast sent to ${r.sent} ${r.audience}`);
+      setF({ subject: '', heading: '', body: '', audience: 'all' });
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>Email broadcast</h2>
+      <Card>
+        {cfg && cfg.emailConfigured === false && (
+          <p className="muted alert-warning" style={{ marginTop: 0 }}><span className="icon-label"><Icon name="alert" size={16} /> Email delivery isn't configured — broadcasts will be logged only.</span></p>
+        )}
+        <form onSubmit={send}>
+          <div className="grid grid-2">
+            <Field label="Subject"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} required /></Field>
+            <Field label="Audience">
+              <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
+                <option value="all">All members</option>
+                <option value="researchers">Researchers</option>
+                <option value="editors">Editors / staff</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Heading (optional — defaults to subject)"><input value={f.heading} onChange={(e) => setF({ ...f, heading: e.target.value })} /></Field>
+          <Field label="Message (blank line = new paragraph)"><textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} required placeholder="Hey everyone, we just launched…" /></Field>
+          <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send broadcast'}</Button>
+          <span className="muted" style={{ marginLeft: '0.6rem', fontSize: '0.8rem' }}>Sent as a branded HTML email from your account.</span>
+        </form>
+      </Card>
+    </div>
+  );
+}
 // The reports queue: content members have flagged, with one-click resolution.
 function ReportsQueue() {
   const toast = useToast();
@@ -994,7 +1047,7 @@ function ReportsQueue() {
         Reports queue {reports.length > 0 && <Badge tone="gold">{reports.length} open</Badge>}
       </h2>
       {reports.length === 0 ? (
-        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. 🎉</p></Card>
+        <Card><p className="muted" style={{ margin: 0 }}>No open reports — nothing to review. <span className="icon-label"><Icon name="party" size={16} /></span></p></Card>
       ) : (
         <div className="stack">
           {reports.map((r) => (
