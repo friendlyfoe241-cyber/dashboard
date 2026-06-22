@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, RequireAuth } from './auth.jsx';
+import { getDefaultHomePath } from './views.js';
 import Login from './pages/Login.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import UikitDemo from './pages/__UikitDemo.jsx';
+import PageLoader from './components/PageLoader.jsx';
 
 // Route-level code splitting: the two dashboards (and heavier public pages)
 // load on demand, so a researcher never downloads the editor app and first
@@ -19,19 +20,14 @@ const Archive = lazy(() => import('./pages/Archive.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
-const PageFallback = () => <div className="page-loading"><div className="spinner" /></div>;
+const PageFallback = () => <PageLoader label="Loading workspace" />;
 
 // Send a logged-in user to the right dashboard based on their account kind.
 function HomeRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="page-loading">
-      <div className="spinner" />
-      <p className="home-link"><Link to="/">go home</Link></p>
-    </div>
-  );
+  if (loading) return <PageLoader label="Signing you in" />;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.kind === 'editor' ? '/editor' : '/researcher'} replace />;
+  return <Navigate to={getDefaultHomePath(user)} replace />;
 }
 
 export default function App() {
@@ -39,7 +35,6 @@ export default function App() {
     <ErrorBoundary>
       <Suspense fallback={<PageFallback />}>
       <Routes>
-        <Route path="/uikit-demo" element={<UikitDemo />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify" element={<Verify />} />
@@ -63,6 +58,14 @@ export default function App() {
           element={
             <RequireAuth kind="researcher">
               <ResearcherApp />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/moderator/*"
+          element={
+            <RequireAuth kind="editor">
+              <ModeratorApp />
             </RequireAuth>
           }
         />
