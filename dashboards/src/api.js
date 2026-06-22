@@ -144,6 +144,7 @@ export const api = {
   publish: (body) => request('/editor/director/publish', { method: 'POST', body }),
   addComment: (id, body) => request(`/editor/papers/${id}/comments`, { method: 'POST', body: { body } }),
   workload: () => request('/editor/director/workload'),
+  reassignBoard: () => request('/editor/director/reassign'),
   reassign: (body) => request('/editor/director/reassign', { method: 'POST', body }),
 
   // Track 4 — researcher
