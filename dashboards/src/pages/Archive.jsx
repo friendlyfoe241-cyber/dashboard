@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { getDefaultHomePath } from '../views.js';
@@ -40,9 +40,10 @@ function citations(p) {
 // Synthica Archive — the public, no-login record of every verified paper.
 export default function Archive() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
   const [pubs, setPubs] = useState([]);
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
+  const [cat, setCat] = useState(params.get('subject') || '');
   const [openDoi, setOpenDoi] = useState(null);
 
   const load = useCallback(() => api.publications().then(setPubs).catch(() => {}), []);
@@ -63,6 +64,7 @@ export default function Archive() {
         <nav className="archive-topnav">
           <Link to="/" className="topbar-brand"><BrandMark size={22} />Synthica</Link>
           <span className="row" style={{ gap: '0.8rem' }}>
+            <Link className="btn btn-ghost btn-sm" to="/journal">Journal home</Link>
             {user
               ? <Link className="btn btn-ghost btn-sm" to={getDefaultHomePath(user)}>My dashboard</Link>
               : <Link className="btn btn-ghost btn-sm" to="/login">Sign in</Link>}

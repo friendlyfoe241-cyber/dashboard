@@ -134,6 +134,9 @@ export const api = {
   },
   recordPublicationAccess: (id) => request(`/journal/publications/${encodeURIComponent(id)}/access`, { method: 'POST' }),
   article: (id) => request(`/journal/article/${encodeURIComponent(id)}`),
+  journalOverview: () => request('/journal/overview'),
+  journalVolumes: () => request('/journal/volumes'),
+  journalIssue: (v, i) => request(`/journal/issue/${encodeURIComponent(v)}/${encodeURIComponent(i)}`),
   tagPublication: (id, body) => request(`/journal/publications/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
 
   // Track 3 — editor

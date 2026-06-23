@@ -1674,6 +1674,62 @@ const isVerifiedPub = (p) => p.verified !== false;
 export const listPublications = () => db.publications.filter(isVerifiedPub);
 export const getPublication = (id) => db.publications.find((p) => p.id === id || p.doi === id) || null;
 
+// --- journal home + volumes/issues (Phase 2) -------------------------------
+
+const pubCard = (p) => ({
+  id: p.id, doi: p.doi, title: p.title, category: p.category, articleType: p.articleType || 'Article',
+  abstract: p.abstract || '', authors: (p.authors || []).map((a) => a.name), publishedAt: p.publishedAt,
+  volume: p.volume, issue: p.issue, pages: p.pages, openAccess: p.openAccess !== false,
+  featured: p.featured === true, accesses: p.metrics?.accesses || 0,
+});
+
+// Everything the Journal landing page needs in one call.
+export function journalOverview() {
+  const pubs = listPublications().slice().sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  const featured = pubs.find((p) => p.featured) || pubs[0] || null;
+  const byVolume = new Map();
+  const bySubject = new Map();
+  for (const p of pubs) {
+    const v = p.volume || 1, i = p.issue || 1;
+    if (!byVolume.has(v)) byVolume.set(v, new Map());
+    byVolume.get(v).set(i, (byVolume.get(v).get(i) || 0) + 1);
+    if (p.category) bySubject.set(p.category, (bySubject.get(p.category) || 0) + 1);
+  }
+  const volumes = [...byVolume.entries()]
+    .map(([volume, issues]) => ({ volume, issues: [...issues.entries()].map(([issue, count]) => ({ issue, count })).sort((a, b) => b.issue - a.issue) }))
+    .sort((a, b) => b.volume - a.volume);
+  // The newest issue = highest volume, highest issue.
+  const latestVol = volumes[0];
+  const latestIssue = latestVol ? { volume: latestVol.volume, issue: latestVol.issues[0]?.issue || 1 } : null;
+  const currentIssue = latestIssue
+    ? pubs.filter((p) => (p.volume || 1) === latestIssue.volume && (p.issue || 1) === latestIssue.issue).map(pubCard)
+    : [];
+  return {
+    featured: featured ? pubCard(featured) : null,
+    recent: pubs.slice(0, 6).map(pubCard),
+    mostRead: [...pubs].sort((a, b) => (b.metrics?.accesses || 0) - (a.metrics?.accesses || 0)).slice(0, 5).map(pubCard),
+    currentIssue, latestIssue,
+    volumes,
+    subjects: [...bySubject.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
+    stats: { papers: pubs.length, volumes: volumes.length, subjects: bySubject.size },
+  };
+}
+
+export function listVolumes() {
+  return journalOverview().volumes;
+}
+
+// All articles in one issue, as a table of contents (grouped, ordered by pages).
+export function issueContents(volume, issue) {
+  const v = Number(volume), i = Number(issue);
+  const articles = listPublications()
+    .filter((p) => (p.volume || 1) === v && (p.issue || 1) === i)
+    .sort((a, b) => String(a.pages || '').localeCompare(String(b.pages || ''), undefined, { numeric: true }))
+    .map(pubCard);
+  return { volume: v, issue: i, count: articles.length, articles };
+}
+
+
 // --- article page (Nature-style hero) + account tagging --------------------
 
 // A compact public card for a tagged/linked Synthica account.

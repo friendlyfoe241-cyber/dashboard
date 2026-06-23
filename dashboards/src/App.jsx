@@ -18,6 +18,9 @@ const ModeratorApp = lazy(() => import('./pages/moderator/ModeratorApp.jsx'));
 const ResearcherApp = lazy(() => import('./pages/researcher/ResearcherApp.jsx'));
 const Archive = lazy(() => import('./pages/Archive.jsx'));
 const ArticleHero = lazy(() => import('./pages/ArticleHero.jsx'));
+const Journal = lazy(() => import('./pages/Journal.jsx'));
+const JournalVolumes = lazy(() => import('./pages/JournalVolumes.jsx'));
+const JournalIssue = lazy(() => import('./pages/JournalIssue.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
@@ -43,6 +46,9 @@ export default function App() {
         <Route path="/forgot" element={<ForgotPassword />} />
         {/* Public, no login required: the archive + member profiles. */}
         <Route path="/archive" element={<Archive />} />
+        <Route path="/journal" element={<Journal />} />
+        <Route path="/journal/volumes" element={<JournalVolumes />} />
+        <Route path="/journal/vol/:volume/issue/:issue" element={<JournalIssue />} />
         <Route path="/article/:id" element={<ArticleHero />} />
         <Route path="/p/:key" element={<PublicProfile />} />
         <Route path="/verify-certificate" element={<VerifyCertificate />} />

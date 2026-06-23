@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { useAuth } from '../auth.jsx';
-import { getDefaultHomePath } from '../views.js';
-import { Card, Badge, Button, Pfp } from '../components/ui.jsx';
-import Icon, { BrandMark } from '../components/Icon.jsx';
+import { Card, Badge, Pfp } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 import { embedSrc, imageSrc } from '../files.js';
 import { useToast } from '../components/toast.jsx';
+import { JournalMast, JournalFooter } from '../components/JournalChrome.jsx';
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
 
@@ -35,7 +34,6 @@ function citations(p) {
 // + actions rail. Authors and staff get inline account-tagging.
 export default function ArticleHero() {
   const { id } = useParams();
-  const { user } = useAuth();
   const [p, setP] = useState(null);
   const [missing, setMissing] = useState(false);
 
@@ -44,23 +42,14 @@ export default function ArticleHero() {
   useEffect(() => { if (id) api.recordPublicationAccess(id).catch(() => {}); }, [id]);
   useEffect(() => { if (p?.title) { document.title = `${p.title} · Synthica Journal`; } return () => { document.title = 'Synthica'; }; }, [p?.title]);
 
-  if (missing) return <div className="archive-page"><div className="archive-body"><h1 className="page-title">Article not found</h1><Link to="/archive">← Back to the Archive</Link></div></div>;
+  if (missing) return <div className="jr-page"><JournalMast /><div className="jr-body"><h1 className="page-title">Article not found</h1><Link to="/journal">← Back to the Journal</Link></div><JournalFooter /></div>;
   if (!p) return <div className="page-loading">Loading…</div>;
 
   const embed = embedSrc(p.pdfUrl);
 
   return (
-    <div className="archive-page">
-      <header className="archive-hero" style={{ paddingBottom: '1rem' }}>
-        <nav className="archive-topnav">
-          <Link to="/archive" className="topbar-brand"><BrandMark size={22} />Synthica</Link>
-          <span className="row" style={{ gap: '0.8rem' }}>
-            {user
-              ? <Link className="btn btn-ghost btn-sm" to={getDefaultHomePath(user)}>My dashboard</Link>
-              : <Link className="btn btn-ghost btn-sm" to="/login">Sign in</Link>}
-          </span>
-        </nav>
-      </header>
+    <div className="jr-page">
+      <JournalMast />
 
       <main className="art-wrap">
         {/* breadcrumb */}
@@ -135,6 +124,7 @@ export default function ArticleHero() {
           </aside>
         </div>
       </main>
+      <JournalFooter />
     </div>
   );
 }
