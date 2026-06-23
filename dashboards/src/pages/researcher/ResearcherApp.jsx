@@ -130,6 +130,8 @@ export default function ResearcherApp() {
     ] : []),
 
     { spacer: true, views: ['*'] },
+    { to: '/journal', label: 'Read Journal', icon: 'books', views: ['*'] },
+    { to: '/preprints', label: 'Preprints', icon: 'file-text', views: ['*'] },
     { to: '/archive', label: 'Archive', icon: 'archive', views: ['*'] },
     { to: '/researcher/account', label: 'Account', icon: 'user', views: ['*'] },
   ];

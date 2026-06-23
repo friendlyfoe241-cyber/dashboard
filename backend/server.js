@@ -604,6 +604,31 @@ app.post('/api/journal/publications/:id/tags', requireAuth, wrap((req, res) => {
   res.json(store.tagPublicationAccounts({ pubId: req.params.id, actorId: req.user.id, addUserIds, removeUserIds }));
 }));
 
+// --- Preprint server (author-posted, versioned, internal Synthica IDs) ------
+app.get('/api/preprints', wrap((req, res) => res.json(store.listPreprints({ category: req.query.category, q: req.query.q }))));
+app.get('/api/researcher/preprints', requireAuth, wrap((req, res) => res.json(store.myPreprints(req.user.id))));
+app.post('/api/preprints', requireAuth, wrap((req, res) => res.json(store.postPreprint({ userId: req.user.id, ...(req.body || {}) }))));
+app.get('/api/preprints/:id', wrap((req, res) => {
+  const header = req.headers.authorization || '';
+  const viewer = userFromToken(header.startsWith('Bearer ') ? header.slice(7) : null);
+  const view = store.preprintView(req.params.id, viewer?.id || null);
+  if (!view) return res.status(404).json({ error: 'Preprint not found' });
+  res.json(view);
+}));
+app.post('/api/preprints/:id/versions', requireAuth, wrap((req, res) => {
+  const { pdfUrl, note } = req.body || {};
+  res.json(store.addPreprintVersion({ preprintId: req.params.id, userId: req.user.id, pdfUrl, note }));
+}));
+app.post('/api/preprints/:id/access', wrap((req, res) => {
+  const n = store.recordPreprintAccess(req.params.id);
+  if (n === null) return res.status(404).json({ error: 'Preprint not found' });
+  res.json({ ok: true, accesses: n });
+}));
+app.post('/api/preprints/:id/tags', requireAuth, wrap((req, res) => {
+  const { addUserIds, removeUserIds } = req.body || {};
+  res.json(store.tagPreprintAccounts({ preprintId: req.params.id, actorId: req.user.id, addUserIds, removeUserIds }));
+}));
+
 app.post('/api/journal/publications/:id/access', wrap((req, res) => {
   const accesses = store.recordPublicationAccess(req.params.id);
   if (accesses === null) return res.status(404).json({ error: 'Publication not found' });

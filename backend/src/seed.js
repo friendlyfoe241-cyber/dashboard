@@ -994,6 +994,44 @@ export const competitions = [
   },
 ];
 
+// Preprints — author-posted, not peer-reviewed, versioned, internal Synthica IDs.
+const daysAgoIso = (d) => new Date(Date.now() - d * 864e5).toISOString();
+export const preprints = [
+  {
+    id: id('pre'),
+    synId: `SYN-${new Date().getFullYear()}-0001`,
+    title: 'Thermal tolerance thresholds in reef-building corals under marine heatwaves',
+    category: 'Biology',
+    abstract: 'We report bleaching-onset temperatures across three coral genera using a low-cost field sensor array, and propose a tolerance index that predicts colony survival two weeks ahead of visible bleaching.',
+    authors: [{ name: 'Sam Rivera', userId: leadId }, { name: 'Casey Wong', userId: caseyId }],
+    authorUserId: leadId,
+    authorUserIds: [leadId, caseyId],
+    taggedUserIds: [],
+    versions: [
+      { v: 1, pdfUrl: 'https://example.com/preprints/coral-thermal-v1.pdf', postedAt: daysAgoIso(12), note: 'Initial version' },
+      { v: 2, pdfUrl: 'https://example.com/preprints/coral-thermal-v2.pdf', postedAt: daysAgoIso(3), note: 'Added 2024 field season + reviewer-suggested controls' },
+    ],
+    linkedDoi: null,
+    postedAt: daysAgoIso(12),
+    accesses: 184,
+  },
+  {
+    id: id('pre'),
+    synId: `SYN-${new Date().getFullYear()}-0002`,
+    title: 'A lightweight transformer for on-device classification of citizen-science birdsong',
+    category: 'Computer Science',
+    abstract: 'We distill a birdsong classifier to 1.2M parameters that runs in real time on a phone, trading 1.8% accuracy for a 14× speedup — enabling offline field identification.',
+    authors: [{ name: 'Jordan Kim', userId: assocId }],
+    authorUserId: assocId,
+    authorUserIds: [assocId],
+    taggedUserIds: [],
+    versions: [{ v: 1, pdfUrl: 'https://example.com/preprints/birdsong-v1.pdf', postedAt: daysAgoIso(5), note: 'Initial version' }],
+    linkedDoi: null,
+    postedAt: daysAgoIso(5),
+    accesses: 92,
+  },
+];
+
 // Community feed — member-written posts (questions, opportunities, updates)
 // with likes and comments. Author name/avatar are resolved at read time.
 const hoursAgo = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();

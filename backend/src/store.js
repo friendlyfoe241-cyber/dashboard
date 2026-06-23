@@ -45,6 +45,7 @@ function buildSeed() {
     activities: clone(seed.activities || []),
     messages: clone(seed.messages || []),
     reports: clone(seed.reports || []),
+    preprints: clone(seed.preprints || []),
     // Expertise-mentor 1:1 bookings (ROLE_WORKFLOWS §7). Mentor profile + slots
     // live on the researcher record; this collection holds the booked calls.
     mentorBookings: clone(seed.mentorBookings || []),
@@ -1727,6 +1728,130 @@ export function issueContents(volume, issue) {
     .sort((a, b) => String(a.pages || '').localeCompare(String(b.pages || ''), undefined, { numeric: true }))
     .map(pubCard);
   return { volume: v, issue: i, count: articles.length, articles };
+}
+
+// --- preprint server (Phase 3) ---------------------------------------------
+// Author-posted, not peer-reviewed, versioned, citable instantly with an internal
+// Synthica ID (SYN-YYYY-NNNN). No DOI until/unless it's published in the journal.
+
+// Mint a sequential per-year preprint accession number.
+function mintSynId() {
+  if (!Array.isArray(db.preprints)) db.preprints = [];
+  const year = new Date().getFullYear();
+  const n = db.preprints.filter((p) => (p.synId || '').includes(`-${year}-`)).length + 1;
+  return `SYN-${year}-${String(n).padStart(4, '0')}`;
+}
+
+const getPreprint = (id) => (db.preprints || []).find((p) => p.id === id || p.synId === id) || null;
+const canEditPreprint = (actor, pp) => !!actor && (isStaff(actor) || pp.authorUserId === actor.id || (pp.authorUserIds || []).includes(actor.id));
+
+const preprintCard = (pp) => ({
+  id: pp.id, synId: pp.synId, title: pp.title, category: pp.category, abstract: pp.abstract || '',
+  authors: pp.authors || [], postedAt: pp.postedAt, version: (pp.versions || []).length || 1,
+  linkedDoi: pp.linkedDoi || null, accesses: pp.accesses || 0,
+});
+
+export function postPreprint({ userId, title, category, abstract, pdfUrl, coAuthorIds }) {
+  const u = getResearcherById(userId) || getUserById(userId);
+  if (!u) throw httpError(404, 'User not found');
+  if (u.approved === false) throw httpError(403, 'Your account is pending approval');
+  if (!title?.trim()) throw httpError(400, 'A title is required');
+  if (!Array.isArray(db.preprints)) db.preprints = [];
+  const at = now();
+  const safePdf = safeUrl(pdfUrl, 400);
+  const authorUserIds = [...new Set([userId, ...(Array.isArray(coAuthorIds) ? coAuthorIds : [])])].filter((id) => getUserById(id));
+  const pp = {
+    id: uid('pre'),
+    synId: mintSynId(),
+    title: title.trim().slice(0, 300),
+    category: CATEGORIES.includes(category) ? category : (category || ''),
+    abstract: String(abstract || '').trim().slice(0, 4000),
+    authors: authorUserIds.map((id) => ({ name: getUserById(id)?.name || 'Member', userId: id })),
+    authorUserId: userId,
+    authorUserIds,
+    taggedUserIds: [],
+    versions: [{ v: 1, pdfUrl: safePdf, postedAt: at, note: 'Initial version' }],
+    linkedDoi: null,
+    postedAt: at,
+    accesses: 0,
+  };
+  db.preprints.unshift(pp);
+  recordActivity(userId, 'preprint_posted', `posted the preprint "${pp.title}"`, `/preprints/${pp.id}`);
+  schedulePersist();
+  return preprintView(pp.id, userId);
+}
+
+export function addPreprintVersion({ preprintId, userId, pdfUrl, note }) {
+  const pp = getPreprint(preprintId);
+  if (!pp) throw httpError(404, 'Preprint not found');
+  if (!canEditPreprint(getUserById(userId), pp)) throw httpError(403, 'Only an author or staff can post a new version');
+  pp.versions = pp.versions || [];
+  pp.versions.push({ v: pp.versions.length + 1, pdfUrl: safeUrl(pdfUrl, 400), postedAt: now(), note: String(note || '').slice(0, 200) });
+  schedulePersist();
+  return preprintView(pp.id, userId);
+}
+
+export function listPreprints({ category, q } = {}) {
+  let list = [...(db.preprints || [])].sort((a, b) => new Date(b.postedAt) - new Date(a.postedAt));
+  if (category) list = list.filter((p) => p.category === category);
+  if (q) {
+    const needle = String(q).toLowerCase();
+    list = list.filter((p) => p.title.toLowerCase().includes(needle) || (p.authors || []).some((a) => a.name.toLowerCase().includes(needle)));
+  }
+  return list.map(preprintCard);
+}
+
+export const myPreprints = (userId) =>
+  (db.preprints || [])
+    .filter((p) => p.authorUserId === userId || (p.authorUserIds || []).includes(userId) || (p.taggedUserIds || []).includes(userId))
+    .sort((a, b) => new Date(b.postedAt) - new Date(a.postedAt))
+    .map(preprintCard);
+
+// Full preprint payload for its hero page (mirrors articleView).
+export function preprintView(idOrSyn, viewerId) {
+  const pp = getPreprint(idOrSyn);
+  if (!pp) return null;
+  const viewer = viewerId ? getUserById(viewerId) : null;
+  const authors = (pp.authors || []).map((a) => ({ name: a.name, account: a.userId ? accountCard(a.userId) : null }));
+  const taggedAccounts = [...new Set(pp.taggedUserIds || [])].map(accountCard).filter(Boolean);
+  const related = (db.preprints || [])
+    .filter((p) => p.id !== pp.id && p.category === pp.category)
+    .sort((a, b) => new Date(b.postedAt) - new Date(a.postedAt))
+    .slice(0, 4)
+    .map((p) => ({ id: p.id, synId: p.synId, title: p.title, category: p.category, postedAt: p.postedAt }));
+  const versions = [...(pp.versions || [])].sort((a, b) => b.v - a.v);
+  return {
+    id: pp.id, synId: pp.synId, title: pp.title, category: pp.category, abstract: pp.abstract,
+    authors, taggedAccounts, versions, linkedDoi: pp.linkedDoi || null, postedAt: pp.postedAt,
+    latestPdf: versions[0]?.pdfUrl || '', accesses: pp.accesses || 0, related,
+    canEdit: canEditPreprint(viewer, pp), canTag: canEditPreprint(viewer, pp),
+  };
+}
+
+export function recordPreprintAccess(idOrSyn) {
+  const pp = getPreprint(idOrSyn);
+  if (!pp) return null;
+  pp.accesses = (pp.accesses || 0) + 1;
+  schedulePersist();
+  return pp.accesses;
+}
+
+// Tag (credit) Synthica accounts on a preprint.
+export function tagPreprintAccounts({ preprintId, actorId, addUserIds = [], removeUserIds = [] }) {
+  const pp = getPreprint(preprintId);
+  if (!pp) throw httpError(404, 'Preprint not found');
+  if (!canEditPreprint(getUserById(actorId), pp)) throw httpError(403, 'Only an author or staff can tag accounts');
+  if (!Array.isArray(pp.taggedUserIds)) pp.taggedUserIds = [];
+  for (const uid of Array.isArray(addUserIds) ? addUserIds : []) {
+    if (uid && getUserById(uid) && !pp.taggedUserIds.includes(uid)) {
+      pp.taggedUserIds.push(uid);
+      if (uid !== actorId) pushNotif(uid, { type: 'paper', title: 'You were tagged on a preprint', body: pp.title, link: `/preprints/${pp.id}` });
+    }
+  }
+  const remove = new Set(Array.isArray(removeUserIds) ? removeUserIds : []);
+  pp.taggedUserIds = pp.taggedUserIds.filter((uid) => !remove.has(uid)).slice(0, 30);
+  schedulePersist();
+  return preprintView(pp.id, actorId);
 }
 
 

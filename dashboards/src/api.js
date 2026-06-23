@@ -137,6 +137,14 @@ export const api = {
   journalOverview: () => request('/journal/overview'),
   journalVolumes: () => request('/journal/volumes'),
   journalIssue: (v, i) => request(`/journal/issue/${encodeURIComponent(v)}/${encodeURIComponent(i)}`),
+  // preprints
+  preprints: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/preprints${qs ? `?${qs}` : ''}`); },
+  preprint: (id) => request(`/preprints/${encodeURIComponent(id)}`),
+  myPreprints: () => request('/researcher/preprints'),
+  postPreprint: (body) => request('/preprints', { method: 'POST', body }),
+  addPreprintVersion: (id, body) => request(`/preprints/${encodeURIComponent(id)}/versions`, { method: 'POST', body }),
+  recordPreprintAccess: (id) => request(`/preprints/${encodeURIComponent(id)}/access`, { method: 'POST' }),
+  tagPreprint: (id, body) => request(`/preprints/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
   tagPublication: (id, body) => request(`/journal/publications/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
 
   // Track 3 — editor
