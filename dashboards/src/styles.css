@@ -2417,3 +2417,10 @@ html[data-theme='dark'] .jr-published-banner { background: #052e22; border-color
 
 /* Preprint link block on the article rail */
 .art-preprint-link { padding-bottom: 0.9rem; margin-bottom: 0.9rem; border-bottom: 1px solid var(--border); }
+
+/* Featured band polish — soft glow + relief, shared by /journal and /archive */
+.jr-feature { position: relative; overflow: hidden; }
+.jr-feature::before { content: ''; position: absolute; width: 420px; height: 420px; right: -110px; top: -150px; border-radius: 50%; background: radial-gradient(circle, rgba(255,215,0,0.22), transparent 70%); pointer-events: none; }
+.jr-feature::after { content: ''; position: absolute; width: 300px; height: 300px; left: -120px; bottom: -160px; border-radius: 50%; background: radial-gradient(circle, rgba(120,180,251,0.25), transparent 70%); pointer-events: none; }
+.jr-feature-body { position: relative; z-index: 1; }
+.jr-art-doi { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.86em; opacity: 0.8; }

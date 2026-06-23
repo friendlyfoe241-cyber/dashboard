@@ -7,6 +7,7 @@
 // Run: `npm install && npm start` (defaults to http://localhost:4000).
 
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 
 import { login, issueToken, issuePurposeToken, verifyPurposeToken } from './src/auth.js';
@@ -33,6 +34,7 @@ const SITE_URL = (process.env.SITE_URL || 'https://www.synthica.org').replace(/\
 
 const app = express();
 app.set('trust proxy', 1); // real client IP behind Render/Vercel proxies
+app.use(compression()); // gzip JSON/HTML responses — big win for list payloads
 
 // Fail fast in production if the token secret is missing.
 if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
@@ -538,6 +540,7 @@ app.post('/api/auth/reset-password', authLimiter, wrap((req, res) => {
 
 // --- Track 2: Journal publications / DOI registry --------------------------
 app.get('/api/journal/publications', wrap((req, res) => {
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   let pubs = store.listPublications();
   const { category, q } = req.query;
   if (category) pubs = pubs.filter((p) => p.category === category);
@@ -583,10 +586,11 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
   res.json(pub);
 }));
 
-// Journal home + volumes/issues browse (public).
-app.get('/api/journal/overview', wrap((_req, res) => res.json(store.journalOverview())));
-app.get('/api/journal/volumes', wrap((_req, res) => res.json(store.listVolumes())));
-app.get('/api/journal/issue/:volume/:issue', wrap((req, res) => res.json(store.issueContents(req.params.volume, req.params.issue))));
+// Journal home + volumes/issues browse (public, lightly cached at the edge/browser).
+const publicCache = (res) => res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+app.get('/api/journal/overview', wrap((_req, res) => { publicCache(res); res.json(store.journalOverview()); }));
+app.get('/api/journal/volumes', wrap((_req, res) => { publicCache(res); res.json(store.listVolumes()); }));
+app.get('/api/journal/issue/:volume/:issue', wrap((req, res) => { publicCache(res); res.json(store.issueContents(req.params.volume, req.params.issue)); }));
 
 // Full article page (hero) — public; if a token is present we resolve the viewer
 // so an author/staff sees the "tag accounts" controls.
@@ -610,7 +614,7 @@ app.post('/api/journal/publications/:id/link-preprint', requireAuth, wrap((req, 
 }));
 
 // --- Preprint server (author-posted, versioned, internal Synthica IDs) ------
-app.get('/api/preprints', wrap((req, res) => res.json(store.listPreprints({ category: req.query.category, q: req.query.q }))));
+app.get('/api/preprints', wrap((req, res) => { res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120'); res.json(store.listPreprints({ category: req.query.category, q: req.query.q })); }));
 app.get('/api/researcher/preprints', requireAuth, wrap((req, res) => res.json(store.myPreprints(req.user.id))));
 app.post('/api/preprints', requireAuth, wrap((req, res) => res.json(store.postPreprint({ userId: req.user.id, ...(req.body || {}) }))));
 app.get('/api/preprints/:id', wrap((req, res) => {
