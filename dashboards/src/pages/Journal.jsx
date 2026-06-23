@@ -2,16 +2,21 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
+import { safeHref } from '../url.js';
 import { JournalMast, JournalFooter } from '../components/JournalChrome.jsx';
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
+const fmtShort = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000);
 const authorLine = (a = []) => (a.length > 3 ? `${a.slice(0, 3).join(', ')}, et al.` : a.join(', '));
 
 // Synthica Journal — the public, professional front page. Featured article hero,
 // current issue, browse-by-subject, recent + most-read, and a volume index.
 export default function Journal() {
   const [d, setD] = useState(null);
+  const [comps, setComps] = useState([]);
   useEffect(() => { api.journalOverview().then(setD).catch(() => setD({ })); }, []);
+  useEffect(() => { api.journalCompetitions().then(setComps).catch(() => setComps([])); }, []);
 
   return (
     <div className="jr-page">
@@ -56,6 +61,8 @@ export default function Journal() {
             </div>
 
             <aside className="jr-side-col">
+              <CompetitionsCard comps={comps} />
+
               {(d.subjects || []).length > 0 && (
                 <div className="jr-side-card">
                   <h3 className="jr-side-h">Browse by subject</h3>
@@ -124,6 +131,39 @@ function FeaturedArticle({ p }) {
         </div>
       </div>
     </section>
+  );
+}
+
+// Right-rail competitions: the soonest still-open opportunities, read-only.
+function CompetitionsCard({ comps }) {
+  const open = (comps || [])
+    .filter((c) => !c.deadline || daysLeft(c.deadline) >= 0)
+    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'))
+    .slice(0, 4);
+  if (open.length === 0) return null;
+  return (
+    <div className="jr-side-card jr-comps">
+      <h3 className="jr-side-h"><span className="icon-label"><Icon name="trophy" size={15} /> Competitions</span></h3>
+      <div className="stack" style={{ gap: '0.7rem' }}>
+        {open.map((c) => {
+          const href = safeHref(c.url);
+          const dl = c.deadline ? daysLeft(c.deadline) : null;
+          const Inner = (
+            <>
+              <div className="jr-comp-title">{c.title}</div>
+              <div className="jr-comp-meta">
+                {c.prize && <span className="jr-comp-prize"><Icon name="trophy" size={11} /> {c.prize}</span>}
+                {c.deadline && <span className={`jr-comp-deadline${dl <= 7 ? ' urgent' : ''}`}>{dl === 0 ? 'closes today' : `${dl}d left`} · {fmtShort(c.deadline)}</span>}
+              </div>
+            </>
+          );
+          return href
+            ? <a key={c.id} className="jr-comp" href={href} target="_blank" rel="noreferrer">{Inner}</a>
+            : <div key={c.id} className="jr-comp">{Inner}</div>;
+        })}
+      </div>
+      <Link to="/researcher/competitions" className="jr-more" style={{ display: 'inline-block', marginTop: '0.7rem' }}>All competitions →</Link>
+    </div>
   );
 }
 

@@ -136,6 +136,7 @@ export const api = {
   article: (id) => request(`/journal/article/${encodeURIComponent(id)}`),
   journalOverview: () => request('/journal/overview'),
   journalVolumes: () => request('/journal/volumes'),
+  journalCompetitions: () => request('/journal/competitions'),
   journalIssue: (v, i) => request(`/journal/issue/${encodeURIComponent(v)}/${encodeURIComponent(i)}`),
   // preprints
   preprints: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/preprints${qs ? `?${qs}` : ''}`); },

@@ -590,6 +590,7 @@ app.get('/api/journal/publications/:id', wrap((req, res) => {
 const publicCache = (res) => res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
 app.get('/api/journal/overview', wrap((_req, res) => { publicCache(res); res.json(store.journalOverview()); }));
 app.get('/api/journal/volumes', wrap((_req, res) => { publicCache(res); res.json(store.listVolumes()); }));
+app.get('/api/journal/competitions', wrap((_req, res) => { publicCache(res); res.json(store.listCompetitions()); }));
 app.get('/api/journal/issue/:volume/:issue', wrap((req, res) => { publicCache(res); res.json(store.issueContents(req.params.volume, req.params.issue)); }));
 
 // Full article page (hero) — public; if a token is present we resolve the viewer
