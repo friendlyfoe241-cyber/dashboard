@@ -146,6 +146,7 @@ export const api = {
   recordPreprintAccess: (id) => request(`/preprints/${encodeURIComponent(id)}/access`, { method: 'POST' }),
   tagPreprint: (id, body) => request(`/preprints/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
   tagPublication: (id, body) => request(`/journal/publications/${encodeURIComponent(id)}/tags`, { method: 'POST', body }),
+  linkPreprint: (pubId, preprintId) => request(`/journal/publications/${encodeURIComponent(pubId)}/link-preprint`, { method: 'POST', body: { preprintId } }),
 
   // Track 3 — editor
   editorPapers: () => request('/editor/papers'),

@@ -604,6 +604,11 @@ app.post('/api/journal/publications/:id/tags', requireAuth, wrap((req, res) => {
   res.json(store.tagPublicationAccounts({ pubId: req.params.id, actorId: req.user.id, addUserIds, removeUserIds }));
 }));
 
+// Cross-link a preprint to its published article (author of either side / staff).
+app.post('/api/journal/publications/:id/link-preprint', requireAuth, wrap((req, res) => {
+  res.json(store.linkPreprintToPublication({ pubId: req.params.id, preprintId: (req.body || {}).preprintId, actorId: req.user.id }));
+}));
+
 // --- Preprint server (author-posted, versioned, internal Synthica IDs) ------
 app.get('/api/preprints', wrap((req, res) => res.json(store.listPreprints({ category: req.query.category, q: req.query.q }))));
 app.get('/api/researcher/preprints', requireAuth, wrap((req, res) => res.json(store.myPreprints(req.user.id))));

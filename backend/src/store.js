@@ -1276,6 +1276,7 @@ export function publishToJournal({ paperId, doiSuffix, volume, issue, pages }) {
   pub.source = 'editorial';
   pub.verified = true;
   db.publications.push(pub);
+  autoLinkPreprintForPublication(pub); // Phase 4: cross-link a matching preprint
   // Mark the submission published so it leaves the "Papers to publish" queue and
   // remember the DOI/date for the Director's "Published" reference list.
   sub.published = true;
@@ -1822,10 +1823,48 @@ export function preprintView(idOrSyn, viewerId) {
   const versions = [...(pp.versions || [])].sort((a, b) => b.v - a.v);
   return {
     id: pp.id, synId: pp.synId, title: pp.title, category: pp.category, abstract: pp.abstract,
-    authors, taggedAccounts, versions, linkedDoi: pp.linkedDoi || null, postedAt: pp.postedAt,
-    latestPdf: versions[0]?.pdfUrl || '', accesses: pp.accesses || 0, related,
+    authors, taggedAccounts, versions, linkedDoi: pp.linkedDoi || null, linkedPubId: pp.linkedPubId || null,
+    postedAt: pp.postedAt, latestPdf: versions[0]?.pdfUrl || '', accesses: pp.accesses || 0, related,
     canEdit: canEditPreprint(viewer, pp), canTag: canEditPreprint(viewer, pp),
   };
+}
+
+// --- preprint ⇄ journal cross-linking (Phase 4) ----------------------------
+
+const normTitle = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Low-level link: stamp the DOI onto the preprint and the preprint id onto the pub.
+function linkPreprintPub(pp, pub) {
+  pp.linkedDoi = pub.doi;
+  pp.linkedPubId = pub.id;
+  pub.preprintId = pp.id;
+  pub.hasPreprint = true;
+}
+
+// On publish, auto-link a preprint that shares an author and the same (normalized)
+// title — but only when the match is unambiguous (exactly one).
+function autoLinkPreprintForPublication(pub) {
+  const authorIds = new Set([pub.authorUserId, ...(pub.authorUserIds || [])].filter(Boolean));
+  const target = normTitle(pub.title);
+  if (!target) return;
+  const matches = (db.preprints || []).filter((pp) =>
+    !pp.linkedDoi && normTitle(pp.title) === target &&
+    (authorIds.has(pp.authorUserId) || (pp.authorUserIds || []).some((id) => authorIds.has(id))));
+  if (matches.length === 1) linkPreprintPub(matches[0], pub);
+}
+
+// Manual link: an author of either side, or staff, ties a preprint to a publication.
+export function linkPreprintToPublication({ preprintId, pubId, actorId }) {
+  const pp = getPreprint(preprintId);
+  const pub = getPublication(pubId);
+  if (!pp || !pub) throw httpError(404, 'Preprint or publication not found');
+  const actor = getUserById(actorId);
+  const mayLink = isStaff(actor) || canEditPreprint(actor, pp) || canTagPublication(actor, pub);
+  if (!mayLink) throw httpError(403, 'Only an author or staff can link these');
+  linkPreprintPub(pp, pub);
+  recordAudit(actor, 'link_preprint', `${pp.synId} → ${pub.doi}`);
+  schedulePersist();
+  return articleView(pub.id, actorId);
 }
 
 export function recordPreprintAccess(idOrSyn) {
@@ -1886,7 +1925,9 @@ export function articleView(idOrDoi, viewerId) {
     .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
     .slice(0, 4)
     .map((p) => ({ id: p.id, doi: p.doi, title: p.title, category: p.category, articleType: p.articleType, publishedAt: p.publishedAt }));
-  return { ...pub, authors, taggedAccounts, related, canTag: canTagPublication(viewer, pub) };
+  const linkedPre = pub.preprintId ? getPreprint(pub.preprintId) : null;
+  const preprint = linkedPre ? { id: linkedPre.id, synId: linkedPre.synId, version: (linkedPre.versions || []).length || 1 } : null;
+  return { ...pub, authors, taggedAccounts, related, preprint, canTag: canTagPublication(viewer, pub) };
 }
 
 // Tag (credit/link) Synthica accounts on a publication so it surfaces on their

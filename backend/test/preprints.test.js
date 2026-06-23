@@ -39,4 +39,20 @@ describe('preprints', () => {
     expect(out.taggedAccounts.map((t) => t.id)).toContain(j.id);
     expect(store.myPreprints(j.id).some((p) => p.id === v.id)).toBe(true);
   });
+
+  it('links a preprint to a published article both ways (Phase 4)', () => {
+    const u = sam();
+    const pre = store.postPreprint({ userId: u.id, title: 'Linkable work', category: 'Biology' });
+    const pub = store.listPublications()[0];
+
+    // A random member can't link.
+    expect(() => store.linkPreprintToPublication({ preprintId: pre.id, pubId: pub.id, actorId: robin().id })).toThrow(/author or staff/i);
+
+    const article = store.linkPreprintToPublication({ preprintId: pre.id, pubId: pub.id, actorId: u.id });
+    expect(article.preprint.synId).toBe(pre.synId); // article shows its preprint
+
+    const pv = store.preprintView(pre.id, u.id);
+    expect(pv.linkedDoi).toBe(pub.doi);   // preprint shows the published DOI
+    expect(pv.linkedPubId).toBe(pub.id);  // and links back in-site
+  });
 });

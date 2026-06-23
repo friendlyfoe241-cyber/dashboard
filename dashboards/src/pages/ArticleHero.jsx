@@ -102,6 +102,7 @@ export default function ArticleHero() {
 
           <aside className="art-rail">
             <Card className="art-rail-card">
+              <PreprintLink article={p} onChange={setP} />
               <TagAccounts article={p} onChange={setP} />
               <Metadata p={p} />
               <CiteBox p={p} />
@@ -125,6 +126,59 @@ export default function ArticleHero() {
         </div>
       </main>
       <JournalFooter />
+    </div>
+  );
+}
+
+// Shows the linked preprint, or (for authors/staff) lets you link one.
+function PreprintLink({ article, onChange }) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [list, setList] = useState(null);
+  const [q, setQ] = useState('');
+
+  if (article.preprint) {
+    return (
+      <div className="art-preprint-link">
+        <h4 className="art-h4" style={{ margin: '0 0 0.4rem' }}>Preprint</h4>
+        <Link to={`/preprints/${article.preprint.id}`} className="art-related" style={{ display: 'block' }}>
+          <span className="jr-pre-id">{article.preprint.synId}</span>
+          <div className="muted" style={{ fontSize: '0.78rem' }}>Earlier version{article.preprint.version > 1 ? ` (v${article.preprint.version})` : ''} → view preprint</div>
+        </Link>
+      </div>
+    );
+  }
+  if (!article.canTag) return null;
+
+  const open = () => { setEditing(true); if (!list) api.preprints().then(setList).catch(() => setList([])); };
+  const link = (preprintId) =>
+    api.linkPreprint(article.id, preprintId).then(onChange).then(() => toast.success('Preprint linked')).catch((e) => toast.error(e.message));
+  const matches = (list || []).filter((p) => !p.linkedDoi).filter((p) => !q.trim() || p.title.toLowerCase().includes(q.toLowerCase())).slice(0, 6);
+
+  return (
+    <div className="art-preprint-link">
+      <div className="card-row" style={{ marginBottom: '0.4rem' }}>
+        <h4 className="art-h4" style={{ margin: 0 }}>Preprint</h4>
+        <button className="btn btn-ghost btn-sm" onClick={() => (editing ? setEditing(false) : open())}>{editing ? 'Done' : 'Link a preprint'}</button>
+      </div>
+      {editing && (
+        <div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search preprints…" />
+          {!list ? <p className="muted" style={{ fontSize: '0.8rem' }}>Loading…</p> : (
+            <div className="stack" style={{ gap: '0.25rem', marginTop: '0.4rem' }}>
+              {matches.length === 0 ? <p className="muted" style={{ fontSize: '0.8rem' }}>No unlinked preprints.</p> : matches.map((p) => (
+                <button key={p.id} type="button" className="art-tag-pick" onClick={() => link(p.id)}>
+                  <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                    <span className="jr-pre-id">{p.synId}</span>
+                    <span style={{ display: 'block', fontSize: '0.82rem' }}>{p.title.slice(0, 60)}{p.title.length > 60 ? '…' : ''}</span>
+                  </span>
+                  <Icon name="link" size={14} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

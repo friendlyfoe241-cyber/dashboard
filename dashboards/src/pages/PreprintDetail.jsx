@@ -32,8 +32,10 @@ export default function PreprintDetail() {
 
         {p.linkedDoi && (
           <div className="jr-published-banner">
-            <Icon name="check-circle" size={16} /> This preprint has been peer-reviewed and published.{' '}
-            <a href={`https://doi.org/${p.linkedDoi}`} target="_blank" rel="noreferrer">Read the published version →</a>
+            <Icon name="check-circle" size={16} /> This preprint has been peer-reviewed and published in the Synthica Journal.{' '}
+            {p.linkedPubId
+              ? <Link to={`/article/${p.linkedPubId}`}>Read the published version →</Link>
+              : <a href={`https://doi.org/${p.linkedDoi}`} target="_blank" rel="noreferrer">Read the published version →</a>}
           </div>
         )}
 
