@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import Icon from '../components/Icon.jsx';
 import { safeHref } from '../url.js';
 import { JournalMast, JournalFooter } from '../components/JournalChrome.jsx';
@@ -106,10 +107,33 @@ export default function Journal() {
               )}
             </aside>
           </div>
+
+          <SubmitCTA />
         </main>
       )}
       <JournalFooter />
     </div>
+  );
+}
+
+// Call-to-action: route members to the dashboard submission pipeline; route
+// visitors to sign-up. Submissions flow through review → the Director publishes
+// → the paper appears here automatically.
+function SubmitCTA() {
+  const { user } = useAuth();
+  return (
+    <section className="jr-cta">
+      <div className="jr-cta-body">
+        <h2>Publish your research with Synthica</h2>
+        <p>Free, open-access, and peer-reviewed by working scientists. Submit from your dashboard — track it through review, and it goes live here the moment it’s accepted.</p>
+        <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {user
+            ? <Link to="/researcher/journal" className="btn btn-primary">Submit to the Journal →</Link>
+            : <Link to="/login" className="btn btn-primary">Join &amp; submit →</Link>}
+          <Link to="/preprints" className="btn btn-ghost jr-cta-ghost">Post a preprint</Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -162,7 +186,7 @@ function CompetitionsCard({ comps }) {
             : <div key={c.id} className="jr-comp">{Inner}</div>;
         })}
       </div>
-      <Link to="/researcher/competitions" className="jr-more" style={{ display: 'inline-block', marginTop: '0.7rem' }}>All competitions →</Link>
+      <Link to="/competitions" className="jr-more" style={{ display: 'inline-block', marginTop: '0.7rem' }}>All competitions →</Link>
     </div>
   );
 }

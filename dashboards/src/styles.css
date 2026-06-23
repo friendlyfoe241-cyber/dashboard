@@ -2434,3 +2434,11 @@ a.jr-comp:hover { background: var(--surface-alt); border-color: var(--brand); tr
 .jr-comp-deadline { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--body-alt); font-weight: 600; background: var(--surface-alt); padding: 0.05rem 0.45rem; border-radius: 999px; }
 .jr-comp-deadline.urgent { color: #b91c1c; background: #fef2f2; }
 html[data-theme='dark'] .jr-comp-deadline.urgent { color: #fca5a5; background: #2a1416; }
+
+/* Journal submit CTA band */
+.jr-cta { margin-top: 2.5rem; border-radius: 18px; background: linear-gradient(135deg, #0a2540, #1a6bb5); color: #fff; padding: clamp(2rem, 5vw, 3rem); text-align: center; box-shadow: 0 18px 44px rgba(10,37,64,0.2); }
+.jr-cta-body { max-width: 640px; margin: 0 auto; }
+.jr-cta h2 { font-family: var(--jr-serif); font-size: clamp(1.5rem, 3.5vw, 2.1rem); margin: 0 0 0.7rem; color: #fff; }
+.jr-cta p { color: rgba(255,255,255,0.85); line-height: 1.6; margin: 0 0 1.3rem; }
+.jr-cta-ghost { color: #fff; border-color: rgba(255,255,255,0.4); }
+.jr-cta-ghost:hover { background: rgba(255,255,255,0.1); }

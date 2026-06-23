@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as store from '../src/store.js';
 import * as seed from '../src/seed.js';
+import { ASSOCIATE_TOTAL_ROUNDS } from '../src/domain.js';
 
 // Fresh seed before each test so pipeline mutations never leak between cases.
 beforeEach(async () => { await store.reset(); });
@@ -113,5 +114,48 @@ describe('audit log — every decision is recorded', () => {
     expect(entries.length).toBe(before + 1);
     expect(entries[0].detail).toMatch(/Reviews Editor approved/);
     expect(entries[0].actorName).toBe(reviewer1().name);
+  });
+});
+
+// Drives a Biology paper through every tier and publishes it, asserting it
+// becomes publicly visible in the journal — the dashboard→journal pipeline.
+function driveToPublishQueue(pid) {
+  store.submitReviewDecision({ paperId: pid, editorId: reviewer1().id, decision: 'approve', comments: 'solid', recommendation: 'advance' });
+  store.submitReviewDecision({ paperId: pid, editorId: reviewer2().id, decision: 'approve', comments: 'agree', recommendation: 'advance' });
+  store.seniorDecision({ paperId: pid, editorId: senior().id, decision: 'approve', comments: 'screen ok' });
+  for (let i = 0; i < ASSOCIATE_TOTAL_ROUNDS; i++) store.associateRound({ paperId: pid, editorId: associate().id, note: `round ${i + 1}` });
+  store.seniorDecision({ paperId: pid, editorId: senior().id, decision: 'approve', comments: 'final ok' });
+  store.chiefDecision({ paperId: pid, editorId: chief().id, decision: 'approve', comments: 'accept' });
+}
+
+describe('pipeline → published in the journal (dashboard to public journal)', () => {
+  it('a Director-published paper shows up in the journal, archive, and overview with a DOI', () => {
+    const pid = bioPaperId();
+    driveToPublishQueue(pid);
+
+    const before = store.listPublications().length;
+    const pub = store.publishToJournal({ paperId: pid, volume: 2, issue: 1, pages: '10–15' });
+    expect(pub.doi).toMatch(/^10\./);
+    expect(pub.verified).toBe(true);
+
+    // Public surfaces all reflect it immediately.
+    expect(store.listPublications().length).toBe(before + 1);
+    expect(store.listPublications().some((p) => p.doi === pub.doi)).toBe(true);
+    expect(store.journalOverview().recent.some((p) => p.doi === pub.doi)).toBe(true);
+    expect(store.issueContents(2, 1).articles.some((p) => p.doi === pub.doi)).toBe(true);
+    expect(store.articleView(pub.id, null).title).toBe(pub.title);
+
+    // It can't be double-published.
+    expect(() => store.publishToJournal({ paperId: pid })).toThrow(/already|not ready/i);
+  });
+
+  it('the published paper lands on its author’s profile when the submitter is a member', () => {
+    // Submit as a real member so submittedBy is set, then run it through.
+    const sam = store.authenticate('sam@example.com', 'demo1234');
+    const sub = store.submitToJournal({ userId: sam.id, title: 'Reef resilience under heat stress', category: 'Biology', abstract: 'abc', pdfUrl: 'https://example.com/p.pdf' });
+    driveToPublishQueue(sub.id);
+    const pub = store.publishToJournal({ paperId: sub.id });
+    expect(store.myPublications(sam.id).some((p) => p.doi === pub.doi)).toBe(true);
+    expect(store.getPublicProfile(sam.slug).publications.some((p) => p.doi === pub.doi)).toBe(true);
   });
 });

@@ -23,6 +23,7 @@ const JournalVolumes = lazy(() => import('./pages/JournalVolumes.jsx'));
 const JournalIssue = lazy(() => import('./pages/JournalIssue.jsx'));
 const Preprints = lazy(() => import('./pages/Preprints.jsx'));
 const PreprintDetail = lazy(() => import('./pages/PreprintDetail.jsx'));
+const CompetitionsPublic = lazy(() => import('./pages/CompetitionsPublic.jsx'));
 const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate.jsx'));
 
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/journal/vol/:volume/issue/:issue" element={<JournalIssue />} />
         <Route path="/preprints" element={<Preprints />} />
         <Route path="/preprints/:id" element={<PreprintDetail />} />
+        <Route path="/competitions" element={<CompetitionsPublic />} />
         <Route path="/article/:id" element={<ArticleHero />} />
         <Route path="/p/:key" element={<PublicProfile />} />
         <Route path="/verify-certificate" element={<VerifyCertificate />} />
