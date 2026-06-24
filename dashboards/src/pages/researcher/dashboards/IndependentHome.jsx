@@ -65,10 +65,10 @@ export default function IndependentHome() {
 
 function DashboardHero({ name, pending, approved, projects, onAdd }) {
   return (
-    <section className="hero-card" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, var(--brand-deep, #1f3a5f), var(--brand, #2d6cdf))' }}>
+    <section className="hero-card hero-card--independent" style={{ marginBottom: '1.5rem' }}>
       <div className="card-row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
         <div style={{ minWidth: 0 }}>
-          <div className="section-badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>Independent researcher</div>
+          <div className="hero-eyebrow">Independent researcher</div>
           <h1 className="page-title" style={{ color: '#fff', margin: '0.4rem 0 0.2rem' }}>
             Welcome, {name}
           </h1>
@@ -76,7 +76,7 @@ function DashboardHero({ name, pending, approved, projects, onAdd }) {
             Propose and run solo, self-directed projects. Submit a research proposal, get it approved by a moderator, then work through your Pathway from question to draft.
           </p>
         </div>
-        <Button onClick={onAdd} style={{ flex: 'none', background: '#fff', color: 'var(--brand-deep, #1f3a5f)' }}>+ Add a project</Button>
+        <Button className="hero-btn" onClick={onAdd}>+ Add a project</Button>
       </div>
       <div className="row" style={{ gap: 'clamp(1.2rem, 5vw, 3rem)', marginTop: '1.1rem', flexWrap: 'wrap' }}>
         <HeroStat n={pending} label="Pending approval" />
@@ -90,8 +90,8 @@ function DashboardHero({ name, pending, approved, projects, onAdd }) {
 function HeroStat({ n, label }) {
   return (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: '1.7rem', fontWeight: 800 }}>{n}</div>
-      <div style={{ fontSize: '0.78rem', opacity: 0.85 }}>{label}</div>
+      <div className="hero-stat-n">{n}</div>
+      <div className="hero-stat-label">{label}</div>
     </div>
   );
 }

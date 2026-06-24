@@ -452,6 +452,52 @@ html[data-theme='dark'] .seg-btn.active { background: #1b2735; }
 .hero-card .page-eyebrow { color: rgba(255, 255, 255, 0.85); }
 .hero-card .page-sub,
 .hero-card p { color: rgba(255, 255, 255, 0.92); }
+.hero-card--independent {
+  background: linear-gradient(135deg, #1f3a5f 0%, #254a7a 50%, #2d5f96 100%);
+}
+.hero-card--chapter {
+  background: linear-gradient(135deg, #0b3d2e 0%, #11633f 50%, #157a4d 100%);
+}
+.hero-card--member {
+  background: linear-gradient(135deg, #1a6bb5 0%, #2589ed 52%, #4999e8 100%);
+}
+.hero-card .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hero-card .hero-actions {
+  gap: 0.55rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.hero-card .hero-stat-n { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.hero-card .hero-stat-label { font-size: 0.78rem; color: rgba(255, 255, 255, 0.78); }
+.hero-card .hero-btn {
+  flex: none;
+  background: #fff;
+  color: #1a3050;
+  font-weight: 650;
+  border: 1px solid transparent;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.12);
+}
+.hero-card .hero-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.94); }
+.hero-card .hero-btn-ghost {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow: none;
+}
+.hero-card .hero-btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
 .grid {
   display: grid;
   gap: 1.1rem;
@@ -1080,11 +1126,58 @@ textarea {
   gap: 0.45rem;
   font-size: 0.78rem;
   color: var(--body-alt);
-  margin-bottom: 1rem;
+  margin: 0 0 1rem;
+  padding-top: 0.15rem;
 }
 .content-crumb-view { font-weight: 650; color: var(--brand-deep); }
 .content-crumb-sep { opacity: 0.45; }
 .content-crumb-page { color: var(--body); }
+
+html[data-theme='dark'] .content-crumb { color: var(--slate); }
+html[data-theme='dark'] .content-crumb-view { color: #9cc4f8; }
+html[data-theme='dark'] .content-crumb-page { color: var(--heading); }
+html[data-theme='dark'] .content-crumb-sep { opacity: 0.55; color: var(--slate); }
+
+html[data-theme='dark'] .hero-card {
+  border: 1px solid rgba(120, 180, 251, 0.14);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+  background: linear-gradient(135deg, #152840 0%, #1a3050 45%, #1e3a5f 100%);
+}
+html[data-theme='dark'] .hero-card--independent {
+  background: linear-gradient(135deg, #132238 0%, #1a2f4a 50%, #1f3858 100%);
+}
+html[data-theme='dark'] .hero-card--chapter {
+  background: linear-gradient(135deg, #0d2118 0%, #123022 50%, #163828 100%);
+}
+html[data-theme='dark'] .hero-card--member {
+  background: linear-gradient(135deg, #152840 0%, #1a3050 45%, #1e3a5f 100%);
+}
+html[data-theme='dark'] .hero-card .hero-eyebrow {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+html[data-theme='dark'] .hero-card .hero-stat-label { color: rgba(255, 255, 255, 0.72); }
+html[data-theme='dark'] .hero-card .hero-btn {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #152840 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+html[data-theme='dark'] .hero-card .hero-btn:hover:not(:disabled) {
+  background: #fff !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+html[data-theme='dark'] .hero-card .hero-btn-ghost {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.38) !important;
+  box-shadow: none;
+}
+html[data-theme='dark'] .hero-card .hero-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
 
 html[data-theme='dark'] .view-switcher-menu { background: #111a28; color: var(--heading); border-color: var(--border); }
 html[data-theme='dark'] .view-switcher-item-ico { background: rgba(255, 255, 255, 0.06); }
@@ -1278,8 +1371,10 @@ html[data-theme='dark'] .view-switcher-item-ico { background: rgba(255, 255, 255
 }
 .google-btn:hover { box-shadow: 0 4px 14px rgba(16, 24, 40, 0.12); transform: translateY(-1px); }
 /* The GIS-rendered button stands on its own: full-width row, centered, no box. */
-.google-gsi { display: flex; justify-content: center; width: 100%; }
+.google-gsi { display: flex; justify-content: center; width: 100%; background: transparent; }
 .google-gsi > div, .google-gsi iframe { margin: 0 auto !important; }
+html[data-theme='dark'] .google-gsi { background: transparent; }
+html[data-theme='dark'] .google-gsi > div { background: transparent !important; }
 
 .login-demo { margin-top: 1rem; }
 .login-demo summary {
@@ -1388,6 +1483,12 @@ body {
 .comp-hero-desc { margin: 0 0 1rem; max-width: 680px; color: rgba(255, 255, 255, 0.86); line-height: 1.55; }
 .comp-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .comp-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(4, 30, 66, 0.14); }
+html[data-theme='dark'] .comp-hero {
+  background: linear-gradient(135deg, #152840 0%, #1a3050 55%, #1e3a5f 100%);
+  border-color: rgba(120, 180, 251, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+html[data-theme='dark'] .comp-hero-glow { opacity: 0.45; }
 @media (prefers-reduced-motion: reduce) { .comp-hero-glow, .comp-card { animation: none; transition: none; } }
 
 /* Safety overflow menu (report / block). */
@@ -1556,6 +1657,7 @@ html[data-theme='dark'] .info-block { background: #16202e; border-color: var(--b
 html[data-theme='dark'] .archive-page { background: #0b1220; }
 html[data-theme='dark'] .archive-hero { background: linear-gradient(180deg, rgba(37, 137, 237, 0.12), transparent); border-bottom-color: var(--border); }
 html[data-theme='dark'] .google-btn { background: #16202e; color: var(--heading); border-color: var(--border); }
+html[data-theme='dark'] .google-btn:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 html[data-theme='dark'] .paper-card h3, html[data-theme='dark'] .section-title { color: var(--heading); }
 html[data-theme='dark'] .section-badge { background: #16202e; color: var(--slate); border-color: var(--border); }
 html[data-theme='dark'] .page-title { color: var(--ink); }

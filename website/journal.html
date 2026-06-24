@@ -22,6 +22,7 @@
   <meta name="twitter:image" content="https://www.synthica.org/src/logo/Synthica Preview Image.png" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="design-system.css" />
+  <link rel="stylesheet" href="journal-bold.css" />
   <script src="icons.js"></script>
   <script>
     /* Apply saved theme before paint to avoid a flash of the wrong theme. */
@@ -48,7 +49,7 @@
   }
   </script>
 </head>
-<body>
+<body class="page-journal">
 
   <!-- ===================== NAVBAR ===================== -->
   <div class="navbar-wrap">
@@ -134,9 +135,9 @@
       </div>
 
       <!-- For Authors checklist -->
-      <div class="card" id="authors" style="max-width: 760px; margin: 0 auto;">
+      <div class="card journal-authors-card" id="authors" data-reveal="80">
         <span class="section-badge">For Authors</span>
-        <h3 style="font-size:1.5rem;font-weight:700;color:var(--heading);margin:0.75rem 0 0;">Before you submit</h3>
+        <h3 class="journal-card-title">Before you submit</h3>
         <ul class="checklist">
           <li>Your manuscript reports original, student-led research.</li>
           <li>You've followed the formatting and citation guidelines.</li>
@@ -151,7 +152,7 @@
   <!-- ===================== ALTERNATING SECTIONS ===================== -->
   <section class="section section-alt">
     <div class="container">
-      <div class="journal-row" id="aims">
+      <div class="journal-row" id="aims" data-reveal>
         <div class="journal-text">
           <h3>Aims &amp; Scope</h3>
           <p>
@@ -166,7 +167,7 @@
         <div class="journal-figure" aria-hidden="true">Aims &amp; Scope</div>
       </div>
 
-      <div class="journal-row" id="policies">
+      <div class="journal-row" id="policies" data-reveal="100">
         <div class="journal-text">
           <h3>Policies</h3>
           <p>
@@ -192,7 +193,7 @@
         <p class="section-subtitle">Ready to publish? Submit your manuscript using the form below &mdash; it's free.</p>
       </div>
 
-      <div class="submit-box">
+      <div class="submit-box" data-reveal="80">
         <span class="submit-label">Submit directly below</span>
         <!-- Google Form embed placeholder: replace with <iframe src="..."> -->
         <div class="form-embed" role="img" aria-label="Submission form embed placeholder">
@@ -204,7 +205,7 @@
 
   <!-- ===================== FOOTER ===================== -->
   <footer class="footer-cta-combined">
-    <div class="footer-cta-card">
+    <div class="footer-cta-card" data-reveal>
       <h2>Ready to get <span class="yellow-text">published</span>?</h2>
       <p>Join 1000+ students across 93+ countries making research approachable &mdash; for free.</p>
       <a class="btn btn-secondary" href="https://discord.gg/8wPzZkGy5Z" target="_blank" rel="noopener">Join Us on Discord</a>
