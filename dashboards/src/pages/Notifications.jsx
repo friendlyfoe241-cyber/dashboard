@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Card, Button, Toggle, Badge } from '../components/ui.jsx';
+import { Card, Button, Badge } from '../components/ui.jsx';
+import Toggle from '../components/Toggle.jsx';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/toast.jsx';
