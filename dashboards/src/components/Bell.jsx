@@ -82,8 +82,15 @@ export default function Bell() {
 
   return (
     <div className="bell" ref={ref}>
-      <button className="bell-btn" onClick={toggle} aria-label={label} aria-haspopup="true" aria-expanded={open}>
-        🔔
+      <button 
+        className="bell-btn" 
+        onClick={toggle} 
+        aria-label={label} 
+        aria-haspopup="true" 
+        aria-expanded={open}
+        style={{ minWidth: '32px', minHeight: '32px' }}
+      >
+        <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>🔔</span>
         {unread > 0 && <span className="bell-badge">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {open && (
