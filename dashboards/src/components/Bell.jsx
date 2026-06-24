@@ -73,6 +73,11 @@ export default function Bell() {
     if (n.link) navigate(n.link);
   };
 
+  const goToSettings = () => {
+    setOpen(false);
+    navigate('/account?tab=notifications');
+  };
+
   const label = unread > 0 ? `Notifications, ${unread} unread` : 'Notifications';
 
   return (
@@ -88,6 +93,14 @@ export default function Bell() {
             {rtStatus !== 'connected' && (
               <span className="bell-status" title="Reconnecting to live updates">• reconnecting…</span>
             )}
+            <button 
+              className="bell-settings-btn"
+              onClick={goToSettings}
+              title="Notification settings"
+              aria-label="Notification settings"
+            >
+              ⚙️
+            </button>
           </div>
           {items.length === 0 ? (
             <div className="bell-empty">

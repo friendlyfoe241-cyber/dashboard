@@ -998,6 +998,8 @@ textarea {
 .bell-time { font-size: 0.68rem; color: var(--body-alt); margin-top: 0.2rem; }
 .bell-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .bell-status { font-size: 0.66rem; font-weight: 600; color: var(--gold, #d4860a); white-space: nowrap; }
+.bell-settings-btn { background: none; border: none; font-size: 0.85rem; cursor: pointer; padding: 0.2rem 0.3rem; border-radius: 4px; opacity: 0.6; transition: opacity 0.15s, background 0.15s; }
+.bell-settings-btn:hover { opacity: 1; background: var(--surface-alt); }
 .bell-empty { text-align: center; }
 .bell-empty-icon { font-size: 1.6rem; opacity: 0.5; margin-bottom: 0.35rem; }
 .bell-empty-sub { font-size: 0.72rem; color: var(--body-alt); margin-top: 0.3rem; }

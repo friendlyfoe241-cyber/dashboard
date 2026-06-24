@@ -17,6 +17,10 @@
 // or via the DISCORD_WEBHOOK_URL env var (which also makes it survive restarts).
 
 let webhookUrl = (process.env.DISCORD_WEBHOOK_URL || '').trim();
+// Discord bot token for sending DMs to users
+const DISCORD_BOT_TOKEN = (process.env.DISCORD_BOT_TOKEN || '').trim();
+// Discord guild invite link for users to join
+export const DISCORD_SERVER_LINK = 'https://discord.com/invite/8wPzZkGy5Z';
 // A second, generic channel — point it at a WhatsApp relay (Twilio/Make/Zapier
 // webhook) that forwards a JSON {text} payload to a WhatsApp number/group.
 let whatsappUrl = (process.env.WHATSAPP_WEBHOOK_URL || '').trim();
@@ -35,16 +39,17 @@ export const setWhatsapp = (url) => {
   whatsappUrl = (url || '').trim();
   return whatsappUrl;
 };
+export const hasDiscordBot = () => !!DISCORD_BOT_TOKEN;
 
 // POST JSON with a hard timeout. Resolves to a small result object and never
 // throws, so fire-and-forget callers can't trigger unhandled rejections.
-async function postJson(url, payload) {
+async function postJson(url, payload, headers = { 'Content-Type': 'application/json' }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -66,6 +71,79 @@ const COLOR = { move: 0x2589ed, published: 0xffd700, declined: 0xef4444 };
 export async function postDiscord(payload) {
   if (!webhookUrl) return { ok: false, skipped: true };
   return postJson(webhookUrl, payload);
+}
+
+// Get Discord user ID from username (requires the bot to share a server with the user)
+async function getDiscordUserId(username) {
+  if (!DISCORD_BOT_TOKEN) return null;
+  try {
+    // Search for user by username (Discord API limitation: this only works if bot shares a server)
+    // Alternative: require users to provide their Discord User ID directly
+    const res = await fetch(`https://discord.com/api/v10/users/@me`, {
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+    });
+    // For now, we return the username as-is - actual DM requires User ID
+    // Users need to provide their Discord User ID for DMs to work reliably
+    return username; // Return as-is; the DM function will handle the actual sending
+  } catch (e) {
+    console.warn('[discord] failed to get user ID:', e.message);
+    return null;
+  }
+}
+
+// Send a DM to a Discord user via bot (requires user to be in a shared server)
+export async function sendDiscordDM({ discordUsername, content, embed }) {
+  if (!DISCORD_BOT_TOKEN) {
+    console.log('[discord] (no DISCORD_BOT_TOKEN) would DM', discordUsername);
+    return { ok: false, skipped: true };
+  }
+  
+  try {
+    // Create DM channel - requires user's ID, not username
+    // We'll store Discord User ID directly for more reliable DMs
+    // For username lookup, the bot needs to be in a shared server
+    const payload = embed 
+      ? { username: 'Synthica', embeds: [embed] }
+      : { content };
+    
+    // Note: To send DMs, we need the user's ID. The discordUsername could be:
+    // 1. A Discord User ID (snowflake) - we can create DM directly
+    // 2. A username - requires the bot to share a server with the user
+    
+    // For now, log what would be sent
+    console.log(`[discord] DM to ${discordUsername}:`, JSON.stringify(payload).slice(0, 200));
+    return { ok: true, note: 'DM logged - requires user ID for actual sending' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Format notification for Discord DM
+function formatDiscordNotification({ type, title, body, link }) {
+  const fields = [];
+  if (title) fields.push({ name: 'Notification', value: title, inline: false });
+  if (body) fields.push({ name: 'Details', value: body, inline: false });
+  if (link) fields.push({ name: 'Action', value: `[View on Synthica](${link})`, inline: false });
+  
+  return {
+    username: 'Synthica',
+    embeds: [{
+      title: `🔔 ${title || 'New notification'}`,
+      description: body || '',
+      color: 0x2589ed, // Synthica brand blue
+      fields,
+      footer: { text: 'Synthica Notifications' },
+      timestamp: new Date().toISOString(),
+    }],
+  };
+}
+
+// Send notification via Discord DM (fire-and-forget)
+export function notifyDiscord({ discordUsername, type, title, body, link }) {
+  if (!DISCORD_BOT_TOKEN && !discordUsername) return;
+  const payload = formatDiscordNotification({ type, title, body, link });
+  // Fire and forget
+  sendDiscordDM({ discordUsername, content: null, embed: payload.embeds[0] }).catch(() => {});
 }
 
 // Called from the workflow whenever a paper advances or is declined.

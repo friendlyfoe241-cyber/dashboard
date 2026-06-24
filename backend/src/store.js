@@ -10,8 +10,8 @@ import { STAGE, STAGE_LABEL, EDITOR_ROLES, ASSOCIATE_TOTAL_ROUNDS, TASK_STATUS, 
 import * as seed from './seed.js';
 import { verifyPassword, hashPassword } from './passwords.js';
 import { safeUrl } from './url.js';
-import { notifyMove, notifyEvent } from './notify.js';
-import { emailDecision, sendEmail, actionEmail } from './email.js';
+import { notifyMove, notifyEvent, notifyDiscord } from './notify.js';
+import { emailDecision, sendEmail, actionEmail, sendNotificationEmail } from './email.js';
 import { registerDoi } from './doi.js';
 import { generateSecret as totpGenerateSecret, otpauthUrl as totpOtpauthUrl, verifyTotp } from './totp.js';
 
@@ -67,6 +67,145 @@ function pushNotif(userId, { type, title, body, link }) {
     at: new Date().toISOString(),
   });
   emit(userId, 'notification', { title, body, link });
+}
+
+// Check if a notification type is enabled for a user
+function isNotificationEnabled(user, channel, type) {
+  const prefs = user?.notifications;
+  if (!prefs) return channel === 'email'; // Default: email enabled if no prefs set
+  if (channel === 'email') {
+    return prefs.email?.[type] ?? true; // Default: enabled
+  }
+  if (channel === 'discord') {
+    return prefs.discord?.[type] ?? false; // Default: disabled
+  }
+  return false;
+}
+
+// Get the link URL for a notification
+function getNotificationLink(notifData) {
+  const SITE = process.env.FRONTEND_URL || 'https://app.synthica.org';
+  const base = SITE.replace(/\/$/, '');
+  return notifData.link ? `${base}${notifData.link}` : base;
+}
+
+// Comprehensive notification dispatcher - sends to all enabled channels
+// Types: comment, project_invite, application_update, mentor_request, 
+//        announcement, role_granted, proposal_update, listing_update
+export function notifyUser(userId, { type, title, body, link }) {
+  const user = getUserById(userId);
+  if (!user) return;
+  
+  const linkUrl = getNotificationLink({ link });
+  
+  // 1. In-app notification (always sent)
+  pushNotif(userId, { type, title, body, link });
+  
+  // 2. Email notification (if enabled for this type)
+  if (isNotificationEnabled(user, 'email', type)) {
+    try {
+      sendNotificationEmail({
+        toEmail: user.email,
+        toName: user.name,
+        type,
+        data: { title, body, link: linkUrl, authorName: '', postTitle: '', postLink: link },
+      });
+    } catch (e) {
+      console.warn(`[notify] email failed for user ${userId}:`, e.message);
+    }
+  }
+  
+  // 3. Discord DM (if enabled for this type and user has discord username)
+  if (user.discord && isNotificationEnabled(user, 'discord', type)) {
+    try {
+      notifyDiscord({
+        discordUsername: user.discord,
+        type,
+        title,
+        body,
+        link: linkUrl,
+      });
+    } catch (e) {
+      console.warn(`[notify] discord failed for user ${userId}:`, e.message);
+    }
+  }
+}
+
+// Helper functions for specific notification types
+export function notifyComment({ targetUserId, authorName, postTitle, postLink }) {
+  notifyUser(targetUserId, {
+    type: 'comment',
+    title: `${authorName} commented on your post`,
+    body: `"${postTitle}"`,
+    link: postLink,
+  });
+}
+
+export function notifyProjectInvite({ targetUserId, inviterName, projectTitle, projectLink }) {
+  notifyUser(targetUserId, {
+    type: 'project_invite',
+    title: `You've been invited to join: ${projectTitle}`,
+    body: `${inviterName} invited you`,
+    link: projectLink,
+  });
+}
+
+export function notifyApplicationUpdate({ targetUserId, programName, status, statusMessage, link }) {
+  const statusLabel = status === 'approved' ? 'approved' : status === 'rejected' ? 'not approved' : 'updated';
+  notifyUser(targetUserId, {
+    type: 'application_update',
+    title: `Your application to ${programName} was ${statusLabel}`,
+    body: statusMessage || `Your application has been ${statusLabel}`,
+    link,
+  });
+}
+
+export function notifyMentorRequest({ targetUserId, menteeName, menteeMessage, requestLink }) {
+  notifyUser(targetUserId, {
+    type: 'mentor_request',
+    title: `New mentorship request from ${menteeName}`,
+    body: menteeMessage || 'Someone requested your mentorship',
+    link: requestLink,
+  });
+}
+
+export function notifyAnnouncement({ targetUserIds, authorName, title, content, link }) {
+  for (const userId of targetUserIds) {
+    notifyUser(userId, {
+      type: 'announcement',
+      title: `Announcement: ${title}`,
+      body: `From ${authorName}`,
+      link,
+    });
+  }
+}
+
+export function notifyRoleGranted({ targetUserId, roleName, roleDescription, dashboardLink }) {
+  notifyUser(targetUserId, {
+    type: 'role_granted',
+    title: `You've been granted: ${roleName}`,
+    body: roleDescription || `You now have the ${roleName} role`,
+    link: dashboardLink,
+  });
+}
+
+export function notifyProposalUpdate({ targetUserId, proposalTitle, status, feedback, link }) {
+  const statusLabel = status === 'approved' ? 'approved' : status === 'rejected' ? 'not approved' : 'under review';
+  notifyUser(targetUserId, {
+    type: 'proposal_update',
+    title: `Your proposal "${proposalTitle}" was ${statusLabel}`,
+    body: feedback || `Your proposal is now ${statusLabel}`,
+    link,
+  });
+}
+
+export function notifyListingUpdate({ targetUserId, listingTitle, status, link }) {
+  notifyUser(targetUserId, {
+    type: 'listing_update',
+    title: `Update on your ${listingTitle} application`,
+    body: `There's an update regarding your application`,
+    link,
+  });
 }
 
 // Notify every editor who reviewed a paper (per policy: reviewers are told when
@@ -675,6 +814,41 @@ export function updateProfile(userId, patch) {
   if (typeof patch.avatarUrl === 'string') u.avatarUrl = safeUrl(patch.avatarUrl, 400);
   if (typeof patch.resumeUrl === 'string') u.resumeUrl = safeUrl(patch.resumeUrl, 400);
   if (typeof patch.discord === 'string') u.discord = patch.discord.trim().slice(0, 60);
+  
+  // Notification preferences
+  if (patch.notifications !== undefined) {
+    // Initialize notifications object if it doesn't exist
+    if (!u.notifications) u.notifications = {};
+    // Email notifications (by type)
+    if (typeof patch.notifications.email === 'object') {
+      u.notifications.email = {
+        ...u.notifications.email,
+        comment: patch.notifications.email.comment ?? true,
+        project_invite: patch.notifications.email.project_invite ?? true,
+        application_update: patch.notifications.email.application_update ?? true,
+        mentor_request: patch.notifications.email.mentor_request ?? true,
+        announcement: patch.notifications.email.announcement ?? true,
+        role_granted: patch.notifications.email.role_granted ?? true,
+        proposal_update: patch.notifications.email.proposal_update ?? true,
+        listing_update: patch.notifications.email.listing_update ?? true,
+        digest: patch.notifications.email.digest ?? false,
+      };
+    }
+    // Discord notifications (by type)
+    if (typeof patch.notifications.discord === 'object') {
+      u.notifications.discord = {
+        ...u.notifications.discord,
+        comment: patch.notifications.discord.comment ?? true,
+        project_invite: patch.notifications.discord.project_invite ?? true,
+        application_update: patch.notifications.discord.application_update ?? true,
+        mentor_request: patch.notifications.discord.mentor_request ?? true,
+        announcement: patch.notifications.discord.announcement ?? true,
+        role_granted: patch.notifications.discord.role_granted ?? true,
+        proposal_update: patch.notifications.discord.proposal_update ?? true,
+        listing_update: patch.notifications.discord.listing_update ?? true,
+      };
+    }
+  }
   if (typeof patch.linkedinUrl === 'string') u.linkedinUrl = safeUrl(patch.linkedinUrl);
   if (typeof patch.websiteUrl === 'string') u.websiteUrl = safeUrl(patch.websiteUrl);
   if (typeof patch.githubUrl === 'string') u.githubUrl = safeUrl(patch.githubUrl);
