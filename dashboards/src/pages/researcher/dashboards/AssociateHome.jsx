@@ -58,12 +58,9 @@ export default function AssociateHome() {
 // A single, unmistakable banner: this is your Member portal and here's the gist.
 function DashboardHero({ firstName }) {
   return (
-    <section
-      className="hero-card"
-      style={{ marginBottom: '1.5rem' }}
-    >
+    <section className="hero-card hero-card--member" style={{ marginBottom: '1.5rem' }}>
       <div style={{ minWidth: 0 }}>
-        <div className="label-up" style={{ color: 'rgba(255,255,255,0.85)', letterSpacing: '0.08em' }}>
+        <div className="hero-eyebrow">
           <Icon name="compass" size={13} /> Member portal
         </div>
         <h1 className="page-title" style={{ color: '#fff', margin: '0.35rem 0 0.4rem' }}>
@@ -74,11 +71,11 @@ function DashboardHero({ firstName }) {
           <strong>Associate Researcher</strong> you can browse the Research Hub, apply to projects and
           groups, and collaborate from My Projects.
         </p>
-        <div className="row" style={{ gap: '0.5rem', marginTop: '1rem' }}>
-          <Link to="/researcher/hub" className="btn btn-sm" style={{ background: '#fff', color: 'var(--brand-deep)', fontWeight: 700 }}>
+        <div className="hero-actions row">
+          <Link to="/researcher/hub" className="btn btn-sm hero-btn">
             <Icon name="compass" size={15} /> Browse Research Hub
           </Link>
-          <Link to="/researcher/groups" className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.55)' }}>
+          <Link to="/researcher/groups" className="btn btn-sm hero-btn-ghost">
             Browse Groups
           </Link>
         </div>

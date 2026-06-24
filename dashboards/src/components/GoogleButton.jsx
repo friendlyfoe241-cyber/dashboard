@@ -24,6 +24,19 @@ function loadGisScript() {
   return gisScriptPromise;
 }
 
+function useDarkTheme() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark');
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setDark(root.dataset.theme === 'dark');
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
+
 const GoogleG = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -42,6 +55,7 @@ const GoogleG = () => (
 export default function GoogleButton({ onSuccess, onError, text = 'continue_with' }) {
   const { loginWithGoogle } = useAuth();
   const ref = useRef(null);
+  const dark = useDarkTheme();
   const [clientId, setClientId] = useState(resolvedClientId); // null until resolved
   const [width, setWidth] = useState(0);
 
@@ -82,7 +96,7 @@ export default function GoogleButton({ onSuccess, onError, text = 'continue_with
         });
         ref.current.innerHTML = '';
         window.google.accounts.id.renderButton(ref.current, {
-          theme: 'outline',
+          theme: dark ? 'filled_black' : 'outline',
           size: 'large',
           shape: 'pill',
           text,
@@ -92,7 +106,7 @@ export default function GoogleButton({ onSuccess, onError, text = 'continue_with
       })
       .catch((e) => onError?.(e.message));
     return () => { cancelled = true; };
-  }, [clientId, width, text]);
+  }, [clientId, width, text, dark, loginWithGoogle, onError, onSuccess]);
 
   // Still resolving — reserve the row so the layout doesn't jump.
   if (clientId === null) return <div className="google-gsi" ref={ref} style={{ minHeight: 44 }} />;

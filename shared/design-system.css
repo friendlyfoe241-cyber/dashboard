@@ -929,6 +929,10 @@ html[data-theme='dark'] .login-card.login-card-v3 {
 }
 .login-card-v3 .google-gsi {
   min-height: 40px;
+  background: transparent;
+}
+html[data-theme='dark'] .login-card-v3 .google-gsi {
+  background: transparent;
 }
 .login-card-v3 .google-btn {
   padding: 0.48rem 1rem !important;
