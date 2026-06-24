@@ -73,7 +73,9 @@ export default function Bell() {
     if (n.link) navigate(n.link);
   };
 
-  const goToSettings = () => {
+  const goToSettings = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
     setOpen(false);
     navigate('/account?tab=notifications');
   };
@@ -100,14 +102,15 @@ export default function Bell() {
             {rtStatus !== 'connected' && (
               <span className="bell-status" title="Reconnecting to live updates">• reconnecting…</span>
             )}
-            <button 
+            <a 
+              href="/account?tab=notifications"
               className="bell-settings-btn"
               onClick={goToSettings}
               title="Notification settings"
               aria-label="Notification settings"
             >
-              ⚙️
-            </button>
+              ⚙️ Settings
+            </a>
           </div>
           {items.length === 0 ? (
             <div className="bell-empty">
