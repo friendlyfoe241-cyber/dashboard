@@ -77,7 +77,10 @@ export default function Bell() {
     e.stopPropagation();
     e.preventDefault();
     setOpen(false);
-    navigate('/account?tab=notifications');
+    // Use current location to determine if we're in editor or researcher view
+    const isEditor = window.location.pathname.startsWith('/editor');
+    const basePath = isEditor ? '/editor' : '';
+    navigate(`${basePath}/account?tab=notifications`);
   };
 
   const label = unread > 0 ? `Notifications, ${unread} unread` : 'Notifications';
@@ -102,15 +105,14 @@ export default function Bell() {
             {rtStatus !== 'connected' && (
               <span className="bell-status" title="Reconnecting to live updates">• reconnecting…</span>
             )}
-            <a 
-              href="/account?tab=notifications"
+            <button
               className="bell-settings-btn"
               onClick={goToSettings}
               title="Notification settings"
               aria-label="Notification settings"
             >
               ⚙️ Settings
-            </a>
+            </button>
           </div>
           {items.length === 0 ? (
             <div className="bell-empty">
