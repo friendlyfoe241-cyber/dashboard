@@ -120,14 +120,15 @@ export async function sendDiscordDM({ discordUsername, content, embed }) {
       // Search for the user in each guild's member list
       for (const guild of guilds) {
         try {
+          // Use the members list endpoint (works without special intents)
           const membersRes = await fetch(
-            `https://discord.com/api/v10/guilds/${guild.id}/search-members?query=${encodeURIComponent(discordUsername)}&limit=5`,
+            `https://discord.com/api/v10/guilds/${guild.id}/members?limit=1000`,
             { headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}` } }
           );
           
           if (membersRes.ok) {
             const members = await membersRes.json();
-            // Check for exact username or nickname match
+            // Check for exact username or nickname match (case insensitive)
             const match = members.find(m => 
               m.user?.username?.toLowerCase() === discordUsername.toLowerCase() ||
               m.nick?.toLowerCase() === discordUsername.toLowerCase()
