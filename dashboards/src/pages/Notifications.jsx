@@ -100,13 +100,7 @@ function NotificationsContent() {
     if (!user?.discord) return toast.error('No Discord username set');
     setSendingTest(true);
     try {
-      const res = await fetch('/api/notify/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ userId: user.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send test');
+      const data = await api.notifyTest();
       toast.success('Test DM sent! Check your Discord.');
     } catch (e) {
       toast.error(e.message);
