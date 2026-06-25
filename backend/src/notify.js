@@ -98,33 +98,98 @@ export async function sendDiscordDM({ discordUsername, content, embed }) {
     return { ok: false, skipped: true, error: 'no bot token' };
   }
   try {
+    let userId = discordUsername;
+
+    // If it's a username (not just numbers), try to find the user ID
     if (!/^\d+$/.test(discordUsername)) {
-      return { ok: false, error: 'Please use Discord User ID. Right-click → Copy User ID' };
+      console.log(`[discord] Looking up user "${discordUsername}" in shared servers...`);
+      
+      // Get the bot's guilds (servers)
+      const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
+        headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}` },
+      });
+      
+      if (!guildsRes.ok) {
+        const err = await guildsRes.text();
+        console.error('[discord] failed to get guilds:', err);
+        return { ok: false, error: 'Could not access Discord servers' };
+      }
+      
+      const guilds = await guildsRes.json();
+      
+      // Search for the user in each guild's member list
+      for (const guild of guilds) {
+        try {
+          const membersRes = await fetch(
+            `https://discord.com/api/v10/guilds/${guild.id}/search-members?query=${encodeURIComponent(discordUsername)}&limit=5`,
+            { headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}` } }
+          );
+          
+          if (membersRes.ok) {
+            const members = await membersRes.json();
+            // Check for exact username or nickname match
+            const match = members.find(m => 
+              m.user?.username?.toLowerCase() === discordUsername.toLowerCase() ||
+              m.nick?.toLowerCase() === discordUsername.toLowerCase()
+            );
+            
+            if (match?.user?.id) {
+              userId = match.user.id;
+              console.log(`[discord] Found user "${discordUsername}" as ${userId} in guild ${guild.name}`);
+              break;
+            }
+          }
+        } catch (e) {
+          // Continue to next guild if this one fails
+          console.warn(`[discord] Could not search guild ${guild.id}:`, e.message);
+        }
+      }
+      
+      // If we still don't have a user ID, the user might not be in any shared server
+      if (!/^\d+$/.test(userId)) {
+        return { 
+          ok: false, 
+          error: `User "${discordUsername}" not found. Make sure they are in the Synthica Discord server.` 
+        };
+      }
     }
+
+    // Create a DM channel with the user
     const dmResponse = await fetch('https://discord.com/api/v10/users/@me/channels', {
       method: 'POST',
       headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_id: discordUsername }),
+      body: JSON.stringify({ recipient_id: userId }),
     });
+
     if (!dmResponse.ok) {
       const err = await dmResponse.text();
       console.error('[discord] failed to create DM channel:', err);
+      // Common error: user has DMs disabled
+      if (err.includes('403') || err.includes('Cannot send messages to this user')) {
+        return { ok: false, error: 'User has DMs disabled. They need to allow DMs from server members in Discord settings.' };
+      }
       return { ok: false, error: `Failed to create DM: ${err}` };
     }
+
     const dmChannel = await dmResponse.json();
     const channelId = dmChannel.id;
+
+    // Send the message to the DM channel
     const payload = embed ? { embeds: [embed] } : { content };
+
     const msgResponse = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+
     if (!msgResponse.ok) {
       const err = await msgResponse.text();
       console.error('[discord] failed to send DM:', err);
       return { ok: false, error: `Failed to send: ${err}` };
     }
-    console.log(`[discord] DM sent to ${discordUsername}`);
+
+    console.log(`[discord] DM sent to ${discordUsername} (${userId})`);
     return { ok: true };
   } catch (e) {
     console.error('[discord] DM error:', e.message);
