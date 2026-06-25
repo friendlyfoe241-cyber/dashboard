@@ -35,6 +35,7 @@ const DISCORD_SERVER_LINK = 'https://discord.com/invite/8wPzZkGy5Z';
 
 const NOTIFICATION_TYPES = [
   { key: 'comment', label: 'Comments on your posts', desc: 'When someone comments on your posts' },
+  { key: 'project', label: 'Project updates', desc: 'When you are added to or removed from projects' },
   { key: 'project_invite', label: 'Project invitations', desc: 'When you receive a project invitation' },
   { key: 'application_update', label: 'Application updates', desc: 'Status updates on your applications' },
   { key: 'mentor_request', label: 'Mentor requests', desc: 'When someone requests your mentorship' },
@@ -76,7 +77,7 @@ function NotificationsContent() {
 
   const [discordEnabled, setDiscordEnabled] = useState(() =>
     NOTIFICATION_TYPES.reduce((acc, t) => {
-      acc[t.key] = discordPrefs[t.key] ?? false;
+      acc[t.key] = discordPrefs[t.key] ?? true; // Default to true
       return acc;
     }, {})
   );

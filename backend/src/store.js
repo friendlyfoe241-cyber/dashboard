@@ -840,6 +840,7 @@ export function updateProfile(userId, patch) {
       u.notifications.discord = {
         ...u.notifications.discord,
         comment: patch.notifications.discord.comment ?? true,
+        project: patch.notifications.discord.project ?? true,
         project_invite: patch.notifications.discord.project_invite ?? true,
         application_update: patch.notifications.discord.application_update ?? true,
         mentor_request: patch.notifications.discord.mentor_request ?? true,
