@@ -2980,11 +2980,12 @@ export function inviteToProject({ projectId, leadId, email }) {
   if (existing) {
     if (p.members.includes(existing.id)) throw httpError(409, 'They are already on this project');
     p.members.push(existing.id);
-    pushNotif(existing.id, { type: 'project', title: `You were added to ${p.title}`, body: `Invited by ${lead?.name || 'the project lead'}`, link: `/researcher/project/${p.id}` });
-    sendEmail({
-      to: addr,
-      subject: `You've been added to "${p.title}" on Synthica`,
-      text: `Hi ${existing.name},\n\n${lead?.name || 'A project lead'} added you to the project "${p.title}".\nSign in to see it: ${process.env.FRONTEND_URL || 'https://app.synthica.org'}\n\n— The Synthica Team`,
+    // Use notifyUser for full notification support (in-app + email + Discord DM)
+    notifyProjectInvite({
+      targetUserId: existing.id,
+      inviterName: lead?.name || 'the project lead',
+      projectTitle: p.title,
+      projectLink: `/researcher/project/${p.id}`,
     });
     schedulePersist();
     return { status: 'added', name: existing.name };
