@@ -72,7 +72,7 @@ function pushNotif(userId, { type, title, body, link }) {
   // Use setImmediate to not block the mutation
   setImmediate(() => {
     try {
-      notifyUser(userId, { type, title, body, link });
+      notifyUser(userId, { type, title, body, link }, true);
     } catch (e) {
       console.warn('[notify] pushNotif -> notifyUser failed:', e.message);
     }
@@ -103,14 +103,16 @@ function getNotificationLink(notifData) {
 // Comprehensive notification dispatcher - sends to all enabled channels
 // Types: comment, project_invite, application_update, mentor_request, 
 //        announcement, role_granted, proposal_update, listing_update
-export function notifyUser(userId, { type, title, body, link }) {
+export function notifyUser(userId, { type, title, body, link }, skipPush = false) {
   const user = getUserById(userId);
   if (!user) return;
   
   const linkUrl = getNotificationLink({ link });
   
-  // 1. In-app notification (always sent)
-  pushNotif(userId, { type, title, body, link });
+  // 1. In-app notification (always sent) - unless we are already being called from pushNotif
+  if (!skipPush) {
+    pushNotif(userId, { type, title, body, link });
+  }
   
   // 2. Email notification (if enabled for this type)
   if (isNotificationEnabled(user, 'email', type)) {
