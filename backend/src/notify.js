@@ -104,13 +104,22 @@ export async function sendDiscordDM({ discordUsername, content, embed }) {
     if (!/^\d+$/.test(discordUsername)) {
       console.log(`[discord] Looking up user "${discordUsername}" in guild...`);
 
+      let apiFailed = false;
       try {
         const membersRes = await fetch(
           `https://discord.com/api/v10/guilds/1512337763536601169/members?limit=1000`,
           { headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}` } }
         );
 
-        if (membersRes.ok) {
+        if (!membersRes.ok) {
+          const errText = await membersRes.text();
+          console.error('[discord] guild API error:', errText);
+          // Check if it's an auth issue
+          if (membersRes.status === 401 || membersRes.status === 403) {
+            return { ok: false, error: 'Cannot access Discord guild. Bot token may be invalid or expired.' };
+          }
+          apiFailed = true;
+        } else {
           const members = await membersRes.json();
           const match = members.find(m =>
             m.user?.username?.toLowerCase() === discordUsername.toLowerCase() ||
@@ -124,6 +133,15 @@ export async function sendDiscordDM({ discordUsername, content, embed }) {
         }
       } catch (e) {
         console.warn(`[discord] Could not search guild members:`, e.message);
+        apiFailed = true;
+      }
+
+      // If API failed or user not found, return appropriate error
+      if (apiFailed || !/^\d+$/.test(userId)) {
+        return {
+          ok: false,
+          error: `User "${discordUsername}" not found. Make sure they are in the Synthica Discord server.`
+        };
       }
 
       // If we still don't have a user ID, the user might not be in the server
