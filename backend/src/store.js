@@ -53,7 +53,7 @@ function buildSeed() {
   };
 }
 
-// Push an in-app notification to a user (fire-and-forget within mutations).
+// Push an in-app notification to a user and trigger email/Discord via notifyUser.
 function pushNotif(userId, { type, title, body, link }) {
   if (!userId || !db.notifications) return;
   db.notifications.push({
@@ -67,6 +67,16 @@ function pushNotif(userId, { type, title, body, link }) {
     at: new Date().toISOString(),
   });
   emit(userId, 'notification', { title, body, link });
+  
+  // Also trigger email/Discord notifications via notifyUser
+  // Use setImmediate to not block the mutation
+  setImmediate(() => {
+    try {
+      notifyUser(userId, { type, title, body, link });
+    } catch (e) {
+      console.warn('[notify] pushNotif -> notifyUser failed:', e.message);
+    }
+  });
 }
 
 // Check if a notification type is enabled for a user
