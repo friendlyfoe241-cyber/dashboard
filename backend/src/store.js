@@ -72,12 +72,12 @@ function pushNotif(userId, { type, title, body, link }) {
 // Check if a notification type is enabled for a user
 function isNotificationEnabled(user, channel, type) {
   const prefs = user?.notifications;
-  if (!prefs) return channel === 'email'; // Default: email enabled if no prefs set
+  if (!prefs) return channel !== 'discord'; // Default: email enabled, discord disabled if no prefs
   if (channel === 'email') {
     return prefs.email?.[type] ?? true; // Default: enabled
   }
   if (channel === 'discord') {
-    return prefs.discord?.[type] ?? false; // Default: disabled
+    return prefs.discord?.[type] ?? true; // Default: enabled (if user has discord username set)
   }
   return false;
 }
