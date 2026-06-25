@@ -95,29 +95,42 @@ async function getDiscordUserId(username) {
 export async function sendDiscordDM({ discordUsername, content, embed }) {
   if (!DISCORD_BOT_TOKEN) {
     console.log('[discord] (no DISCORD_BOT_TOKEN) would DM', discordUsername);
-    return { ok: false, skipped: true };
+    return { ok: false, skipped: true, error: 'no bot token' };
   }
-  
   try {
-    // Create DM channel - requires user's ID, not username
-    // We'll store Discord User ID directly for more reliable DMs
-    // For username lookup, the bot needs to be in a shared server
-    const payload = embed 
-      ? { username: 'Synthica', embeds: [embed] }
-      : { content };
-    
-    // Note: To send DMs, we need the user's ID. The discordUsername could be:
-    // 1. A Discord User ID (snowflake) - we can create DM directly
-    // 2. A username - requires the bot to share a server with the user
-    
-    // For now, log what would be sent
-    console.log(`[discord] DM to ${discordUsername}:`, JSON.stringify(payload).slice(0, 200));
-    return { ok: true, note: 'DM logged - requires user ID for actual sending' };
+    if (!/^\d+$/.test(discordUsername)) {
+      return { ok: false, error: 'Please use Discord User ID. Right-click → Copy User ID' };
+    }
+    const dmResponse = await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST',
+      headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: discordUsername }),
+    });
+    if (!dmResponse.ok) {
+      const err = await dmResponse.text();
+      console.error('[discord] failed to create DM channel:', err);
+      return { ok: false, error: `Failed to create DM: ${err}` };
+    }
+    const dmChannel = await dmResponse.json();
+    const channelId = dmChannel.id;
+    const payload = embed ? { embeds: [embed] } : { content };
+    const msgResponse = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bot ${DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!msgResponse.ok) {
+      const err = await msgResponse.text();
+      console.error('[discord] failed to send DM:', err);
+      return { ok: false, error: `Failed to send: ${err}` };
+    }
+    console.log(`[discord] DM sent to ${discordUsername}`);
+    return { ok: true };
   } catch (e) {
+    console.error('[discord] DM error:', e.message);
     return { ok: false, error: e.message };
   }
 }
-
 // Format notification for Discord DM
 function formatDiscordNotification({ type, title, body, link }) {
   const fields = [];
