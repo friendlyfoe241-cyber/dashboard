@@ -1,9 +1,35 @@
-import { useState } from 'react';
+import { useState, Component } from 'react';
 import { Card, Button, Badge } from '../components/ui.jsx';
 import Toggle from '../components/Toggle.jsx';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useToast } from '../components/toast.jsx';
+
+// Error boundary to catch rendering errors
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('Notifications Error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card>
+          <h3 style={{ color: 'var(--danger)' }}>Error loading notifications</h3>
+          <p style={{ color: 'var(--body-alt)' }}>{this.state.error?.message}</p>
+          <button onClick={() => window.location.reload()}>Reload page</button>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const DISCORD_SERVER_LINK = 'https://discord.com/invite/8wPzZkGy5Z';
 
@@ -18,7 +44,7 @@ const NOTIFICATION_TYPES = [
   { key: 'listing_update', label: 'Listing updates', desc: 'Updates on listings you have applied to' },
 ];
 
-export default function Notifications() {
+function NotificationsContent() {
   const { user, refreshUser } = useAuth();
   const toast = useToast();
   
@@ -256,5 +282,14 @@ export default function Notifications() {
         {savingPrefs ? 'Saving...' : 'Save Preferences'}
       </Button>
     </div>
+  );
+}
+
+// Wrap with error boundary for production error catching
+export default function Notifications() {
+  return (
+    <ErrorBoundary>
+      <NotificationsContent />
+    </ErrorBoundary>
   );
 }
