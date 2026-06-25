@@ -77,9 +77,10 @@ export default function Bell() {
     e.stopPropagation();
     e.preventDefault();
     setOpen(false);
-    // Use current location to determine if we're in editor or researcher view
-    const isEditor = window.location.pathname.startsWith('/editor');
-    const basePath = isEditor ? '/editor' : '';
+    // Extract base path from current location (e.g., /editor, /moderator, /researcher)
+    const pathname = window.location.pathname;
+    const match = pathname.match(/^(\/editor|\/moderator|\/researcher)/);
+    const basePath = match ? match[1] : '';
     navigate(`${basePath}/account?tab=notifications`);
   };
 
