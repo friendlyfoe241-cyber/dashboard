@@ -95,6 +95,26 @@ function NotificationsContent() {
     }
   };
 
+  const [sendingTest, setSendingTest] = useState(false);
+  const handleSendTestDM = async () => {
+    if (!user?.discord) return toast.error('No Discord username set');
+    setSendingTest(true);
+    try {
+      const res = await fetch('/api/notify/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send test');
+      toast.success('Test DM sent! Check your Discord.');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
   const handleToggleEmail = (key) => {
     setEmailEnabled(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -198,6 +218,9 @@ function NotificationsContent() {
               />
               <Button onClick={handleDiscordSave} disabled={savingDiscord}>
                 {savingDiscord ? 'Saving...' : 'Update'}
+              </Button>
+              <Button onClick={handleSendTestDM} disabled={sendingTest} variant="secondary">
+                {sendingTest ? 'Sending...' : 'Send Test DM'}
               </Button>
             </div>
           </div>
