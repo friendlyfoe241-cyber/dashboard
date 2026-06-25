@@ -21,6 +21,18 @@ const NOTIFICATION_TYPES = [
 export default function Notifications() {
   const { user, refreshUser } = useAuth();
   const toast = useToast();
+  
+  // Guard: show loading if no user
+  if (!user) {
+    return (
+      <Card>
+        <p style={{ color: 'var(--body-alt)', textAlign: 'center', padding: '2rem' }}>
+          Loading notification settings...
+        </p>
+      </Card>
+    );
+  }
+  
   const [discord, setDiscord] = useState(user?.discord || '');
   const [savingDiscord, setSavingDiscord] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -81,7 +93,15 @@ export default function Notifications() {
     }
   };
 
-  const hasDiscord = !!user?.discord;
+  // Check if Discord is connected - be lenient with empty strings
+  const hasDiscord = user?.discord && user.discord.trim().length > 0;
+  
+  // Debug: log user state
+  console.log('Notifications Debug:', { 
+    hasDiscord, 
+    discordValue: user?.discord,
+    discordType: typeof user?.discord 
+  });
 
   return (
     <div>
